@@ -86,6 +86,15 @@ with tabs[0]:
                 
                 anual_data[m][cat['nombre']]["presupuesto"] = p_sum
                 anual_data[m][cat['nombre']]["real"] = r_sum
+            
+            # Derivar automáticamente presupuestos de bloques según regla 50/30/20
+            p_ing_m = anual_data[m][ingresos_name]["presupuesto"]
+            if necesidades_name in anual_data[m]:
+                anual_data[m][necesidades_name]["presupuesto"] = p_ing_m * 0.50
+            if deseos_name in anual_data[m]:
+                anual_data[m][deseos_name]["presupuesto"] = p_ing_m * 0.30
+            if ahorro_name in anual_data[m]:
+                anual_data[m][ahorro_name]["presupuesto"] = p_ing_m * 0.20
 
         # Totales Consolidados Anuales
         ingresos_anual_real = sum(anual_data[m][ingresos_name]["real"] for m in range(1, 13))
@@ -335,9 +344,17 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
                 t_real += (pval + tval)
             totales_m[cat['nombre']] = {"presupuesto": t_pres, "real": t_real, "tipo": cat['tipo'], "subcategorias": cat_subcats}
         
+        # Derivar automáticamente presupuestos de bloques según regla 50/30/20
+        pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
+        if necesidades_name in totales_m:
+            totales_m[necesidades_name]["presupuesto"] = pres_ing * 0.50
+        if deseos_name in totales_m:
+            totales_m[deseos_name]["presupuesto"] = pres_ing * 0.30
+        if ahorro_name in totales_m:
+            totales_m[ahorro_name]["presupuesto"] = pres_ing * 0.20
+
         # 1. RESUMEN KPI DEL MES
         real_ing = totales_m.get(ingresos_name, {}).get("real", 0.0)
-        pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
         
         real_nec_m = totales_m.get(necesidades_name, {}).get("real", 0.0)
         pres_nec_m = totales_m.get(necesidades_name, {}).get("presupuesto", 0.0)
@@ -362,30 +379,90 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # 2. FORMULARIO RÁPIDO Y VISIBLE PARA AÑADIR TRANSACCIÓN (Justo debajo del resumen)
-        st.markdown("##### ➕ Añadir Nueva Transacción")
-        with st.form(key=f"form_add_{mes_key}", clear_on_submit=True):
-            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([2, 3, 2, 3, 2])
+        # 2. GRÁFICOS COMPARATIVOS PRESUPUESTO VS REAL POR CATEGORÍA (Estilo Excel)
+        with st.expander("📊 Gráficos Comparativos (Presupuesto vs Real)", expanded=True):
+            g_col1, g_col2 = st.columns(2)
             
-            with f_col1:
-                fecha_val = st.date_input("Fecha", value=date(year_selected, idx, min(date.today().day, 28)))
-            with f_col2:
-                subcat_sel = st.selectbox("Subcategoría", options=list(subcat_options.keys()), format_func=lambda x: subcat_options[x], key=f"sb_{mes_key}")
-            with f_col3:
-                cant_val = st.number_input("Cantidad (€)", min_value=0.0, step=10.0, key=f"num_{mes_key}")
-            with f_col4:
-                conc_val = st.text_input("Concepto / Causa", key=f"txt_{mes_key}")
-            with f_col5:
-                st.write("&nbsp;")
-                btn_add = st.form_submit_button("Guardar", use_container_width=True)
+            for index_cat, cat in enumerate(categorias):
+                n_cat = cat['nombre']
+                info_c = totales_m.get(n_cat, {})
+                subcats_c = info_c.get("subcategorias", [])
+                if not subcats_c:
+                    continue
                 
-            if btn_add:
-                if subcat_sel and cant_val > 0:
-                    api_client.create_transaccion(fecha_val, subcat_sel, cant_val, conc_val)
-                    st.success("¡Transacción guardada correctamente!")
-                    st.rerun()
-                else:
-                    st.error("Por favor, selecciona una subcategoría y una cantidad mayor que 0.")
+                chart_data_cat = []
+                for s in subcats_c:
+                    s_id = s['id']
+                    pval = 0.0
+                    if presupuestos_m:
+                        pm = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        if pm:
+                            pval = pm[0]['cantidad']
+                    rval_trans = 0.0
+                    if transacciones_m:
+                        rval_trans = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                    rval_total = pval + rval_trans
+                    
+                    chart_data_cat.append({"Concepto": s['nombre'], "Tipo": "Presupuesto", "Monto": pval})
+                    chart_data_cat.append({"Concepto": s['nombre'], "Tipo": "Real", "Monto": rval_total})
+                
+                # Añadir Total al gráfico
+                t_pres_c = info_c.get("presupuesto", 0.0)
+                t_real_c = info_c.get("real", 0.0)
+                chart_data_cat.append({"Concepto": "Total", "Tipo": "Presupuesto", "Monto": t_pres_c})
+                chart_data_cat.append({"Concepto": "Total", "Tipo": "Real", "Monto": t_real_c})
+                
+                df_chart = pd.DataFrame(chart_data_cat)
+                
+                target_col = g_col1 if (index_cat % 2 == 0) else g_col2
+                with target_col:
+                    chart_bars = alt.Chart(df_chart).mark_bar().encode(
+                        x=alt.X('Concepto:N', title=None, sort=None),
+                        y=alt.Y('Monto:Q', title="Euros (€)"),
+                        color=alt.Color('Tipo:N', scale=alt.Scale(
+                            domain=['Presupuesto', 'Real'],
+                            range=['#d4e157', '#ec407a']
+                        )),
+                        xOffset='Tipo:N',
+                        tooltip=['Concepto', 'Tipo', alt.Tooltip('Monto:Q', format=',.2f')]
+                    ).properties(height=220, title=f"{n_cat}")
+                    st.altair_chart(chart_bars, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 3. FORMULARIO CON CATEGORÍA Y SUBCATEGORÍA FILTRADA PARA AÑADIR TRANSACCIÓN
+        st.markdown("##### ➕ Añadir Nueva Transacción")
+        f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([1.8, 2, 2, 2.5, 1.5, 1.2])
+        
+        with f_col1:
+            fecha_val = st.date_input("Fecha", value=date(year_selected, idx, min(date.today().day, 28)), key=f"dt_{mes_key}")
+            
+        with f_col2:
+            cat_options = {c['id']: c['nombre'] for c in categorias}
+            cat_sel_id = st.selectbox("Categoría", options=list(cat_options.keys()), format_func=lambda x: cat_options[x], key=f"cat_sb_{mes_key}")
+            
+        with f_col3:
+            subcats_filtradas = [s for s in todas_subcats if s['categoria_id'] == cat_sel_id]
+            subcat_opts = {s['id']: s['nombre'] for s in subcats_filtradas}
+            subcat_sel_id = st.selectbox("Subcategoría", options=list(subcat_opts.keys()), format_func=lambda x: subcat_opts[x], key=f"subcat_sb_{mes_key}") if subcat_opts else None
+            
+        with f_col4:
+            conc_val = st.text_input("Concepto / Causa", key=f"txt_{mes_key}")
+            
+        with f_col5:
+            cant_val = st.number_input("Cantidad (€)", min_value=0.0, step=10.0, key=f"num_{mes_key}")
+            
+        with f_col6:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            btn_add = st.button("Guardar", key=f"btn_add_{mes_key}", use_container_width=True)
+            
+        if btn_add:
+            if subcat_sel_id and cant_val > 0:
+                api_client.create_transaccion(fecha_val, subcat_sel_id, cant_val, conc_val)
+                st.success("¡Transacción guardada correctamente!")
+                st.rerun()
+            else:
+                st.error("Por favor, selecciona una subcategoría y una cantidad mayor a 0.")
 
         # Personalizar Presupuesto del Mes (Opcional)
         with st.expander(f"✏️ Personalizar Presupuesto de {nombre_mes} (Opcional)"):
@@ -516,6 +593,65 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
 <span style="color: {txt_c}; font-size: 24px; font-weight: 700; display: block; font-variant-numeric: tabular-nums;">{sg}{desv:,.2f} €</span>
 </div>"""
                 st.markdown(ds_card, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 4. EXPANDIBLE CON GRÁFICO CIRCULAR DE PORCENTAJES REALES (Cumplimiento 50/30/20)
+        with st.expander("🍰 Porcentajes Reales de los Bloques (Cumplimiento 50/30/20)", expanded=True):
+            real_sin_asignar = max(0.0, real_ing - (real_nec_m + real_des_m + real_aho_m))
+            if real_ing > 0:
+                pct_nec = (real_nec_m / real_ing) * 100
+                pct_des = (real_des_m / real_ing) * 100
+                pct_aho = (real_aho_m / real_ing) * 100
+                pct_sin = (real_sin_asignar / real_ing) * 100
+            else:
+                pct_nec, pct_des, pct_aho, pct_sin = 0.0, 0.0, 0.0, 0.0
+            
+            df_pie_m = pd.DataFrame([
+                {"Bloque": "Necesidades Totales", "Porcentaje": pct_nec, "Monto": real_nec_m},
+                {"Bloque": "Deseos Totales", "Porcentaje": pct_des, "Monto": real_des_m},
+                {"Bloque": "Ahorros Totales", "Porcentaje": pct_aho, "Monto": real_aho_m},
+                {"Bloque": "Sin Asignar", "Porcentaje": pct_sin, "Monto": real_sin_asignar}
+            ])
+            
+            p_col1, p_col2 = st.columns([1.5, 1])
+            with p_col1:
+                pie_chart = alt.Chart(df_pie_m).mark_arc(innerRadius=0, outerRadius=140).encode(
+                    theta=alt.Theta(field="Porcentaje", type="quantitative"),
+                    color=alt.Color(field="Bloque", type="nominal", scale=alt.Scale(
+                        domain=["Necesidades Totales", "Deseos Totales", "Ahorros Totales", "Sin Asignar"],
+                        range=["#1b6289", "#f27231", "#1b7332", "#78909c"]
+                    ), title=None),
+                    tooltip=["Bloque", alt.Tooltip("Porcentaje:Q", format=".1f", title="Porcentaje (%)"), alt.Tooltip("Monto:Q", format=",.2f", title="Monto Real (€)")]
+                ).properties(height=340, title="Porcentajes Reales de los Bloques")
+                
+                st.altair_chart(pie_chart, use_container_width=True)
+                
+            with p_col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("##### 🎯 Metas 50/30/20")
+                
+                st.markdown(f"""
+                <div style="background: rgba(27, 98, 137, 0.15); border-left: 5px solid #1b6289; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px;">
+                    <span style="font-weight: 600; font-size: 13px;">Necesidades: <strong>{pct_nec:.1f}%</strong></span> <span style="font-size: 12px; opacity: 0.8;">(Meta: 50%)</span><br>
+                    <span style="font-size: 14px; font-weight: 700; color: {'#4caf50' if pct_nec <= 50 else '#ef5350'};">{real_nec_m:,.2f} €</span>
+                </div>
+                
+                <div style="background: rgba(242, 114, 49, 0.15); border-left: 5px solid #f27231; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px;">
+                    <span style="font-weight: 600; font-size: 13px;">Deseos: <strong>{pct_des:.1f}%</strong></span> <span style="font-size: 12px; opacity: 0.8;">(Meta: 30%)</span><br>
+                    <span style="font-size: 14px; font-weight: 700; color: {'#4caf50' if pct_des <= 30 else '#ef5350'};">{real_des_m:,.2f} €</span>
+                </div>
+                
+                <div style="background: rgba(27, 115, 50, 0.15); border-left: 5px solid #1b7332; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px;">
+                    <span style="font-weight: 600; font-size: 13px;">Ahorro: <strong>{pct_aho:.1f}%</strong></span> <span style="font-size: 12px; opacity: 0.8;">(Meta: 20%)</span><br>
+                    <span style="font-size: 14px; font-weight: 700; color: {'#4caf50' if pct_aho >= 20 else '#ef5350'};">{real_aho_m:,.2f} €</span>
+                </div>
+                
+                <div style="background: rgba(120, 144, 156, 0.15); border-left: 5px solid #78909c; padding: 10px 14px; border-radius: 6px;">
+                    <span style="font-weight: 600; font-size: 13px;">Sin Asignar: <strong>{pct_sin:.1f}%</strong></span><br>
+                    <span style="font-size: 14px; font-weight: 700; color: #78909c;">{real_sin_asignar:,.2f} €</span>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # ==========================================
