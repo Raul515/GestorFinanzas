@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: 
+      dockerfile: ./images/backend/Dockerfile
+      context: ../
+    container_name: backend_gestor
+    ports:
+      - "8000:8000"
+    networks: 
+      - app-network
+    volumes:
+      - ../src/backend/data:/app/src/backend/data
+
+  frontend:
+    build: 
+      dockerfile: ./images/frontend/Dockerfile
+      context: ../
+    container_name: frontend_gestor
+    ports:
+      - "8501:8501"
+    depends_on: 
+      - backend
+    networks: 
+      - app-network
+    environment:
+      - API_URL=http://backend_gestor:8000
+
+networks: 
+  app-network:
+    driver: bridge

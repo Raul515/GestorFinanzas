@@ -1,0 +1,10 @@
+/* Custom Streamlit Styles */
+.stDataFrame {
+    font-family: "Inter", sans-serif;
+}
+
+div[data-testid="stMetricValue"] {
+    font-size: 1.5rem;
+}
+
+/* Permitir que Streamlit controle el fondo en Light y Dark mode */

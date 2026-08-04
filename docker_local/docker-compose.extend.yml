@@ -1,0 +1,17 @@
+services:
+  backend:
+    command: ["/bin/bash", "/app/images/backend/start_services.sh"]
+    environment:
+      - PYTHONPATH=/app/src:/app
+    volumes:
+      - ../:/app
+      - /app/.venv
+
+  frontend:
+    command: ["/bin/bash", "/app/images/frontend/start_services.sh"]
+    environment:
+      - PYTHONPATH=/app/src:/app
+      - API_URL=http://backend_gestor:8000
+    volumes:
+      - ../:/app
+      - /app/.venv
