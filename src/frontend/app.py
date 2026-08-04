@@ -70,13 +70,19 @@ with tabs[0]:
                 r_sum = 0.0
                 for s in cat_subcats:
                     s_id = s['id']
+                    p_val = 0.0
                     if presupuestos_m:
                         p_match = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
                         if p_match:
-                            p_sum += p_match[0]['cantidad']
+                            p_val = p_match[0]['cantidad']
+                    p_sum += p_val
+                    
+                    t_val = 0.0
                     if transacciones_m:
                         r_match = [t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id]
-                        r_sum += sum(r_match)
+                        t_val = sum(r_match)
+                    
+                    r_sum += (p_val + t_val)
                 
                 anual_data[m][cat['nombre']]["presupuesto"] = p_sum
                 anual_data[m][cat['nombre']]["real"] = r_sum
@@ -314,13 +320,19 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
             t_real = 0.0
             for s in cat_subcats:
                 s_id = s['id']
+                pval = 0.0
                 if presupuestos_m:
                     p_match = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
                     if p_match:
-                        t_pres += p_match[0]['cantidad']
+                        pval = p_match[0]['cantidad']
+                t_pres += pval
+                
+                tval = 0.0
                 if transacciones_m:
                     r_match = [t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id]
-                    t_real += sum(r_match)
+                    tval = sum(r_match)
+                
+                t_real += (pval + tval)
             totales_m[cat['nombre']] = {"presupuesto": t_pres, "real": t_real, "tipo": cat['tipo'], "subcategorias": cat_subcats}
         
         # 1. RESUMEN KPI DEL MES
@@ -445,14 +457,16 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
                         if pm:
                             pval = pm[0]['cantidad']
                     
-                    rval = 0.0
+                    rval_trans = 0.0
                     if transacciones_m:
-                        rval = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                        rval_trans = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                    
+                    rval_total = pval + rval_trans
                     
                     f_html += f"""<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2);">
 <td style="padding: 10px; font-weight: 500; color: inherit;">{s['nombre']}</td>
 <td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{pval:,.2f} €</td>
-<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{rval:,.2f} €</td>
+<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{rval_total:,.2f} €</td>
 </tr>"""
                 
                 t_html = f"""<table style="width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; color: inherit;">

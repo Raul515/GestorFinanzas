@@ -5,6 +5,8 @@ from backend.domain.models import categorias as cat_model, presupuestos as pres_
 from backend.domain.schemas import categorias as cat_schema, presupuestos as pres_schema, transacciones as trans_schema
 from typing import Optional
 
+import datetime
+
 class SQLiteRepository(IRepository):
     def __init__(self, db: Session):
         self.db = db
@@ -79,6 +81,35 @@ class SQLiteRepository(IRepository):
         return db_item
 
     def save_presupuestos_bulk(self, presupuestos: list[pres_schema.PresupuestoMensualCreate]):
+        if not presupuestos:
+            return []
+
+        es_base = any(item.mes == "BASE" for item in presupuestos)
+        if es_base:
+            # 1. Congelar automáticamente los meses pasados reales antes de actualizar la plantilla BASE
+            today = datetime.date.today()
+            mes_actual_str = today.strftime("%Y-%m")
+            year_actual = today.year
+            
+            # Obtener la plantilla BASE antigua que existía hasta este momento
+            base_antiguo = self.db.query(pres_model.PresupuestoMensual).filter(pres_model.PresupuestoMensual.mes == "BASE").all()
+            
+            if base_antiguo:
+                # Congelar meses pasados del año actual (ej. 2026-01 a 2026-07)
+                for m in range(1, today.month):
+                    m_key = f"{year_actual}-{m:02d}"
+                    if m_key < mes_actual_str:
+                        tiene_especifico = self.db.query(pres_model.PresupuestoMensual).filter(pres_model.PresupuestoMensual.mes == m_key).first()
+                        if not tiene_especifico:
+                            for b in base_antiguo:
+                                p_congelado = pres_model.PresupuestoMensual(
+                                    mes=m_key,
+                                    subcategoria_id=b.subcategoria_id,
+                                    cantidad=b.cantidad
+                                )
+                                self.db.add(p_congelado)
+                self.db.commit()
+
         resultado = []
         for item in presupuestos:
             db_item = self.db.query(pres_model.PresupuestoMensual).filter(
