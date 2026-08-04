@@ -327,6 +327,7 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
 
         # 1. RESUMEN KPI DEL MES
         real_ing = totales_m.get(ingresos_name, {}).get("real", 0.0)
+        pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
         
         real_nec_m = totales_m.get(necesidades_name, {}).get("real", 0.0)
         pres_nec_m = totales_m.get(necesidades_name, {}).get("presupuesto", 0.0)
