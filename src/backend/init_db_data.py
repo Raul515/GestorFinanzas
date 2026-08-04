@@ -34,7 +34,7 @@ def populate():
     db.commit()
     
     # Subcategorias
-    ingresos = ["Salario NETO", "Trabajo en B", "Ingresos Secundarios", "Devoluciones y Reembolsos", "Intereses y Dividendos", "Otros Ingresos"]
+    ingresos = ["Salario NETO", "Ingresos Secundarios", "Devoluciones y Reembolsos", "Intereses y Dividendos", "Otros Ingresos"]
     necesidades = ["Alquiler / Hipoteca", "Suministros (Luz, agua, gas, internet)", "Alimentación básica", "Seguros (Salud, Coche, Vida)", "Cuota del Coche", "Gasolina y Transporte público", "Pago de Deudas (Préstamos personales, mínimos de Tarjetas de Crédito)", "Otros Gastos Esenciales"]
     deseos = ["Entretenimiento (Tomar algo...)", "Salir a comer fuera", "Gimnasio", "Hobbies (Libros, cursos libres)", "Ropa y Complementos", "Tecnología y Dispositivos", "Fondo para Viajes y Vacaciones", "Cuidado Personal (Peluquería, estética, masajes)", "Suscripciones plataformas (Netflix, Spotiffly…)", "Otros Caprichos"]
     ahorro = ["Fondo de emergencia", "Inversión Largo Plazo (Fondos Indexados)", "Fondo de amortización para Proyectos (Medio Plazo)", "Fondo de amortizacion para x (Corto Plazo)"]

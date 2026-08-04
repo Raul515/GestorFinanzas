@@ -57,3 +57,10 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
         return response.json() if response.status_code == 200 else None
     except:
         return None
+
+def save_presupuestos_bulk(presupuestos_list):
+    try:
+        response = requests.post(f"{API_URL}/presupuestos/bulk", json=presupuestos_list)
+        return response.json() if response.status_code == 200 else None
+    except:
+        return None

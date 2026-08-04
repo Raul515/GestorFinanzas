@@ -17,3 +17,7 @@ def read_presupuestos(mes: str, repo: SQLiteRepository = Depends(get_repo)):
 @router.post("/", response_model=schemas.PresupuestoMensual)
 def create_presupuesto(presupuesto: schemas.PresupuestoMensualCreate, repo: SQLiteRepository = Depends(get_repo)):
     return repo.create_presupuesto(presupuesto)
+
+@router.post("/bulk", response_model=List[schemas.PresupuestoMensual])
+def create_presupuestos_bulk(presupuestos: List[schemas.PresupuestoMensualCreate], repo: SQLiteRepository = Depends(get_repo)):
+    return repo.save_presupuestos_bulk(presupuestos)

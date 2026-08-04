@@ -25,8 +25,8 @@ MESES_NOMBRES = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-# Pestañas de Navegación (Resumen Anual + 12 Meses)
-tabs_list = ["📊 Resumen Anual"] + MESES_NOMBRES
+# Pestañas de Navegación (Resumen Anual + 12 Meses + Presupuesto Base)
+tabs_list = ["📊 Resumen Anual"] + MESES_NOMBRES + ["⚙️ Presupuesto Base"]
 tabs = st.tabs(tabs_list)
 
 # Datos globales de categorías y subcategorías
@@ -291,7 +291,7 @@ with tabs[0]:
 # ==========================================
 # PESTAÑAS 1 a 12: MESES INDIVIDUALES
 # ==========================================
-for idx, tab in enumerate(tabs[1:], start=1):
+for idx, tab in enumerate(tabs[1:-1], start=1):
     with tab:
         mes_key = f"{year_selected}-{idx:02d}"
         nombre_mes = MESES_NOMBRES[idx-1]
@@ -374,6 +374,43 @@ for idx, tab in enumerate(tabs[1:], start=1):
                     st.rerun()
                 else:
                     st.error("Por favor, selecciona una subcategoría y una cantidad mayor que 0.")
+
+        # Personalizar Presupuesto del Mes (Opcional)
+        with st.expander(f"✏️ Personalizar Presupuesto de {nombre_mes} (Opcional)"):
+            st.caption("Si este mes tiene un gasto o ingreso presupuestado excepcional, puedes modificarlo aquí. De lo contrario, usará los valores por defecto de tu Presupuesto Base.")
+            with st.form(key=f"form_pres_mes_{mes_key}"):
+                mes_pres_nuevos = []
+                p_mes_map = {p['subcategoria_id']: p['cantidad'] for p in presupuestos_m} if presupuestos_m else {}
+                
+                for cat in categorias:
+                    n_cat = cat['nombre']
+                    subcats_c = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                    if not subcats_c:
+                        continue
+                    st.markdown(f"**{n_cat}**")
+                    cols_m = st.columns(2)
+                    for i_s, s in enumerate(subcats_c):
+                        v_actual = p_mes_map.get(s['id'], 0.0)
+                        with cols_m[i_s % 2]:
+                            nv = st.number_input(
+                                label=f"{s['nombre']} (€)",
+                                min_value=0.0,
+                                value=float(v_actual),
+                                step=10.0,
+                                key=f"pm_in_{mes_key}_{s['id']}"
+                            )
+                            mes_pres_nuevos.append({
+                                "mes": mes_key,
+                                "subcategoria_id": s['id'],
+                                "cantidad": nv
+                            })
+                
+                btn_save_m = st.form_submit_button(f"💾 Guardar Presupuesto de {nombre_mes}", use_container_width=True)
+                if btn_save_m:
+                    res_m = api_client.save_presupuestos_bulk(mes_pres_nuevos)
+                    if res_m is not None:
+                        st.success(f"¡Presupuesto de {nombre_mes} actualizado!")
+                        st.rerun()
 
         st.markdown("---")
 
@@ -465,3 +502,58 @@ for idx, tab in enumerate(tabs[1:], start=1):
 <span style="color: {txt_c}; font-size: 24px; font-weight: 700; display: block; font-variant-numeric: tabular-nums;">{sg}{desv:,.2f} €</span>
 </div>"""
                 st.markdown(ds_card, unsafe_allow_html=True)
+
+
+# ==========================================
+# PESTAÑA FINAL: CONFIGURACIÓN DEL PRESUPUESTO BASE
+# ==========================================
+with tabs[-1]:
+    st.header("⚙️ Configuración del Presupuesto Base (Plantilla)")
+    st.caption("Establece las cantidades presupuestadas habituales para tus ingresos y gastos. Todos los meses utilizarán por defecto estos valores si no tienen una excepción propia.")
+    
+    if not categorias:
+        st.info("La base de datos está vacía.")
+    else:
+        presupuestos_base = api_client.get_presupuestos("BASE")
+        base_map = {p['subcategoria_id']: p['cantidad'] for p in presupuestos_base} if presupuestos_base else {}
+        
+        with st.form("form_presupuesto_base"):
+            nuevos_presupuestos = []
+            
+            for cat in categorias:
+                n_cat = cat['nombre']
+                subcats_c = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                if not subcats_c:
+                    continue
+                    
+                h_color = colores_cabecera.get(n_cat, "#333333")
+                st.markdown(f"""<div style="border-left: 6px solid {h_color}; padding-left: 12px; margin-top: 25px; margin-bottom: 10px;">
+<h4 style="margin: 0; color: inherit; font-family: 'Inter', sans-serif;">{n_cat}</h4>
+</div>""", unsafe_allow_html=True)
+                
+                cols = st.columns(2)
+                for i_s, s in enumerate(subcats_c):
+                    val_actual = base_map.get(s['id'], 0.0)
+                    with cols[i_s % 2]:
+                        nuevo_val = st.number_input(
+                            label=f"{s['nombre']} (€)",
+                            min_value=0.0,
+                            value=float(val_actual),
+                            step=10.0,
+                            key=f"base_input_{s['id']}"
+                        )
+                        nuevos_presupuestos.append({
+                            "mes": "BASE",
+                            "subcategoria_id": s['id'],
+                            "cantidad": nuevo_val
+                        })
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            btn_save_base = st.form_submit_button("💾 Guardar Presupuesto Base", use_container_width=True)
+            if btn_save_base:
+                res = api_client.save_presupuestos_bulk(nuevos_presupuestos)
+                if res is not None:
+                    st.success("¡Presupuesto Base guardado correctamente! Todos los meses sin presupuesto específico adoptarán estos valores.")
+                    st.rerun()
+                else:
+                    st.error("Error al guardar el presupuesto base.")
