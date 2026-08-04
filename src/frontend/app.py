@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+import altair as alt
+from datetime import date, datetime
+import os
 import api_client
 
 st.set_page_config(page_title="Gestor Finanzas", layout="wide")
 
 # Load CSS
-import os
 css_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style.css")
 if os.path.exists(css_path):
     with open(css_path) as f:
@@ -14,229 +15,453 @@ if os.path.exists(css_path):
 
 st.title("Gestor de Finanzas Personales")
 
-# Sidebar for global filters and entry
-st.sidebar.header("Filtros")
-mes_actual = st.sidebar.text_input("Mes (YYYY-MM)", value=date.today().strftime("%Y-%m"))
+# Sidebar para selección de año
+st.sidebar.header("Configuración")
+year_today = date.today().year
+year_selected = st.sidebar.number_input("Año", min_value=2000, max_value=2100, value=year_today, step=1)
 
-st.sidebar.header("Añadir Transacción")
-todas_subcats = api_client.get_subcategorias()
-if todas_subcats:
-    subcat_options = {s['id']: s['nombre'] for s in todas_subcats}
-    selected_subcat = st.sidebar.selectbox("Subcategoría", options=list(subcat_options.keys()), format_func=lambda x: subcat_options[x])
-    cantidad = st.sidebar.number_input("Cantidad (€)", min_value=0.0, step=10.0)
-    concepto = st.sidebar.text_input("Concepto")
-    fecha = st.sidebar.date_input("Fecha", value=date.today())
-    if st.sidebar.button("Guardar Transacción"):
-        api_client.create_transaccion(fecha, selected_subcat, cantidad, concepto)
-        st.sidebar.success("Transacción añadida!")
-        st.rerun()
-else:
-    st.sidebar.warning("No hay subcategorías en la BBDD. Asegúrate de inicializar el backend.")
+MESES_NOMBRES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+]
 
-# Main Dashboard
-st.header(f"Resumen de {mes_actual}")
+# Pestañas de Navegación (Resumen Anual + 12 Meses)
+tabs_list = ["📊 Resumen Anual"] + MESES_NOMBRES
+tabs = st.tabs(tabs_list)
 
-# Fetch data
+# Datos globales de categorías y subcategorías
 categorias = api_client.get_categorias()
-presupuestos = api_client.get_presupuestos(mes_actual)
-transacciones = api_client.get_transacciones(mes_actual)
 todas_subcats = api_client.get_subcategorias()
+subcat_options = {s['id']: s['nombre'] for s in todas_subcats} if todas_subcats else {}
 
-if not categorias:
-    st.info("La base de datos está vacía o el backend no está corriendo. Revisa que FastAPI esté funcionando en el puerto 8000.")
-else:
-    # 1. Calcular totales para la gráfica y la lógica general
-    totales = {}
-    for cat in categorias:
-        subcats = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
-        total_pres = 0.0
-        total_real = 0.0
-        for s in subcats:
-            s_id = s['id']
-            # Presupuesto
-            if presupuestos:
-                p_row = [p for p in presupuestos if p['subcategoria_id'] == s_id]
-                if p_row:
-                    total_pres += p_row[0]['cantidad']
-            # Real
-            if transacciones:
-                r_sum = sum(t['cantidad'] for t in transacciones if t['subcategoria_id'] == s_id)
-                total_real += r_sum
-        totales[cat['nombre']] = {
-            "presupuesto": total_pres,
-            "real": total_real,
-            "tipo": cat['tipo'],
-            "subcategorias": subcats
-        }
-    
-    # 2. Renderizar gráficos de la Regla 50/30/20
-    necesidades_name = "Necesidades Básicas"
-    deseos_name = "Deseos y Estilo de vida"
-    ahorro_name = "Ahorro e Inversión"
-    
-    pres_nec = totales.get(necesidades_name, {}).get("presupuesto", 0.0)
-    real_nec = totales.get(necesidades_name, {}).get("real", 0.0)
-    
-    pres_des = totales.get(deseos_name, {}).get("presupuesto", 0.0)
-    real_des = totales.get(deseos_name, {}).get("real", 0.0)
-    
-    pres_aho = totales.get(ahorro_name, {}).get("presupuesto", 0.0)
-    real_aho = totales.get(ahorro_name, {}).get("real", 0.0)
-    
-    total_gasto_pres = pres_nec + pres_des + pres_aho
-    total_gasto_real = real_nec + real_des + real_aho
-    
-    pct_nec_pres = (pres_nec / total_gasto_pres * 100) if total_gasto_pres > 0 else 0.0
-    pct_des_pres = (pres_des / total_gasto_pres * 100) if total_gasto_pres > 0 else 0.0
-    pct_aho_pres = (pres_aho / total_gasto_pres * 100) if total_gasto_pres > 0 else 0.0
-    
-    pct_nec_real = (real_nec / total_gasto_real * 100) if total_gasto_real > 0 else 0.0
-    pct_des_real = (real_des / total_gasto_real * 100) if total_gasto_real > 0 else 0.0
-    pct_aho_real = (real_aho / total_gasto_real * 100) if total_gasto_real > 0 else 0.0
-    
-    # Gráficos y KPI de totales
-    import altair as alt
-    
-    chart_col, metrics_col = st.columns([2, 1])
-    
-    with chart_col:
-        data_pct = pd.DataFrame([
-            {"Categoría": "Necesidades (50%)", "Distribución": "Objetivo", "Porcentaje": 50.0},
-            {"Categoría": "Deseos (30%)", "Distribución": "Objetivo", "Porcentaje": 30.0},
-            {"Categoría": "Ahorro/Inv (20%)", "Distribución": "Objetivo", "Porcentaje": 20.0},
-            
-            {"Categoría": "Necesidades (50%)", "Distribución": "Presupuestado", "Porcentaje": pct_nec_pres},
-            {"Categoría": "Deseos (30%)", "Distribución": "Presupuestado", "Porcentaje": pct_des_pres},
-            {"Categoría": "Ahorro/Inv (20%)", "Distribución": "Presupuestado", "Porcentaje": pct_aho_pres},
-            
-            {"Categoría": "Necesidades (50%)", "Distribución": "Real", "Porcentaje": pct_nec_real},
-            {"Categoría": "Deseos (30%)", "Distribución": "Real", "Porcentaje": pct_des_real},
-            {"Categoría": "Ahorro/Inv (20%)", "Distribución": "Real", "Porcentaje": pct_aho_real},
-        ])
-        
-        chart = alt.Chart(data_pct).mark_bar().encode(
-            x=alt.X('Distribución:N', title=None, sort=['Objetivo', 'Presupuestado', 'Real']),
-            y=alt.Y('Porcentaje:Q', title="Porcentaje (%)", scale=alt.Scale(domain=[0, 100])),
-            color=alt.Color('Categoría:N', scale=alt.Scale(
-                domain=['Necesidades (50%)', 'Deseos (30%)', 'Ahorro/Inv (20%)'],
-                range=['#1565c0', '#ef6c00', '#00838f']
-            )),
-            tooltip=['Categoría', 'Distribución', alt.Tooltip('Porcentaje:Q', format='.1f')]
-        ).properties(
-            height=300,
-            title="Distribución del Gasto (Regla 50/30/20)"
-        )
-        st.altair_chart(chart, use_container_width=True)
-        
-    with metrics_col:
-        st.subheader("Totales del Mes")
-        total_ingresos_real = totales.get("Ingresos Netos", {}).get("real", 0.0)
-        total_ingresos_pres = totales.get("Ingresos Netos", {}).get("presupuesto", 0.0)
-        
-        st.metric(label="Ingresos Totales (Real)", value=f"{total_ingresos_real:.2f} €", delta=f"{total_ingresos_real - total_ingresos_pres:.2f} € vs Presupuesto")
-        st.metric(label="Gastos Totales (Real)", value=f"{total_gasto_real:.2f} €", delta=f"{total_gasto_real - total_gasto_pres:.2f} € vs Presupuesto", delta_color="inverse")
-        
-        balance = total_ingresos_real - total_gasto_real
-        st.metric(label="Balance Neto (Ahorro)", value=f"{balance:.2f} €", delta=f"{balance - (total_ingresos_pres - total_gasto_pres):.2f} € vs Presupuesto")
+# Nombres estándar de las categorías
+necesidades_name = "Necesidades Básicas"
+deseos_name = "Deseos y Estilo de vida"
+ahorro_name = "Ahorro e Inversión"
+ingresos_name = "Ingresos Netos"
 
-    st.markdown("---")
+colores_cabecera = {
+    "Ingresos Netos": "#2e7d32",
+    "Necesidades Básicas": "#1565c0",
+    "Deseos y Estilo de vida": "#ef6c00",
+    "Ahorro e Inversión": "#00838f"
+}
+
+# ==========================================
+# PESTAÑA 0: RESUMEN ANUAL
+# ==========================================
+with tabs[0]:
+    st.header(f"Resumen Anual - Año: {year_selected}")
     
-    # 3. Renderizar tablas personalizadas estilo Excel
-    colores_cabecera = {
-        "Ingresos Netos": "#2e7d32",
-        "Necesidades Básicas": "#1565c0",
-        "Deseos y Estilo de vida": "#ef6c00",
-        "Ahorro e Inversión": "#00838f"
-    }
-    
-    for cat in categorias:
-        nombre_cat = cat['nombre']
-        info_cat = totales.get(nombre_cat, {})
-        subcats = info_cat.get("subcategorias", [])
+    if not categorias:
+        st.info("La base de datos está vacía o el backend no está corriendo. Revisa que FastAPI esté funcionando.")
+    else:
+        # Recolectar datos de los 12 meses
+        anual_data = {m: {cat['nombre']: {"presupuesto": 0.0, "real": 0.0} for cat in categorias} for m in range(1, 13)}
         
-        if not subcats:
+        for m in range(1, 13):
+            mes_key = f"{year_selected}-{m:02d}"
+            presupuestos_m = api_client.get_presupuestos(mes_key)
+            transacciones_m = api_client.get_transacciones(mes_key)
+            
+            for cat in categorias:
+                cat_subcats = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                p_sum = 0.0
+                r_sum = 0.0
+                for s in cat_subcats:
+                    s_id = s['id']
+                    if presupuestos_m:
+                        p_match = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        if p_match:
+                            p_sum += p_match[0]['cantidad']
+                    if transacciones_m:
+                        r_match = [t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id]
+                        r_sum += sum(r_match)
+                
+                anual_data[m][cat['nombre']]["presupuesto"] = p_sum
+                anual_data[m][cat['nombre']]["real"] = r_sum
+
+        # Totales Consolidados Anuales
+        ingresos_anual_real = sum(anual_data[m][ingresos_name]["real"] for m in range(1, 13))
+        ingresos_anual_pres = sum(anual_data[m][ingresos_name]["presupuesto"] for m in range(1, 13))
+        
+        nec_anual_real = sum(anual_data[m][necesidades_name]["real"] for m in range(1, 13))
+        nec_anual_pres = sum(anual_data[m][necesidades_name]["presupuesto"] for m in range(1, 13))
+        
+        des_anual_real = sum(anual_data[m][deseos_name]["real"] for m in range(1, 13))
+        des_anual_pres = sum(anual_data[m][deseos_name]["presupuesto"] for m in range(1, 13))
+        
+        aho_anual_real = sum(anual_data[m][ahorro_name]["real"] for m in range(1, 13))
+        aho_anual_pres = sum(anual_data[m][ahorro_name]["presupuesto"] for m in range(1, 13))
+        
+        gasto_corriente_real = nec_anual_real + des_anual_real
+        tasa_ahorro_media = (aho_anual_real / ingresos_anual_real * 100) if ingresos_anual_real > 0 else 0.0
+        ahorro_acumulado_total = aho_anual_real
+        
+        # 1. TARJETAS KPI SUPERIORES ANUALES (4 Columnas)
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        
+        with kpi1:
+            st.markdown(f"""<div style="background-color: rgba(21, 101, 192, 0.1); border: 2px solid #1565c0; border-radius: 8px; padding: 15px; text-align: center;">
+                <span style="font-size: 11px; font-weight: 700; color: #1565c0; text-transform: uppercase;">INGRESOS NETOS ANUALES</span>
+                <h2 style="margin: 5px 0 0 0; color: inherit; font-size: 22px;">{ingresos_anual_real:,.2f} €</h2>
+            </div>""", unsafe_allow_html=True)
+            
+        with kpi2:
+            st.markdown(f"""<div style="background-color: rgba(239, 108, 0, 0.1); border: 2px solid #ef6c00; border-radius: 8px; padding: 15px; text-align: center;">
+                <span style="font-size: 11px; font-weight: 700; color: #ef6c00; text-transform: uppercase;">GASTO CORRIENTE CONSOLIDADO</span>
+                <h2 style="margin: 5px 0 0 0; color: inherit; font-size: 22px;">{gasto_corriente_real:,.2f} €</h2>
+            </div>""", unsafe_allow_html=True)
+            
+        with kpi3:
+            st.markdown(f"""<div style="background-color: rgba(46, 125, 50, 0.15); border: 2px solid #2e7d32; border-radius: 8px; padding: 15px; text-align: center;">
+                <span style="font-size: 11px; font-weight: 700; color: #2e7d32; text-transform: uppercase;">TASA DE AHORRO MEDIA REAL</span>
+                <h2 style="margin: 5px 0 0 0; color: #2e7d32; font-size: 22px;">{tasa_ahorro_media:.2f}%</h2>
+            </div>""", unsafe_allow_html=True)
+            
+        with kpi4:
+            st.markdown(f"""<div style="background-color: rgba(0, 131, 143, 0.1); border: 2px solid #00838f; border-radius: 8px; text-align: center; padding: 15px;">
+                <span style="font-size: 11px; font-weight: 700; color: #00838f; text-transform: uppercase;">AHORRO ACUMULADO TOTAL</span>
+                <h2 style="margin: 5px 0 0 0; color: inherit; font-size: 22px;">{ahorro_acumulado_total:,.2f} €</h2>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 2. RESUMEN FLUJO DINÁMICO & GRÁFICOS (3 Columnas)
+        c_flujo, c_donut, c_bar = st.columns([1.2, 1, 1.2])
+        
+        with c_flujo:
+            st.markdown("##### Resumen Flujo Dinámico")
+            
+            pct_nec_real = (nec_anual_real / ingresos_anual_real * 100) if ingresos_anual_real > 0 else 0.0
+            pct_des_real = (des_anual_real / ingresos_anual_real * 100) if ingresos_anual_real > 0 else 0.0
+            pct_aho_real = (aho_anual_real / ingresos_anual_real * 100) if ingresos_anual_real > 0 else 0.0
+            
+            desv_nec = pct_nec_real - 50.0
+            desv_des = pct_des_real - 30.0
+            desv_aho = pct_aho_real - 20.0
+            
+            flujo_html = f"""<table style="width: 100%; border-collapse: collapse; font-size: 13px; color: inherit;">
+            <thead>
+                <tr style="background-color: #1565c0; color: white;">
+                    <th style="padding: 6px; text-align: left;">Bloque</th>
+                    <th style="padding: 6px; text-align: right;">Cifra Total</th>
+                    <th style="padding: 6px; text-align: right;">% Presup.</th>
+                    <th style="padding: 6px; text-align: right;">% Real</th>
+                    <th style="padding: 6px; text-align: right;">Desviación</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                    <td style="padding: 6px; font-weight: bold;">Ingresos Netos Totales</td>
+                    <td style="padding: 6px; text-align: right;">{ingresos_anual_real:,.2f} €</td>
+                    <td style="padding: 6px; text-align: right;">100,00%</td>
+                    <td style="padding: 6px; text-align: right;">100,00%</td>
+                    <td style="padding: 6px; text-align: right;">0,00%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                    <td style="padding: 6px;">Necesidades Básicas (50%)</td>
+                    <td style="padding: 6px; text-align: right;">{nec_anual_real:,.2f} €</td>
+                    <td style="padding: 6px; text-align: right;">50,00%</td>
+                    <td style="padding: 6px; text-align: right;">{pct_nec_real:.2f}%</td>
+                    <td style="padding: 6px; text-align: right; color: {'#ef5350' if desv_nec > 0 else '#4caf50'};">{desv_nec:+.2f}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                    <td style="padding: 6px;">Deseos (30%)</td>
+                    <td style="padding: 6px; text-align: right;">{des_anual_real:,.2f} €</td>
+                    <td style="padding: 6px; text-align: right;">30,00%</td>
+                    <td style="padding: 6px; text-align: right;">{pct_des_real:.2f}%</td>
+                    <td style="padding: 6px; text-align: right; color: {'#ef5350' if desv_des > 0 else '#4caf50'};">{desv_des:+.2f}%</td>
+                </tr>
+                <tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                    <td style="padding: 6px;">Ahorro e Inversión (20%)</td>
+                    <td style="padding: 6px; text-align: right;">{aho_anual_real:,.2f} €</td>
+                    <td style="padding: 6px; text-align: right;">20,00%</td>
+                    <td style="padding: 6px; text-align: right;">{pct_aho_real:.2f}%</td>
+                    <td style="padding: 6px; text-align: right; color: {'#4caf50' if desv_aho >= 0 else '#ef5350'};">{desv_aho:+.2f}%</td>
+                </tr>
+            </tbody>
+            </table>"""
+            st.markdown(flujo_html, unsafe_allow_html=True)
+            
+        with c_donut:
+            st.markdown("<p style='text-align: center; font-weight: bold; font-size: 13px; margin: 0;'>Porcentaje Real a cada bloque</p>", unsafe_allow_html=True)
+            donut_df = pd.DataFrame([
+                {"Bloque": "Necesidades (50%)", "Valor": nec_anual_real},
+                {"Bloque": "Deseos (30%)", "Valor": des_anual_real},
+                {"Bloque": "Ahorro (20%)", "Valor": aho_anual_real},
+            ])
+            donut_chart = alt.Chart(donut_df).mark_arc(innerRadius=40).encode(
+                theta=alt.Theta(field="Valor", type="quantitative"),
+                color=alt.Color(field="Bloque", type="nominal", scale=alt.Scale(
+                    domain=['Necesidades (50%)', 'Deseos (30%)', 'Ahorro (20%)'],
+                    range=['#1565c0', '#ef6c00', '#2e7d32']
+                )),
+                tooltip=['Bloque', alt.Tooltip('Valor:Q', format=',.2f')]
+            ).properties(height=200)
+            st.altair_chart(donut_chart, use_container_width=True)
+            
+        with c_bar:
+            st.markdown("<p style='text-align: center; font-weight: bold; font-size: 13px; margin: 0;'>Gasto vs Ahorro mensual</p>", unsafe_allow_html=True)
+            mensual_list = []
+            for m in range(1, 13):
+                m_nombre = MESES_NOMBRES[m-1][:3]
+                mensual_list.append({"Mes": m_nombre, "Bloque": "Necesidades", "Monto": anual_data[m][necesidades_name]["real"], "Orden": m})
+                mensual_list.append({"Mes": m_nombre, "Bloque": "Deseos", "Monto": anual_data[m][deseos_name]["real"], "Orden": m})
+                mensual_list.append({"Mes": m_nombre, "Bloque": "Ahorro", "Monto": anual_data[m][ahorro_name]["real"], "Orden": m})
+            
+            bar_df = pd.DataFrame(mensual_list)
+            bar_chart = alt.Chart(bar_df).mark_bar().encode(
+                x=alt.X('Mes:N', sort=alt.SortField("Orden"), title=None),
+                y=alt.Y('Monto:Q', title="Euros (€)"),
+                color=alt.Color('Bloque:N', scale=alt.Scale(
+                    domain=['Necesidades', 'Deseos', 'Ahorro'],
+                    range=['#1565c0', '#ef6c00', '#ffca28']
+                )),
+                tooltip=['Mes', 'Bloque', alt.Tooltip('Monto:Q', format=',.2f')]
+            ).properties(height=200)
+            st.altair_chart(bar_chart, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 3. GRÁFICO DE AHORRO ACUMULADO (LÍNEA)
+        st.markdown("##### Ahorro Acumulado")
+        ahorro_acum_list = []
+        acumulado = 0.0
+        for m in range(1, 13):
+            m_nombre = MESES_NOMBRES[m-1]
+            acumulado += anual_data[m][ahorro_name]["real"]
+            ahorro_acum_list.append({"Mes": m_nombre, "Ahorro Acumulado": acumulado, "Orden": m})
+            
+        line_df = pd.DataFrame(ahorro_acum_list)
+        line_chart = alt.Chart(line_df).mark_line(point=True, color='#00838f', strokeWidth=3).encode(
+            x=alt.X('Mes:N', sort=alt.SortField("Orden"), title=None),
+            y=alt.Y('Ahorro Acumulado:Q', title="Euros (€)"),
+            tooltip=['Mes', alt.Tooltip('Ahorro Acumulado:Q', format=',.2f')]
+        ).properties(height=220)
+        st.altair_chart(line_chart, use_container_width=True)
+
+        # 4. TABLA MATRIZ MENSUAL CONSOLIDADA (Enero a Diciembre + Total)
+        st.markdown("##### Detalle Mensual Consolidado")
+        
+        columnas_meses = "".join([f"<th style='padding: 8px; text-align: right;'>{MESES_NOMBRES[m-1][:3]}</th>" for m in range(1, 13)])
+        
+        def render_row(nombre_bloque, key_name):
+            vals = [anual_data[m][key_name]["real"] for m in range(1, 13)]
+            tot = sum(vals)
+            cells = "".join([f"<td style='padding: 8px; text-align: right;'>{v:,.2f} €</td>" for v in vals])
+            return f"""<tr style="border-bottom: 1px solid rgba(128,128,128,0.2);">
+                <td style="padding: 8px; font-weight: 500;">{nombre_bloque}</td>
+                {cells}
+                <td style="padding: 8px; text-align: right; font-weight: bold;">{tot:,.2f} €</td>
+            </tr>"""
+
+        acum_vals = []
+        ac = 0.0
+        for m in range(1, 13):
+            ac += anual_data[m][ahorro_name]["real"]
+            acum_vals.append(ac)
+        cells_acum = "".join([f"<td style='padding: 8px; text-align: right;'>{v:,.2f} €</td>" for v in acum_vals])
+        row_acum = f"""<tr style="border-bottom: 1px solid rgba(128,128,128,0.2); font-weight: bold; background-color: rgba(0, 131, 143, 0.1);">
+            <td style="padding: 8px;">Ahorro Acumulado</td>
+            {cells_acum}
+            <td style="padding: 8px; text-align: right;">{acum_vals[-1]:,.2f} €</td>
+        </tr>"""
+
+        matriz_html = f"""<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 12px; color: inherit; white-space: nowrap;">
+        <thead>
+            <tr style="background-color: #1565c0; color: white;">
+                <th style="padding: 8px; text-align: left;">Meses</th>
+                {columnas_meses}
+                <th style="padding: 8px; text-align: right;">Total Anual Real</th>
+            </tr>
+        </thead>
+        <tbody>
+            {render_row("Ingresos", ingresos_name)}
+            {render_row("Necesidades (50%)", necesidades_name)}
+            {render_row("Deseos (30%)", deseos_name)}
+            {render_row("Ahorro (20%)", ahorro_name)}
+            {row_acum}
+        </tbody>
+        </table></div>"""
+        
+        st.markdown(matriz_html, unsafe_allow_html=True)
+
+
+# ==========================================
+# PESTAÑAS 1 a 12: MESES INDIVIDUALES
+# ==========================================
+for idx, tab in enumerate(tabs[1:], start=1):
+    with tab:
+        mes_key = f"{year_selected}-{idx:02d}"
+        nombre_mes = MESES_NOMBRES[idx-1]
+        
+        st.header(f"Gestión de Finanzas - {nombre_mes} {year_selected}")
+        
+        # Cargar datos del mes
+        presupuestos_m = api_client.get_presupuestos(mes_key)
+        transacciones_m = api_client.get_transacciones(mes_key)
+        
+        if not categorias:
+            st.info("La base de datos está vacía o el backend no está corriendo.")
             continue
-            
-        header_color = colores_cabecera.get(nombre_cat, "#333333")
-        
-        # Título de sección adaptativo al tema (Light/Dark)
-        st.markdown(f"""<div style="border-left: 6px solid {header_color}; padding-left: 12px; margin-top: 30px; margin-bottom: 15px;">
-<h3 style="margin: 0; color: inherit; font-family: 'Inter', sans-serif; font-weight: 700;">{nombre_cat}</h3>
-</div>""", unsafe_allow_html=True)
-        
-        col_tabla, col_desv = st.columns([3, 1])
-        
-        total_pres = info_cat.get("presupuesto", 0.0)
-        total_real = info_cat.get("real", 0.0)
-        
-        with col_tabla:
-            filas_html = ""
-            for s in subcats:
+
+        # Totales del mes
+        totales_m = {}
+        for cat in categorias:
+            cat_subcats = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+            t_pres = 0.0
+            t_real = 0.0
+            for s in cat_subcats:
                 s_id = s['id']
+                if presupuestos_m:
+                    p_match = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                    if p_match:
+                        t_pres += p_match[0]['cantidad']
+                if transacciones_m:
+                    r_match = [t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id]
+                    t_real += sum(r_match)
+            totales_m[cat['nombre']] = {"presupuesto": t_pres, "real": t_real, "tipo": cat['tipo'], "subcategorias": cat_subcats}
+        
+        # 1. RESUMEN KPI DEL MES
+        real_ing = totales_m.get(ingresos_name, {}).get("real", 0.0)
+        pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
+        
+        real_nec_m = totales_m.get(necesidades_name, {}).get("real", 0.0)
+        pres_nec_m = totales_m.get(necesidades_name, {}).get("presupuesto", 0.0)
+        
+        real_des_m = totales_m.get(deseos_name, {}).get("real", 0.0)
+        pres_des_m = totales_m.get(deseos_name, {}).get("presupuesto", 0.0)
+        
+        real_aho_m = totales_m.get(ahorro_name, {}).get("real", 0.0)
+        pres_aho_m = totales_m.get(ahorro_name, {}).get("presupuesto", 0.0)
+        
+        total_gasto_real_m = real_nec_m + real_des_m + real_aho_m
+        total_gasto_pres_m = pres_nec_m + pres_des_m + pres_aho_m
+        
+        m_kpi1, m_kpi2, m_kpi3 = st.columns(3)
+        with m_kpi1:
+            st.metric(label="Ingresos Totales (Real)", value=f"{real_ing:,.2f} €", delta=f"{real_ing - pres_ing:,.2f} € vs Presupuesto")
+        with m_kpi2:
+            st.metric(label="Gastos Totales (Real)", value=f"{total_gasto_real_m:,.2f} €", delta=f"{total_gasto_real_m - total_gasto_pres_m:,.2f} € vs Presupuesto", delta_color="inverse")
+        with m_kpi3:
+            bal_m = real_ing - total_gasto_real_m
+            st.metric(label="Balance Neto (Ahorro)", value=f"{bal_m:,.2f} €", delta=f"{bal_m - (pres_ing - total_gasto_pres_m):,.2f} € vs Presupuesto")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 2. FORMULARIO RÁPIDO Y VISIBLE PARA AÑADIR TRANSACCIÓN (Justo debajo del resumen)
+        st.markdown("##### ➕ Añadir Nueva Transacción")
+        with st.form(key=f"form_add_{mes_key}", clear_on_submit=True):
+            f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns([2, 3, 2, 3, 2])
+            
+            with f_col1:
+                fecha_val = st.date_input("Fecha", value=date(year_selected, idx, min(date.today().day, 28)))
+            with f_col2:
+                subcat_sel = st.selectbox("Subcategoría", options=list(subcat_options.keys()), format_func=lambda x: subcat_options[x], key=f"sb_{mes_key}")
+            with f_col3:
+                cant_val = st.number_input("Cantidad (€)", min_value=0.0, step=10.0, key=f"num_{mes_key}")
+            with f_col4:
+                conc_val = st.text_input("Concepto / Causa", key=f"txt_{mes_key}")
+            with f_col5:
+                st.write("&nbsp;")
+                btn_add = st.form_submit_button("Guardar", use_container_width=True)
                 
-                pres_val = 0.0
-                if presupuestos:
-                    p_row = [p for p in presupuestos if p['subcategoria_id'] == s_id]
-                    if p_row:
-                        pres_val = p_row[0]['cantidad']
+            if btn_add:
+                if subcat_sel and cant_val > 0:
+                    api_client.create_transaccion(fecha_val, subcat_sel, cant_val, conc_val)
+                    st.success("¡Transacción guardada correctamente!")
+                    st.rerun()
+                else:
+                    st.error("Por favor, selecciona una subcategoría y una cantidad mayor que 0.")
+
+        st.markdown("---")
+
+        # 3. TABLAS POR CATEGORÍA DEL MES
+        for cat in categorias:
+            n_cat = cat['nombre']
+            info_c = totales_m.get(n_cat, {})
+            subcats_c = info_c.get("subcategorias", [])
+            
+            if not subcats_c:
+                continue
                 
-                real_val = 0.0
-                if transacciones:
-                    real_val = sum(t['cantidad'] for t in transacciones if t['subcategoria_id'] == s_id)
-                
-                filas_html += f"""<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2);">
+            h_color = colores_cabecera.get(n_cat, "#333333")
+            
+            st.markdown(f"""<div style="border-left: 6px solid {h_color}; padding-left: 12px; margin-top: 25px; margin-bottom: 12px;">
+<h3 style="margin: 0; color: inherit; font-family: 'Inter', sans-serif; font-weight: 700;">{n_cat}</h3>
+</div>""", unsafe_allow_html=True)
+            
+            c_tb, c_ds = st.columns([3, 1])
+            
+            t_pres_c = info_c.get("presupuesto", 0.0)
+            t_real_c = info_c.get("real", 0.0)
+            
+            with c_tb:
+                f_html = ""
+                for s in subcats_c:
+                    s_id = s['id']
+                    
+                    pval = 0.0
+                    if presupuestos_m:
+                        pm = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        if pm:
+                            pval = pm[0]['cantidad']
+                    
+                    rval = 0.0
+                    if transacciones_m:
+                        rval = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                    
+                    f_html += f"""<tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2);">
 <td style="padding: 10px; font-weight: 500; color: inherit;">{s['nombre']}</td>
-<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{pres_val:.2f} €</td>
-<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{real_val:.2f} €</td>
+<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{pval:,.2f} €</td>
+<td style="padding: 10px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{rval:,.2f} €</td>
 </tr>"""
                 
-            tabla_html = f"""<table style="width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; color: inherit;">
+                t_html = f"""<table style="width: 100%; border-collapse: collapse; font-family: 'Inter', sans-serif; color: inherit;">
 <thead>
-<tr style="background-color: {header_color}; color: #ffffff !important; text-align: left; font-weight: 600;">
+<tr style="background-color: {h_color}; color: #ffffff !important; text-align: left; font-weight: 600;">
 <th style="padding: 12px; border-bottom: 2px solid rgba(0,0,0,0.1); border-top-left-radius: 4px; color: #ffffff;">Concepto</th>
 <th style="padding: 12px; border-bottom: 2px solid rgba(0,0,0,0.1); text-align: right; color: #ffffff;">Presupuesto</th>
 <th style="padding: 12px; border-bottom: 2px solid rgba(0,0,0,0.1); text-align: right; border-top-right-radius: 4px; color: #ffffff;">Real</th>
 </tr>
 </thead>
 <tbody>
-{filas_html}
+{f_html}
 <tr style="font-weight: bold; background-color: rgba(128, 128, 128, 0.15);">
 <td style="padding: 12px; border-bottom-left-radius: 4px; color: inherit;">TOTAL</td>
-<td style="padding: 12px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{total_pres:.2f} €</td>
-<td style="padding: 12px; text-align: right; font-variant-numeric: tabular-nums; border-bottom-right-radius: 4px; color: inherit;">{total_real:.2f} €</td>
+<td style="padding: 12px; text-align: right; font-variant-numeric: tabular-nums; color: inherit;">{t_pres_c:,.2f} €</td>
+<td style="padding: 12px; text-align: right; font-variant-numeric: tabular-nums; border-bottom-right-radius: 4px; color: inherit;">{t_real_c:,.2f} €</td>
 </tr>
 </tbody>
 </table>"""
-            st.markdown(tabla_html, unsafe_allow_html=True)
-            
-        with col_desv:
-            # Calcular desviación según tipo de categoría
-            if cat['tipo'] == 'ingreso':
-                desviacion = total_real - total_pres
-                es_positivo = desviacion >= 0
-            else:
-                if nombre_cat == "Ahorro e Inversión":
-                    desviacion = total_real - total_pres
-                    es_positivo = desviacion >= 0
-                else:
-                    # Para gastos, gastar menos es positivo (verde)
-                    desviacion = total_pres - total_real
-                    es_positivo = desviacion >= 0
-            
-            # Estilo condicional de desviación (verde brillante para positivo, rojo claro para negativo)
-            if es_positivo:
-                bg_color = "rgba(46, 125, 50, 0.15)"
-                border_color = "#2e7d32"
-                text_color = "#4caf50"
-                signo = "+"
-            else:
-                bg_color = "rgba(198, 40, 40, 0.15)"
-                border_color = "#c62828"
-                text_color = "#ef5350"
-                signo = ""
+                st.markdown(t_html, unsafe_allow_html=True)
                 
-            desviacion_card = f"""<div style="background-color: {bg_color}; border: 2px solid {border_color}; padding: 22px 15px; border-radius: 8px; text-align: center; margin-top: 38px;">
+            with c_ds:
+                if cat['tipo'] == 'ingreso':
+                    desv = t_real_c - t_pres_c
+                    pos = desv >= 0
+                else:
+                    if n_cat == "Ahorro e Inversión":
+                        desv = t_real_c - t_pres_c
+                        pos = desv >= 0
+                    else:
+                        desv = t_pres_c - t_real_c
+                        pos = desv >= 0
+                
+                if pos:
+                    bg_c = "rgba(46, 125, 50, 0.15)"
+                    brd_c = "#2e7d32"
+                    txt_c = "#4caf50"
+                    sg = "+"
+                else:
+                    bg_c = "rgba(198, 40, 40, 0.15)"
+                    brd_c = "#c62828"
+                    txt_c = "#ef5350"
+                    sg = ""
+                    
+                ds_card = f"""<div style="background-color: {bg_c}; border: 2px solid {brd_c}; padding: 22px 15px; border-radius: 8px; text-align: center; margin-top: 38px;">
 <span style="color: inherit; font-size: 13px; font-weight: 600; display: block; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px;">Desviación Total</span>
-<span style="color: {text_color}; font-size: 24px; font-weight: 700; display: block; font-variant-numeric: tabular-nums;">{signo}{desviacion:.2f} €</span>
+<span style="color: {txt_c}; font-size: 24px; font-weight: 700; display: block; font-variant-numeric: tabular-nums;">{sg}{desv:,.2f} €</span>
 </div>"""
-            st.markdown(desviacion_card, unsafe_allow_html=True)
+                st.markdown(ds_card, unsafe_allow_html=True)
