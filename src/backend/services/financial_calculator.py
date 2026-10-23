@@ -1,0 +1,137 @@
+"""
+Financial Calculator Service (Backend Domain Service).
+Contains pure functions for 50/30/20 budget calculations,
+monthly totals, unassigned funds tracking, and annual summaries.
+Decoupled from presentation layer.
+"""
+
+from typing import Dict, List, Any, Tuple
+
+
+def calculate_category_totals(
+    categorias: List[Dict[str, Any]],
+    todas_subcats: List[Dict[str, Any]],
+    presupuestos_m: List[Dict[str, Any]],
+    transacciones_m: List[Dict[str, Any]],
+    ingresos_name: str,
+    necesidades_name: str,
+    deseos_name: str,
+    ahorro_name: str,
+) -> Dict[str, Dict[str, Any]]:
+    """Calculates budgeted and actual amounts by category and subcategory for a given month."""
+    totales_m: Dict[str, Dict[str, Any]] = {}
+
+    for cat in categorias:
+        cat_subcats = [s for s in todas_subcats if s["categoria_id"] == cat["id"]]
+        t_pres = 0.0
+        t_real = 0.0
+
+        for s in cat_subcats:
+            s_id = s["id"]
+            pval = 0.0
+            if presupuestos_m:
+                p_match = [p for p in presupuestos_m if p["subcategoria_id"] == s_id]
+                if p_match:
+                    pval = p_match[0]["cantidad"]
+            t_pres += pval
+
+            tval = 0.0
+            if transacciones_m:
+                r_match = [t["cantidad"] for t in transacciones_m if t["subcategoria_id"] == s_id]
+                tval = sum(r_match)
+
+            t_real += (pval + tval)
+
+        totales_m[cat["nombre"]] = {
+            "presupuesto": t_pres,
+            "real": t_real,
+            "tipo": cat["tipo"],
+            "subcategorias": cat_subcats,
+        }
+
+    # Derive 50/30/20 block budgets based on budgeted income
+    pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
+    if necesidades_name in totales_m:
+        totales_m[necesidades_name]["presupuesto"] = pres_ing * 0.50
+    if deseos_name in totales_m:
+        totales_m[deseos_name]["presupuesto"] = pres_ing * 0.30
+    if ahorro_name in totales_m:
+        totales_m[ahorro_name]["presupuesto"] = pres_ing * 0.20
+
+    return totales_m
+
+
+def calculate_503020_percentages(
+    real_ing: float,
+    real_nec: float,
+    real_des: float,
+    real_aho: float,
+) -> Tuple[float, float, float, float, float]:
+    """
+    Calculates actual percentage distribution across 50/30/20 blocks relative to actual income,
+    as well as unassigned amount and percentage.
+    Returns: (pct_nec, pct_des, pct_aho, pct_sin, real_sin_asignar)
+    """
+    real_sin_asignar = max(0.0, real_ing - (real_nec + real_des + real_aho))
+    if real_ing > 0.0:
+        pct_nec = (real_nec / real_ing) * 100.0
+        pct_des = (real_des / real_ing) * 100.0
+        pct_aho = (real_aho / real_ing) * 100.0
+        pct_sin = (real_sin_asignar / real_ing) * 100.0
+    else:
+        pct_nec, pct_des, pct_aho, pct_sin = 0.0, 0.0, 0.0, 0.0
+
+    return pct_nec, pct_des, pct_aho, pct_sin, real_sin_asignar
+
+
+def calculate_annual_metrics(
+    anual_data: Dict[int, Dict[str, Dict[str, float]]],
+    ingresos_name: str,
+    necesidades_name: str,
+    deseos_name: str,
+    ahorro_name: str,
+) -> Dict[str, float]:
+    """Calculates yearly accumulated totals and deviations for the annual summary view."""
+    ingresos_anual_real = sum(anual_data[m][ingresos_name]["real"] for m in range(1, 13))
+    nec_anual_real = sum(anual_data[m][necesidades_name]["real"] for m in range(1, 13))
+    des_anual_real = sum(anual_data[m][deseos_name]["real"] for m in range(1, 13))
+    aho_anual_real = sum(anual_data[m][ahorro_name]["real"] for m in range(1, 13))
+
+    gastos_anual_real = nec_anual_real + des_anual_real + aho_anual_real
+    ahorro_acumulado_total = ingresos_anual_real - gastos_anual_real
+
+    pct_nec_real = (nec_anual_real / ingresos_anual_real * 100.0) if ingresos_anual_real > 0.0 else 0.0
+    pct_des_real = (des_anual_real / ingresos_anual_real * 100.0) if ingresos_anual_real > 0.0 else 0.0
+    pct_aho_real = (aho_anual_real / ingresos_anual_real * 100.0) if ingresos_anual_real > 0.0 else 0.0
+
+    return {
+        "ingresos_anual_real": ingresos_anual_real,
+        "nec_anual_real": nec_anual_real,
+        "des_anual_real": des_anual_real,
+        "aho_anual_real": aho_anual_real,
+        "gastos_anual_real": gastos_anual_real,
+        "ahorro_acumulado_total": ahorro_acumulado_total,
+        "pct_nec_real": pct_nec_real,
+        "pct_des_real": pct_des_real,
+        "pct_aho_real": pct_aho_real,
+        "desv_nec": pct_nec_real - 50.0,
+        "desv_des": pct_des_real - 30.0,
+        "desv_aho": pct_aho_real - 20.0,
+    }
+
+
+def get_monthly_needs_budget(
+    presupuestos: List[Dict[str, Any]],
+    subcategorias: List[Dict[str, Any]],
+    categoria_necesidades_id: int,
+) -> float:
+    """
+    Extracts the total budgeted amount for basic needs in a given month or base template.
+    Matches subcategories belonging to categoria_necesidades_id.
+    """
+    nec_subcat_ids = {s["id"] for s in subcategorias if s.get("categoria_id") == categoria_necesidades_id}
+    total_needs = 0.0
+    for p in presupuestos:
+        if p.get("subcategoria_id") in nec_subcat_ids:
+            total_needs += float(p.get("cantidad", 0.0))
+    return total_needs
