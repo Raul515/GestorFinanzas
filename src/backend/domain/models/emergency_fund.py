@@ -5,6 +5,7 @@ from .base import Base
 
 
 class EmergencyFund(Base):
+    """Modelo ORM para la configuración y saldo acumulado del fondo de seguridad constitucional."""
     __tablename__ = "emergency_funds"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -15,3 +16,4 @@ class EmergencyFund(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=func.now(), onupdate=func.now()
     )
+

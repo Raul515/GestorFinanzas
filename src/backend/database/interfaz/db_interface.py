@@ -1,73 +1,143 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any
-from backend.domain.schemas import categorias as cat_schema, presupuestos as pres_schema, transacciones as trans_schema
+from backend.domain.schemas import categories as cat_schema, budgets as budget_schema, transactions as trans_schema
 
-class ICategoriaRepository(ABC):
+
+class ICategoryRepository(ABC):
+    """Interfaz del repositorio de categorías y subcategorías."""
+
     @abstractmethod
+    def get_categories(self) -> List[Any]:
+        """Obtiene el listado completo de categorías contables."""
+        pass
+
+    @abstractmethod
+    def create_category(self, category: cat_schema.CategoryCreate) -> Any:
+        """Crea una nueva categoría contable."""
+        pass
+
+    @abstractmethod
+    def get_subcategories(self, category_id: Optional[int] = None) -> List[Any]:
+        """Obtiene subcategorías, filtrando opcionalmente por categoría."""
+        pass
+
+    @abstractmethod
+    def create_subcategory(self, subcategory: cat_schema.SubcategoryCreate) -> Any:
+        """Crea una nueva subcategoría contable."""
+        pass
+
+    # Métodos alias para compatibilidad
     def get_categorias(self) -> List[Any]:
-        pass
+        return self.get_categories()
 
-    @abstractmethod
-    def create_categoria(self, categoria: cat_schema.CategoriaCreate) -> Any:
-        pass
+    def create_categoria(self, categoria: Any) -> Any:
+        return self.create_category(categoria)
 
-    @abstractmethod
     def get_subcategorias(self, categoria_id: Optional[int] = None) -> List[Any]:
+        return self.get_subcategories(categoria_id)
+
+    def create_subcategoria(self, subcategoria: Any) -> Any:
+        return self.create_subcategory(subcategoria)
+
+
+ICategoriaRepository = ICategoryRepository
+
+
+class IBudgetRepository(ABC):
+    """Interfaz del repositorio de presupuestos mensuales."""
+
+    @abstractmethod
+    def get_budgets(self, month: str) -> List[Any]:
+        """Obtiene las asignaciones presupuestarias para un mes o plantilla BASE."""
         pass
 
     @abstractmethod
-    def create_subcategoria(self, subcategoria: cat_schema.SubcategoriaCreate) -> Any:
+    def create_budget(self, budget: budget_schema.MonthlyBudgetCreate) -> Any:
+        """Crea o actualiza una asignación presupuestaria individual."""
         pass
 
-class IPresupuestoRepository(ABC):
     @abstractmethod
+    def save_budgets_bulk(self, budgets: List[budget_schema.MonthlyBudgetCreate]) -> List[Any]:
+        """Guarda un conjunto de presupuestos en bloque."""
+        pass
+
+    # Métodos alias para compatibilidad
     def get_presupuestos(self, mes: str) -> List[Any]:
+        return self.get_budgets(mes)
+
+    def create_presupuesto(self, presupuesto: Any) -> Any:
+        return self.create_budget(presupuesto)
+
+    def save_presupuestos_bulk(self, presupuestos: List[Any]) -> List[Any]:
+        return self.save_budgets_bulk(presupuestos)
+
+
+IPresupuestoRepository = IBudgetRepository
+
+
+class ITransactionRepository(ABC):
+    """Interfaz del repositorio de transacciones contables."""
+
+    @abstractmethod
+    def get_transactions(self, month: Optional[str] = None) -> List[Any]:
+        """Obtiene transacciones registradas, filtrando opcionalmente por mes."""
         pass
 
     @abstractmethod
-    def create_presupuesto(self, presupuesto: pres_schema.PresupuestoMensualCreate) -> Any:
+    def create_transaction(self, transaction: trans_schema.TransactionCreate) -> Any:
+        """Registra una nueva transacción y ejecuta sincronizaciones colaterales."""
         pass
 
-    @abstractmethod
-    def save_presupuestos_bulk(self, presupuestos: List[pres_schema.PresupuestoMensualCreate]) -> List[Any]:
-        pass
-
-class ITransaccionRepository(ABC):
-    @abstractmethod
+    # Métodos alias para compatibilidad
     def get_transacciones(self, mes: Optional[str] = None) -> List[Any]:
-        pass
+        return self.get_transactions(mes)
 
-    @abstractmethod
-    def create_transaccion(self, transaccion: trans_schema.TransaccionCreate) -> Any:
-        pass
+    def create_transaccion(self, transaccion: Any) -> Any:
+        return self.create_transaction(transaccion)
+
+
+ITransaccionRepository = ITransactionRepository
+
 
 class IEmergencyFundRepository(ABC):
+    """Interfaz del repositorio del fondo de emergencia."""
+
     @abstractmethod
     def get_or_create_emergency_fund(self) -> Any:
+        """Obtiene o inicializa el fondo de emergencia con valores seguros."""
         pass
 
     @abstractmethod
     def update_emergency_fund(self, target_months: Optional[int] = None, current_balance: Optional[float] = None) -> Any:
+        """Actualiza parámetros de cobertura o saldo del fondo."""
         pass
 
     @abstractmethod
     def adjust_emergency_fund_balance(self, delta: float) -> Any:
+        """Incrementa o decrementa el saldo acumulado del fondo de emergencia."""
         pass
 
+
 class IMarketCacheRepository(ABC):
+    """Interfaz del repositorio de caché de datos de mercado."""
+
     @abstractmethod
     def get_market_cache(self, key: str) -> Optional[dict]:
+        """Recupera datos cacheados válidos según su TTL."""
         pass
 
     @abstractmethod
     def set_market_cache(self, key: str, data: dict, ttl_hours: int = 24) -> Any:
+        """Almacena datos en la caché de mercado con expiración configurable."""
         pass
 
     @abstractmethod
     def invalidate_market_cache(self, key: Optional[str] = None) -> None:
+        """Invalida claves específicas o toda la caché de mercado."""
         pass
 
-class IRepository(ICategoriaRepository, IPresupuestoRepository, ITransaccionRepository, IEmergencyFundRepository, IMarketCacheRepository, ABC):
-    """Interfaz monolítica unificada para compatibilidad global."""
+
+class IRepository(ICategoryRepository, IBudgetRepository, ITransactionRepository, IEmergencyFundRepository, IMarketCacheRepository, ABC):
+    """Interfaz unificada del repositorio del sistema."""
     pass
 
