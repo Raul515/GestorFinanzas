@@ -6,9 +6,11 @@ from backend.domain.models import (
     presupuestos as pres_model,
     transacciones as trans_model,
     emergency_fund as fund_model,
+    market_cache as cache_model,
 )
 from backend.domain.schemas import categorias as cat_schema, presupuestos as pres_schema, transacciones as trans_schema
 from typing import Optional, Any
+import json
 import datetime
 
 class SQLiteRepository(IRepository):
@@ -173,3 +175,57 @@ class SQLiteRepository(IRepository):
         self.db.commit()
         self.db.refresh(fund)
         return fund
+
+    def get_market_cache(self, key: str) -> Optional[dict]:
+        entry = (
+            self.db.query(cache_model.MarketCache)
+            .filter(cache_model.MarketCache.key == key)
+            .first()
+        )
+        if not entry:
+            return None
+        # Verify expiration
+        now = datetime.datetime.now()
+        if entry.expires_at and entry.expires_at < now:
+            return None
+        try:
+            return json.loads(entry.data_json)
+        except Exception:
+            return None
+
+    def set_market_cache(
+        self, key: str, data: Any, ttl_hours: int = 24
+    ) -> cache_model.MarketCache:
+        now = datetime.datetime.now()
+        expires_at = now + datetime.timedelta(hours=ttl_hours)
+        data_json = json.dumps(data, ensure_ascii=False, default=str)
+
+        entry = (
+            self.db.query(cache_model.MarketCache)
+            .filter(cache_model.MarketCache.key == key)
+            .first()
+        )
+        if entry:
+            entry.data_json = data_json
+            entry.updated_at = now
+            entry.expires_at = expires_at
+        else:
+            entry = cache_model.MarketCache(
+                key=key,
+                data_json=data_json,
+                updated_at=now,
+                expires_at=expires_at,
+            )
+            self.db.add(entry)
+        self.db.commit()
+        self.db.refresh(entry)
+        return entry
+
+    def invalidate_market_cache(self, key: Optional[str] = None) -> None:
+        if key:
+            self.db.query(cache_model.MarketCache).filter(
+                cache_model.MarketCache.key == key
+            ).delete()
+        else:
+            self.db.query(cache_model.MarketCache).delete()
+        self.db.commit()

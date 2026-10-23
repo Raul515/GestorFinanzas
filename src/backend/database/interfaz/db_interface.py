@@ -54,7 +54,20 @@ class IEmergencyFundRepository(ABC):
     def adjust_emergency_fund_balance(self, delta: float) -> Any:
         pass
 
-class IRepository(ICategoriaRepository, IPresupuestoRepository, ITransaccionRepository, IEmergencyFundRepository, ABC):
+class IMarketCacheRepository(ABC):
+    @abstractmethod
+    def get_market_cache(self, key: str) -> Optional[dict]:
+        pass
+
+    @abstractmethod
+    def set_market_cache(self, key: str, data: dict, ttl_hours: int = 24) -> Any:
+        pass
+
+    @abstractmethod
+    def invalidate_market_cache(self, key: Optional[str] = None) -> None:
+        pass
+
+class IRepository(ICategoriaRepository, IPresupuestoRepository, ITransaccionRepository, IEmergencyFundRepository, IMarketCacheRepository, ABC):
     """Interfaz monolítica unificada para compatibilidad global."""
     pass
 
