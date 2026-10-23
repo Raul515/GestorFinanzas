@@ -64,3 +64,32 @@ def save_presupuestos_bulk(presupuestos_list):
         return response.json() if response.status_code == 200 else None
     except:
         return None
+
+def get_safety_status(mes=None):
+    params = {}
+    if mes:
+        params["mes"] = mes
+    try:
+        response = requests.get(f"{API_URL}/advisor/safety-status", params=params)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return None
+
+def update_emergency_fund_config(target_months=None, current_balance=None, mes=None):
+    params = {}
+    if mes:
+        params["mes"] = mes
+    data = {}
+    if target_months is not None:
+        data["target_months"] = target_months
+    if current_balance is not None:
+        data["current_balance"] = current_balance
+    try:
+        response = requests.post(f"{API_URL}/advisor/emergency-fund/config", params=params, json=data)
+        if response.status_code == 200:
+            return response.json()
+    except:
+        pass
+    return None

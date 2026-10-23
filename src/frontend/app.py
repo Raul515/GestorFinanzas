@@ -621,6 +621,23 @@ for idx, tab in enumerate(tabs[1:-1], start=1):
                 </div>
                 """, unsafe_allow_html=True)
 
+        # 5. TARJETA RESUMEN DEL FONDO DE EMERGENCIA (SAFETY GUARD)
+        safety_status_m = api_client.get_safety_status(mes_key)
+        if safety_status_m:
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown("##### 🛡️ Estado del Fondo de Emergencia (Safety Guard)")
+                col_sg1, col_sg2, col_sg3 = st.columns([1, 1, 2])
+                with col_sg1:
+                    st.metric("Saldo Acumulado", f"{safety_status_m['current_balance']:,.2f} €")
+                with col_sg2:
+                    st.metric("Meta Objetivo", f"{safety_status_m['target_amount']:,.2f} €", f"{safety_status_m['coverage_months']:.1f} / {safety_status_m['target_months']} meses")
+                with col_sg3:
+                    if safety_status_m['is_completed']:
+                        st.success(f"**Fondo Completo ({safety_status_m['coverage_months']:.1f} meses cubiertos)**: Capacidad de inversión autorizada. Asignación sugerida este mes a 'Fondo de emergencia': **0,00 €**.")
+                    else:
+                        st.warning(f"**En Construcción ({safety_status_m['coverage_months']:.1f} / {safety_status_m['target_months']} meses)**: Faltan {safety_status_m['gap']:,.2f} €. Se prioriza la aportación a 'Fondo de emergencia' antes de invertir.")
+
 
 # ==========================================
 # PESTAÑA FINAL: CONFIGURACIÓN DEL PRESUPUESTO BASE
@@ -675,3 +692,54 @@ with tabs[-1]:
                     st.rerun()
                 else:
                     st.error("Error al guardar el presupuesto base.")
+
+        # SECCIÓN CONFIGURACIÓN FONDO DE EMERGENCIA (SAFETY GUARD)
+        st.markdown("<br><hr>", unsafe_allow_html=True)
+        st.subheader("🛡️ Fondo de Emergencia (Safety Guard)")
+        st.caption("Gestiona tu reserva patrimonial mínima de seguridad. Por mandato constitucional (Principio 5), debe cubrir al menos 3 meses de gastos esenciales antes de autorizar recomendaciones de inversión.")
+
+        safety_status_base = api_client.get_safety_status("BASE")
+        if safety_status_base:
+            col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+            with col_b1:
+                st.metric("Saldo Acumulado", f"{safety_status_base['current_balance']:,.2f} €")
+            with col_b2:
+                st.metric("Gasto Base Necesidades", f"{safety_status_base['monthly_needs_reference']:,.2f} €/mes")
+            with col_b3:
+                st.metric("Meta de Seguridad", f"{safety_status_base['target_amount']:,.2f} €", f"{safety_status_base['target_months']} meses")
+            with col_b4:
+                status_txt = "✅ Habilitada" if safety_status_base["can_invest"] else "⛔ Bloqueada"
+                st.metric("Inversión de Riesgo", status_txt, f"{safety_status_base['coverage_months']:.1f} meses cubiertos")
+
+            if safety_status_base["is_completed"]:
+                st.success(safety_status_base["message"])
+            else:
+                st.warning(safety_status_base["message"])
+
+            with st.expander("✏️ Ajustar Parámetros del Fondo de Emergencia", expanded=False):
+                with st.form("form_emergency_fund_config"):
+                    new_months = st.number_input(
+                        "Meses de cobertura objetivo (mínimo 3):",
+                        min_value=3,
+                        max_value=24,
+                        value=int(safety_status_base["target_months"]),
+                        step=1,
+                    )
+                    new_balance = st.number_input(
+                        "Ajustar saldo real acumulado en cuenta (€):",
+                        min_value=0.0,
+                        value=float(safety_status_base["current_balance"]),
+                        step=50.0,
+                    )
+                    btn_save_ef = st.form_submit_button("Actualizar Fondo de Emergencia")
+                    if btn_save_ef:
+                        res_ef = api_client.update_emergency_fund_config(
+                            target_months=int(new_months),
+                            current_balance=float(new_balance),
+                            mes="BASE",
+                        )
+                        if res_ef:
+                            st.success("¡Configuración del Fondo de Emergencia actualizada con éxito!")
+                            st.rerun()
+                        else:
+                            st.error("Error al actualizar la configuración del Fondo de Emergencia.")
