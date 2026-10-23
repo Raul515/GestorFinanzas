@@ -1,8 +1,11 @@
 {
   "venvPath": ".",
   "venv": "venv",
+  "pythonPath": "venv/Scripts/python.exe",
   "extraPaths": [
-    "src/frontend",
-    "src"
+    "venv/Lib/site-packages",
+    "src",
+    "src/backend",
+    "src/frontend"
   ]
 }
