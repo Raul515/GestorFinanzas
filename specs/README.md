@@ -1,0 +1,18 @@
+# Especificaciones del Proyecto (Spec-Driven Development)
+
+Índice y estado de las especificaciones del sistema:
+
+| Spec | Nombre | Estado | Descripción |
+| :--- | :--- | :--- | :--- |
+| **000-map** | [Mapa de Arquitectura](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/000-architecture-map/design-report.md) | **Aprobado** | Descomposición global, contratos técnicos y hoja de ruta secuencial. |
+| **000** | [Cimientos y Safety Guard](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/000-cimientos-safety-guard/spec.md) | **Completada** | Suite `pytest` (23 tests), servicios desacoplados en backend y entidad dinámica `EmergencyFund`. |
+| **001** | [Radar Macro y Noticias](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/001-radar-macro-noticias/spec.md) | **Redactada / En Revisión** | Contexto macroeconómico, fuentes de noticias y filtro de impacto sin sensacionalismo. |
+| **002** | Screener y Oportunidades | *Pendiente* | Filtrado cuantitativo de acciones y ETFs por múltiplos contables y volumen. |
+| **003** | Análisis Fundamental (Deep Dive) | *Pendiente* | Diagnóstico contable individual, Piotroski, FCF, Moat y riesgos (amplía borrador archivado). |
+| **004** | Copiloto Patrimonial | *Pendiente* | Chat asesor con doble tesis, integración con finanzas.db y salvaguarda de riesgo. |
+| **005** | Orquestación LangGraph | *Pendiente* | Grafo de agentes de mercado y conexión con Google Gemini Pro API. |
+
+---
+
+### Archivo
+- [archive/001-analisis-mercado/spec.md](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/archive/001-analisis-mercado/spec.md): Borrador inicial de análisis de mercado, archivado para ser reescrito con alcance ampliado en Spec 003.
