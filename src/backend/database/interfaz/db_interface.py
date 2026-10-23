@@ -41,7 +41,20 @@ class ITransaccionRepository(ABC):
     def create_transaccion(self, transaccion: trans_schema.TransaccionCreate) -> Any:
         pass
 
-class IRepository(ICategoriaRepository, IPresupuestoRepository, ITransaccionRepository, ABC):
+class IEmergencyFundRepository(ABC):
+    @abstractmethod
+    def get_or_create_emergency_fund(self) -> Any:
+        pass
+
+    @abstractmethod
+    def update_emergency_fund(self, target_months: Optional[int] = None, current_balance: Optional[float] = None) -> Any:
+        pass
+
+    @abstractmethod
+    def adjust_emergency_fund_balance(self, delta: float) -> Any:
+        pass
+
+class IRepository(ICategoriaRepository, IPresupuestoRepository, ITransaccionRepository, IEmergencyFundRepository, ABC):
     """Interfaz monolítica unificada para compatibilidad global."""
     pass
 

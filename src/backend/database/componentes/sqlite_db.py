@@ -15,7 +15,7 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    from backend.domain.models import categorias, presupuestos, transacciones
+    from backend.domain.models import categorias, presupuestos, transacciones, emergency_fund
     Base.metadata.create_all(bind=engine)
 
 def get_db():

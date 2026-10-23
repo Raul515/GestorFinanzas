@@ -1,10 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from backend.database.interfaz.db_interface import IRepository
-from backend.domain.models import categorias as cat_model, presupuestos as pres_model, transacciones as trans_model
+from backend.domain.models import (
+    categorias as cat_model,
+    presupuestos as pres_model,
+    transacciones as trans_model,
+    emergency_fund as fund_model,
+)
 from backend.domain.schemas import categorias as cat_schema, presupuestos as pres_schema, transacciones as trans_schema
-from typing import Optional
-
+from typing import Optional, Any
 import datetime
 
 class SQLiteRepository(IRepository):
@@ -49,6 +53,12 @@ class SQLiteRepository(IRepository):
         self.db.add(db_item)
         self.db.commit()
         self.db.refresh(db_item)
+
+        # Sync EmergencyFund current_balance if transaction belongs to 'Fondo de emergencia'
+        subcat = self.db.query(cat_model.Subcategoria).filter(cat_model.Subcategoria.id == db_item.subcategoria_id).first()
+        if subcat and "fondo de emergencia" in subcat.nombre.lower():
+            self.adjust_emergency_fund_balance(db_item.cantidad)
+
         return db_item
 
     def get_presupuestos(self, mes: str):
@@ -126,3 +136,40 @@ class SQLiteRepository(IRepository):
             self.db.refresh(db_item)
             resultado.append(db_item)
         return resultado
+
+    def get_or_create_emergency_fund(self) -> fund_model.EmergencyFund:
+        fund = self.db.query(fund_model.EmergencyFund).first()
+        if not fund:
+            fund = fund_model.EmergencyFund(
+                current_balance=0.0,
+                target_months=3,
+                target_amount=0.0,
+                is_completed=False,
+            )
+            self.db.add(fund)
+            self.db.commit()
+            self.db.refresh(fund)
+        return fund
+
+    def update_emergency_fund(
+        self,
+        target_months: Optional[int] = None,
+        current_balance: Optional[float] = None,
+    ) -> fund_model.EmergencyFund:
+        fund = self.get_or_create_emergency_fund()
+        if target_months is not None:
+            if target_months < 3:
+                raise ValueError("El número de meses de cobertura no puede ser inferior a 3 (regla constitucional).")
+            fund.target_months = target_months
+        if current_balance is not None:
+            fund.current_balance = max(0.0, current_balance)
+        self.db.commit()
+        self.db.refresh(fund)
+        return fund
+
+    def adjust_emergency_fund_balance(self, delta: float) -> fund_model.EmergencyFund:
+        fund = self.get_or_create_emergency_fund()
+        fund.current_balance = max(0.0, fund.current_balance + delta)
+        self.db.commit()
+        self.db.refresh(fund)
+        return fund
