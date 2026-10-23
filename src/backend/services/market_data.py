@@ -1,10 +1,10 @@
 """
-Market Data Service.
-Fetches macro indicators with focus on Spain, the Eurozone, and global benchmarks.
-Extracts:
-- Equities: IBEX 35, EuroStoxx 50, S&P 500, Nasdaq 100
-- Sovereign Debt: Spain 10Y Bond, German Bund 10Y, Spain Risk Premium, US 10Y Treasury
-Provides 30-day sparkline series and graceful fallbacks.
+Servicio de Datos Macroeconómicos de Mercado.
+Extrae indicadores macroeconómicos con foco prioritario en España, la Eurozona y referencias globales.
+Cubre:
+- Renta Variable: IBEX 35, EuroStoxx 50, S&P 500, Nasdaq 100
+- Deuda Soberana y Diferenciales: Bono Español 10A, Bund Alemán 10A, Prima de Riesgo de España, Bono EE.UU. 10A
+Proporciona series sparkline de 30 días y degradación elegante con datos base de contingencia.
 """
 
 from datetime import datetime
@@ -22,7 +22,7 @@ def _extract_ticker_data(
     region: str,
     unit: str = "pts",
 ) -> MacroIndicator:
-    """Fetches ticker data from Yahoo Finance and extracts current price, change %, and 30-day sparkline."""
+    """Extrae datos de cotización de Yahoo Finance: precio actual, variación porcentual y sparkline a 30 días."""
     try:
         ticker = yf.Ticker(symbol)
         history = ticker.history(period="1mo")
@@ -50,7 +50,7 @@ def _extract_ticker_data(
     except Exception:
         pass
 
-    # Graceful fallback baseline values if external API is unreachable
+    # Valores base de contingencia en caso de indisponibilidad temporal de la API externa
     baseline_values = {
         "^IBEX": (11850.0, 0.35, 41.5, "pts"),
         "^STOXX50E": (4950.0, 0.20, 9.8, "pts"),
@@ -74,7 +74,7 @@ def _extract_ticker_data(
 
 
 def _fetch_ecb_series(url: str, default_val: float) -> Tuple[float, float, List[float]]:
-    """Helper to fetch recent yield series from ECB SDMX REST API."""
+    """Función auxiliar para obtener series de rendimiento recientes desde la API REST SDMX del Banco Central Europeo."""
     try:
         res = requests.get(url, timeout=4)
         if res.status_code == 200:
@@ -97,10 +97,10 @@ def _fetch_ecb_series(url: str, default_val: float) -> Tuple[float, float, List[
 
 def fetch_sovereign_bonds_and_risk_premium() -> Tuple[MacroIndicator, MacroIndicator, MacroIndicator]:
     """
-    Fetches the 10Y Spanish Bond, 10Y German Bund, and derives Spain's Risk Premium:
-    Risk Premium (bps) = (Spain_10Y - Germany_10Y) * 100
+    Obtiene el Bono Español a 10A, el Bund Alemán a 10A y deriva matemáticamente la Prima de Riesgo de España:
+    Prima de Riesgo (pb) = (Bono_España_10A - Bund_Alemania_10A) * 100
     """
-    # 1. German Bund 10Y (ECB AAA Government Benchmark Yield)
+    # 1. Bund Alemán 10A (Rendimiento soberano de referencia AAA en la Eurozona - BCE)
     bund_url = "https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y?lastNObservations=25&format=jsondata"
     bund_val, bund_diff, bund_spark = _fetch_ecb_series(bund_url, default_val=2.25)
 
@@ -117,7 +117,7 @@ def fetch_sovereign_bonds_and_risk_premium() -> Tuple[MacroIndicator, MacroIndic
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
-    # 2. Spanish 10Y Bond (Obligaciones del Estado 10A)
+    # 2. Bono Español 10A (Obligaciones del Estado a 10 años)
     spain_url = "https://data-api.ecb.europa.eu/service/data/IRS/M.ES.L.L40.CI.0000.EUR.N.Z?lastNObservations=25&format=jsondata"
     spain_val, spain_diff, spain_spark = _fetch_ecb_series(spain_url, default_val=3.00)
 
@@ -134,12 +134,12 @@ def fetch_sovereign_bonds_and_risk_premium() -> Tuple[MacroIndicator, MacroIndic
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
-    # 3. Spain Risk Premium (Prima de Riesgo) in basis points
+    # 3. Prima de Riesgo de España en puntos básicos (pb)
     risk_premium_bps = round((spain_val - bund_val) * 100.0, 1)
     prev_premium = round(((spain_val - spain_diff) - (bund_val - bund_diff)) * 100.0, 1)
     premium_diff = round(risk_premium_bps - prev_premium, 1)
 
-    # Generate aligned sparkline for risk premium
+    # Generar sparkline alineado para la prima de riesgo
     min_len = min(len(spain_spark), len(bund_spark))
     premium_spark = [
         round((spain_spark[i] - bund_spark[i]) * 100.0, 1) for i in range(min_len)
@@ -162,10 +162,10 @@ def fetch_sovereign_bonds_and_risk_premium() -> Tuple[MacroIndicator, MacroIndic
 
 
 def get_macro_overview() -> List[MacroIndicator]:
-    """Consolidates all 8 macro assets with prioritized focus on Spain and Europe."""
+    """Consolida los 8 activos e indicadores macroeconómicos priorizando España y Europa."""
     indicators: List[MacroIndicator] = []
 
-    # 1. Priority Spain & Eurozone Equities
+    # 1. Renta Variable prioritaria: España y Eurozona
     indicators.append(
         _extract_ticker_data("^IBEX", "ibex35", "IBEX 35", "España", "pts")
     )
@@ -173,11 +173,11 @@ def get_macro_overview() -> List[MacroIndicator]:
         _extract_ticker_data("^STOXX50E", "stoxx50", "EuroStoxx 50", "Eurozona", "pts")
     )
 
-    # 2. Priority Spain & Eurozone Sovereign Debt & Risk Premium
+    # 2. Deuda Soberana prioritaria y Prima de Riesgo: España y Eurozona
     spain_bond, bund_bond, risk_premium = fetch_sovereign_bonds_and_risk_premium()
     indicators.extend([spain_bond, bund_bond, risk_premium])
 
-    # 3. Global Benchmark Equities & US 10Y
+    # 3. Renta Variable y Renta Fija Global de referencia (EE.UU.)
     indicators.append(
         _extract_ticker_data("^GSPC", "sp500", "S&P 500", "EE.UU.", "pts")
     )
@@ -192,7 +192,7 @@ def get_macro_overview() -> List[MacroIndicator]:
 
 
 def get_macro_overview_response(is_cached: bool = False) -> MacroOverviewResponse:
-    """Consolidates all macro indicators into a typed MacroOverviewResponse."""
+    """Consolida todos los indicadores macroeconómicos en una respuesta tipada MacroOverviewResponse."""
     indicators = get_macro_overview()
     return MacroOverviewResponse(
         indicators=indicators,
@@ -200,3 +200,4 @@ def get_macro_overview_response(is_cached: bool = False) -> MacroOverviewRespons
         is_cached=is_cached,
         source_notes="Datos extraídos de Yahoo Finance y BCE",
     )
+

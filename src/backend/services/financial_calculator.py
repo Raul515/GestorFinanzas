@@ -1,8 +1,8 @@
 """
-Financial Calculator Service (Backend Domain Service).
-Contains pure functions for 50/30/20 budget calculations,
-monthly totals, unassigned funds tracking, and annual summaries.
-Decoupled from presentation layer.
+Servicio de Cálculo Financiero (Servicio de Dominio del Backend).
+Contiene funciones puras para la lógica de presupuesto 50/30/20,
+totales mensuales por categoría, seguimiento del fondo 'Sin Asignar' y consolidación anual.
+Desacoplado por completo de la capa de presentación.
 """
 
 from typing import Dict, List, Any, Tuple
@@ -18,7 +18,7 @@ def calculate_category_totals(
     deseos_name: str,
     ahorro_name: str,
 ) -> Dict[str, Dict[str, Any]]:
-    """Calculates budgeted and actual amounts by category and subcategory for a given month."""
+    """Calcula los importes presupuestados y reales por categoría y subcategoría para un mes determinado."""
     totales_m: Dict[str, Dict[str, Any]] = {}
 
     for cat in categorias:
@@ -49,7 +49,7 @@ def calculate_category_totals(
             "subcategorias": cat_subcats,
         }
 
-    # Derive 50/30/20 block budgets based on budgeted income
+    # Derivar los topes presupuestarios 50/30/20 a partir del ingreso neto presupuestado
     pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
     if necesidades_name in totales_m:
         totales_m[necesidades_name]["presupuesto"] = pres_ing * 0.50
@@ -68,9 +68,9 @@ def calculate_503020_percentages(
     real_aho: float,
 ) -> Tuple[float, float, float, float, float]:
     """
-    Calculates actual percentage distribution across 50/30/20 blocks relative to actual income,
-    as well as unassigned amount and percentage.
-    Returns: (pct_nec, pct_des, pct_aho, pct_sin, real_sin_asignar)
+    Calcula la distribución porcentual real de los bloques 50/30/20 en relación al ingreso real,
+    así como el importe y porcentaje del excedente 'Sin Asignar'.
+    Retorna: (pct_nec, pct_des, pct_aho, pct_sin, real_sin_asignar)
     """
     real_sin_asignar = max(0.0, real_ing - (real_nec + real_des + real_aho))
     if real_ing > 0.0:
@@ -91,7 +91,7 @@ def calculate_annual_metrics(
     deseos_name: str,
     ahorro_name: str,
 ) -> Dict[str, float]:
-    """Calculates yearly accumulated totals and deviations for the annual summary view."""
+    """Calcula totales acumulados anuales, ahorro total y desviaciones frente a la regla 50/30/20."""
     ingresos_anual_real = sum(anual_data[m][ingresos_name]["real"] for m in range(1, 13))
     nec_anual_real = sum(anual_data[m][necesidades_name]["real"] for m in range(1, 13))
     des_anual_real = sum(anual_data[m][deseos_name]["real"] for m in range(1, 13))
@@ -126,8 +126,8 @@ def get_monthly_needs_budget(
     categoria_necesidades_id: int,
 ) -> float:
     """
-    Extracts the total budgeted amount for basic needs in a given month or base template.
-    Matches subcategories belonging to categoria_necesidades_id.
+    Extrae el total presupuestado en Necesidades Básicas para un mes determinado o plantilla BASE.
+    Filtra las subcategorías correspondientes a categoria_necesidades_id.
     """
     nec_subcat_ids = {s["id"] for s in subcategorias if s.get("categoria_id") == categoria_necesidades_id}
     total_needs = 0.0
@@ -135,3 +135,4 @@ def get_monthly_needs_budget(
         if p.get("subcategoria_id") in nec_subcat_ids:
             total_needs += float(p.get("cantidad", 0.0))
     return total_needs
+

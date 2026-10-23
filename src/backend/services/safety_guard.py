@@ -1,8 +1,8 @@
 """
-Safety Guard Domain Service.
-Implements the constitutional protection rule (Principio 5):
-No risk-bearing asset allocations are permitted unless the safety fund
-covers at least the target number of months (minimum 3) of essential needs.
+Servicio del Dominio: Salvaguarda de Seguridad Patrimonial (Safety Guard).
+Implementa la regla constitucional de protección (Principio 5):
+Queda terminantemente prohibido sugerir, asignar o permitir inversiones con riesgo si el fondo
+de emergencia no cubre al menos el número de meses objetivo (mínimo 3 meses) de necesidades esenciales.
 """
 
 from backend.domain.models.emergency_fund import EmergencyFund
@@ -14,8 +14,8 @@ def evaluate_safety_status(
     monthly_needs: float,
 ) -> SafetyStatusResponse:
     """
-    Evaluates the current coverage of the emergency fund against monthly essential basic needs.
-    Returns a structured SafetyStatusResponse with status metrics and diagnostic message.
+    Evalúa la cobertura actual del fondo de emergencia frente al gasto mensual en necesidades básicas.
+    Retorna un objeto estructurado SafetyStatusResponse con métricas cuantitativas y mensaje diagnóstico.
     """
     monthly_needs = max(0.0, round(monthly_needs, 2))
     target_months = max(3, fund.target_months)
@@ -70,10 +70,11 @@ def sync_fund_state(
     monthly_needs: float,
 ) -> EmergencyFund:
     """
-    Updates the target_amount and is_completed fields of the EmergencyFund entity
-    based on the current monthly needs and current balance.
+    Actualiza los campos target_amount e is_completed de la entidad EmergencyFund
+    en función de las necesidades mensuales vigentes y el saldo actual.
     """
     status = evaluate_safety_status(fund, monthly_needs)
     fund.target_amount = status.target_amount
     fund.is_completed = status.is_completed
     return fund
+
