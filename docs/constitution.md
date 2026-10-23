@@ -1,13 +1,17 @@
-# Constitution: Gestor de Finanzas Personales
+# Constitución: Gestor de Finanzas Personales
 
-1. **Local Stack**: FastAPI, SQLite local, Streamlit y Docker; LLM cloud permitido vía Google Gemini API (clave de usuario).
-2. **Spec Mandate**: Nada se implementa fuera de la spec activa; ante cualquier duda o vacío, parar y preguntar.
-3. **Decoupled Logic & SSOT**: Lógica 50/30/20 y herramientas desacopladas como módulos puros de la UI de Streamlit. Fuente única de verdad para cualquier cálculo financiero (cero duplicación en frontend).
-4. **SOLID Architecture**: Código estructurado bajo principios SOLID: responsabilidad única por módulo, inversión de dependencias mediante interfaces (`db_interface.py`) y segregación de repositorios.
-5. **KISS & YAGNI**: Simplicidad sobre complejidad. Prohibido añadir abstracciones prematuras o capas innecesarias no requeridas por la especificación.
-6. **Veracity & Testing**: Prohibido alucinar métricas financieras; tests automáticos pasan al 100% o no hay avance.
-7. **Type Safety & Defensive Validation**: Tipado estricto con Pydantic v2 en todas las fronteras de datos y precisión numérica garantizada.
-8. **Graceful Degradation**: Caídas de servicios externos (Yahoo, BCE, Gemini) deben gestionarse de forma resiliente mediante fallbacks o cachés, sin romper la aplicación.
-9. **Safety Guard**: Prohibido recomendar activos de riesgo sin 3 meses de gastos fijos cubiertos en fondo de emergencia.
-10. **Local Privacy**: Datos contables detallados residen en local; a Gemini API solo se envían datos de mercado o resúmenes autorizados.
-11. **Language & Git Policy**: Código y schemas en inglés; commits semánticos atómicos con tipo en inglés y descripción en español (`feat(scope): descripción en español`); UI de Streamlit, documentación y explicaciones en español.
+1. **Entorno de Ejecución Local**: FastAPI, SQLite local, Streamlit y Docker; integración con LLM en la nube permitida exclusivamente mediante la API de Google Gemini utilizando la clave personal del usuario.
+2. **Mandato de Especificaciones (Spec-Driven)**: Ninguna funcionalidad se implementa sin una especificación aprobada en el directorio `specs/`; ante cualquier duda, caso borde o vacío de diseño, detenerse inmediatamente y consultar al usuario.
+3. **Lógica Desacoplada y Fuente Única de Verdad (SSOT)**: Los algoritmos presupuestarios (50/30/20, fondos de seguridad, cálculos de mercado) deben residir desacoplados en servicios del backend. La interfaz de Streamlit es una capa pura de presentación. Queda prohibida la duplicación de cálculos financieros en el frontend.
+4. **Arquitectura Limpia y Principios SOLID**: Código estructurado bajo principios SOLID: responsabilidad única por módulo, inversión de dependencias mediante interfaces explícitas (`db_interface.py`), segregación de repositorios y sustitución limpia de componentes.
+5. **Simplicidad Pragmática (KISS y YAGNI)**: Priorizar la simplicidad frente a la complejidad innecesaria. Queda prohibido introducir abstracciones prematuras o componentes no requeridos por la especificación activa.
+6. **Veracidad Numérica y Pruebas Automáticas**: Queda prohibido simular, alucinar o inventar métricas financieras en código de producción; la suite completa de pruebas automatizadas debe pasar al 100% como puerta obligatoria de avance.
+7. **Seguridad de Tipado y Validación Defensiva**: Uso riguroso de modelos fuertemente tipados con SQLAlchemy 2.0 y validación de esquemas con Pydantic v2 en todas las fronteras de datos, garantizando precisión numérica y redondeos controlados.
+8. **Degradación Elegante y Resiliencia**: Las caídas o límites de cuota de APIs externas (Yahoo Finance, BCE, Gemini) deben gestionarse de manera resiliente mediante cachés o valores de respaldo, impidiendo que la aplicación se rompa.
+9. **Guardia de Seguridad del Fondo de Emergencia**: Regla innegociable: queda prohibido sugerir o asignar capital a instrumentos de inversión con riesgo si el fondo de emergencia no cubre al menos 3 meses de gastos fijos esenciales.
+10. **Privacidad Local y Protección de Datos**: Los registros contables y transacciones financieras personales residen exclusivamente en local; a la API de Gemini solo se enviarán datos macroeconómicos públicos, noticias o resúmenes disociados autorizados.
+11. **Seguridad Pre-Commit y Verificación de `.gitignore`**: Queda terminantemente prohibido realizar un commit sin auditar previamente el área de preparación (`staging`) con `git status -u` para verificar que ningún archivo nuevo o modificado deba estar en `.gitignore`. Se debe comprobar activamente que no se suban datos sensibles, claves API, credenciales, bases de datos SQLite locales con transacciones reales ni ficheros de entorno (`.env*`).
+12. **Política de Idioma y Estándar de Código (Opción 1 - Estándar Internacional)**:
+    - **Todo el Código Backend, Base de Datos y API en Inglés**: Modelos de base de datos, tablas, columnas, esquemas Pydantic, routers, endpoints de la API, nombres de métodos, funciones y variables deben estar **100% en inglés** (ej. `Category`, `Transaction`, `MonthlyBudget`, `EmergencyFund`, `MarketCache`, `amount`, `current_balance`, `/categories`, `/advisor/safety-status`).
+    - **Interfaz de Usuario, Documentación y Comunicación en Español**: Todo lo que lee el usuario final en Streamlit, los documentos en `specs/`, guías, comentarios/docstrings explicativos y la comunicación en el chat deben estar **100% en español**.
+    - **Commits en Git**: Formato *Conventional Commits* con tipo y ámbito en inglés y descripción en español (`feat(scope): descripción en español`).

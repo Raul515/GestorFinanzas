@@ -418,3 +418,25 @@ src/backend/data/
 *.sqlite
 *.sqlite3
 *.db
+
+# ==========================================
+# REGLAS DE SEGURIDAD ESTRICTA Y SECRETOS LOCALES
+# ==========================================
+.env.*
+!.env.example
+*.key
+*.pem
+*.cert
+*.crt
+*.pfx
+*.p12
+*.sql
+*.dump
+*.bak
+*secret*
+*credential*
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
