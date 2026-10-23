@@ -1,10 +1,10 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from backend.domain.models import presupuestos as pres_models
+from backend.domain.models import budgets as pres_models
 
 
 def test_api_safety_status_no_needs(client: TestClient, seed_data: dict[str, int]):
-    """If no basic needs budget exists, status indicates unconfigured with can_invest = False."""
+    """Si no existe presupuesto para necesidades básicas, el estado indica no configurado con can_invest = False."""
     response = client.get("/advisor/safety-status")
     assert response.status_code == 200
     data = response.json()
@@ -16,13 +16,14 @@ def test_api_safety_status_no_needs(client: TestClient, seed_data: dict[str, int
 def test_api_safety_status_with_base_budget(
     client: TestClient, db_session: Session, seed_data: dict[str, int]
 ):
-    """Verifies that BASE budget for Needs defines target_amount dynamically."""
-    # Add 1000 € to Alquiler (Necesidades Básicas) in BASE
-    p = pres_models.PresupuestoMensual(
-        mes="BASE",
-        subcategoria_id=seed_data["sub_alquiler_id"],
-        cantidad=1000.0,
+    """Verifica que el presupuesto en plantilla BASE para Necesidades define la meta target_amount de forma dinámica."""
+    # Añadir 1000 € a Alquiler (Necesidades Básicas) en BASE
+    p = pres_models.MonthlyBudget(
+        month="BASE",
+        subcategory_id=seed_data["sub_alquiler_id"],
+        amount=1000.0,
     )
+
     db_session.add(p)
     db_session.commit()
 
@@ -30,7 +31,7 @@ def test_api_safety_status_with_base_budget(
     assert response.status_code == 200
     data = response.json()
     assert data["monthly_needs_reference"] == 1000.0
-    assert data["target_amount"] == 3000.0  # 3 months default
+    assert data["target_amount"] == 3000.0  # 3 meses por defecto
     assert data["can_invest"] is False
     assert data["gap"] == 3000.0
 
@@ -38,17 +39,17 @@ def test_api_safety_status_with_base_budget(
 def test_api_update_emergency_fund_config(
     client: TestClient, db_session: Session, seed_data: dict[str, int]
 ):
-    """Tests configuring target_months and manual balance update."""
-    # Set BASE needs budget = 800 €
-    p = pres_models.PresupuestoMensual(
-        mes="BASE",
-        subcategoria_id=seed_data["sub_alquiler_id"],
-        cantidad=800.0,
+    """Prueba la configuración de meses objetivo (target_months) y la actualización manual de saldo."""
+    # Establecer presupuesto BASE de necesidades = 800 €
+    p = pres_models.MonthlyBudget(
+        month="BASE",
+        subcategory_id=seed_data["sub_alquiler_id"],
+        amount=800.0,
     )
     db_session.add(p)
     db_session.commit()
 
-    # 1. Update target_months to 6
+    # 1. Actualizar meses objetivo a 6
     res1 = client.post(
         "/advisor/emergency-fund/config?mes=BASE",
         json={"target_months": 6},
@@ -59,7 +60,7 @@ def test_api_update_emergency_fund_config(
     assert data1["target_amount"] == 4800.0  # 6 * 800
     assert data1["can_invest"] is False
 
-    # 2. Update balance manually to 5000 € (fully covered)
+    # 2. Actualizar saldo manualmente a 5000 € (cobertura total alcanzada)
     res2 = client.post(
         "/advisor/emergency-fund/config?mes=BASE",
         json={"current_balance": 5000.0},
@@ -73,9 +74,10 @@ def test_api_update_emergency_fund_config(
 
 
 def test_api_reject_under_3_months(client: TestClient):
-    """API must reject target_months < 3 with validation error."""
+    """La API debe rechazar target_months < 3 con error de validación constitucional."""
     response = client.post(
         "/advisor/emergency-fund/config",
         json={"target_months": 2},
     )
     assert response.status_code in (400, 422)
+

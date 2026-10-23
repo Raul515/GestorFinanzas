@@ -3,6 +3,7 @@ from backend.services.safety_guard import evaluate_safety_status, sync_fund_stat
 
 
 def test_evaluate_safety_status_zero_balance():
+    """Verifica el diagnóstico de salvaguarda cuando el saldo acumulado es 0 €."""
     fund = EmergencyFund(current_balance=0.0, target_months=3)
     status = evaluate_safety_status(fund, monthly_needs=1000.0)
 
@@ -16,6 +17,7 @@ def test_evaluate_safety_status_zero_balance():
 
 
 def test_evaluate_safety_status_partial_coverage():
+    """Verifica el estado cuando la reserva cubre parcialmente los meses objetivo."""
     fund = EmergencyFund(current_balance=1500.0, target_months=3)
     status = evaluate_safety_status(fund, monthly_needs=1000.0)
 
@@ -28,6 +30,7 @@ def test_evaluate_safety_status_partial_coverage():
 
 
 def test_evaluate_safety_status_fully_covered():
+    """Verifica que al alcanzar o superar el objetivo se habiliten las inversiones en activos de riesgo."""
     fund = EmergencyFund(current_balance=3000.0, target_months=3)
     status = evaluate_safety_status(fund, monthly_needs=1000.0)
 
@@ -42,19 +45,19 @@ def test_evaluate_safety_status_fully_covered():
 
 def test_evaluate_safety_status_needs_increase_dynamic_gap():
     """
-    Simulates the exact user scenario:
-    User has completed 3000 € for 3 months of 1000 € needs.
-    Then basic needs increase to 1400 € (rent increase, inflation).
-    Target jumps to 4200 €, opening a 1200 € gap and locking risk investments.
+    Simula el escenario dinámico del usuario:
+    1. El usuario completa 3000 € (3 meses a 1000 €/mes).
+    2. Las necesidades básicas aumentan a 1400 €/mes (subida de alquiler, inflación).
+    3. La meta salta dinámicamente a 4200 €, abriendo una brecha de 1200 € y bloqueando de inmediato inversiones de riesgo.
     """
     fund = EmergencyFund(current_balance=3000.0, target_months=3)
 
-    # Initial state: 1000 € needs
+    # Estado inicial: necesidades de 1000 €
     status_initial = evaluate_safety_status(fund, monthly_needs=1000.0)
     assert status_initial.is_completed is True
     assert status_initial.can_invest is True
 
-    # Needs increase to 1400 €
+    # Aumento de necesidades a 1400 €
     status_after_increase = evaluate_safety_status(fund, monthly_needs=1400.0)
     assert status_after_increase.target_amount == 4200.0
     assert status_after_increase.gap == 1200.0
@@ -64,6 +67,7 @@ def test_evaluate_safety_status_needs_increase_dynamic_gap():
 
 
 def test_evaluate_safety_status_zero_monthly_needs():
+    """Verifica que ante necesidades básicas en 0 € se indique no configurado y se bloqueen inversiones."""
     fund = EmergencyFund(current_balance=2000.0, target_months=3)
     status = evaluate_safety_status(fund, monthly_needs=0.0)
 
@@ -73,8 +77,10 @@ def test_evaluate_safety_status_zero_monthly_needs():
 
 
 def test_sync_fund_state():
+    """Verifica la persistencia de target_amount e is_completed en la entidad de base de datos."""
     fund = EmergencyFund(current_balance=3500.0, target_months=3)
     sync_fund_state(fund, monthly_needs=1000.0)
 
     assert fund.target_amount == 3000.0
     assert fund.is_completed is True
+

@@ -8,7 +8,7 @@ from backend.services.financial_calculator import (
 
 
 def test_calculate_category_totals_503020_derivation():
-    """Verifies that 50/30/20 budget ceilings are mathematically derived from budgeted income."""
+    """Verifica que los topes presupuestarios 50/30/20 se deriven matemáticamente del ingreso neto presupuestado."""
     categorias = [
         {"id": 1, "nombre": "Ingresos Netos", "tipo": "ingreso"},
         {"id": 2, "nombre": "Necesidades Básicas", "tipo": "gasto"},
@@ -21,7 +21,7 @@ def test_calculate_category_totals_503020_derivation():
         {"id": 30, "categoria_id": 3, "nombre": "Restaurantes"},
         {"id": 40, "categoria_id": 4, "nombre": "Fondo de emergencia"},
     ]
-    # Income budget of 2000.0
+    # Presupuesto de ingresos de 2000.0 €
     presupuestos = [
         {"subcategoria_id": 10, "cantidad": 2000.0},
         {"subcategoria_id": 20, "cantidad": 800.0},
@@ -41,19 +41,19 @@ def test_calculate_category_totals_503020_derivation():
         ahorro_name="Ahorro e Inversión",
     )
 
-    # Ingresos budget = 2000.0
+    # Presupuesto de ingresos = 2000.0 €
     assert totals["Ingresos Netos"]["presupuesto"] == 2000.0
-    # Needs = 50% of 2000 = 1000.0
+    # Necesidades = 50% de 2000 € = 1000.0 €
     assert totals["Necesidades Básicas"]["presupuesto"] == 1000.0
-    # Wants = 30% of 2000 = 600.0
+    # Deseos = 30% de 2000 € = 600.0 €
     assert totals["Deseos"]["presupuesto"] == 600.0
-    # Savings = 20% of 2000 = 400.0
+    # Ahorro = 20% de 2000 € = 400.0 €
     assert totals["Ahorro e Inversión"]["presupuesto"] == 400.0
 
 
 def test_calculate_503020_percentages_standard():
-    """Verifies percentage calculations and unassigned funds tracking."""
-    # Income: 2000, Needs: 1000 (50%), Wants: 500 (25%), Savings: 300 (15%), Unassigned: 200 (10%)
+    """Verifica el cálculo de porcentajes reales y el seguimiento del fondo Sin Asignar."""
+    # Ingresos: 2000 €, Necesidades: 1000 € (50%), Deseos: 500 € (25%), Ahorro: 300 € (15%), Sin Asignar: 200 € (10%)
     pct_nec, pct_des, pct_aho, pct_sin, sin_asignar = calculate_503020_percentages(
         real_ing=2000.0,
         real_nec=1000.0,
@@ -68,7 +68,7 @@ def test_calculate_503020_percentages_standard():
 
 
 def test_calculate_503020_percentages_zero_income():
-    """Verifies edge case: zero income should yield 0.0 percentages without ZeroDivisionError."""
+    """Verifica caso borde: ingreso cero debe arrojar 0.0% sin provocar ZeroDivisionError."""
     pct_nec, pct_des, pct_aho, pct_sin, sin_asignar = calculate_503020_percentages(
         real_ing=0.0,
         real_nec=500.0,
@@ -83,8 +83,8 @@ def test_calculate_503020_percentages_zero_income():
 
 
 def test_calculate_503020_percentages_overspending():
-    """Verifies that unassigned amount cannot be negative (clamped at 0.0)."""
-    # Total expenses (2500) exceed income (2000)
+    """Verifica que el excedente Sin Asignar no sea negativo ante sobregasto (acotado en 0.0)."""
+    # Gastos totales (2500 €) superan los ingresos (2000 €)
     _, _, _, pct_sin, sin_asignar = calculate_503020_percentages(
         real_ing=2000.0,
         real_nec=1500.0,
@@ -96,8 +96,8 @@ def test_calculate_503020_percentages_overspending():
 
 
 def test_calculate_annual_metrics():
-    """Verifies annual accumulated metrics and target deviations."""
-    # Synthetic 12 months data
+    """Verifica el cálculo de métricas acumuladas anuales y desviaciones frente al objetivo."""
+    # Datos sintéticos para los 12 meses del año
     anual_data = {}
     for m in range(1, 13):
         anual_data[m] = {
@@ -122,14 +122,14 @@ def test_calculate_annual_metrics():
     assert metrics["pct_nec_real"] == pytest.approx(50.0)
     assert metrics["pct_des_real"] == pytest.approx(30.0)
     assert metrics["pct_aho_real"] == pytest.approx(20.0)
-    # Deviations from 50/30/20 target should be 0.0
+    # Desviaciones frente a la meta 50/30/20 deben ser exactamente 0.0
     assert metrics["desv_nec"] == pytest.approx(0.0)
     assert metrics["desv_des"] == pytest.approx(0.0)
     assert metrics["desv_aho"] == pytest.approx(0.0)
 
 
 def test_get_monthly_needs_budget():
-    """Verifies extraction of total budgeted amount for basic needs category."""
+    """Verifica la extracción del total presupuestado para la categoría de necesidades básicas."""
     subcats = [
         {"id": 1, "categoria_id": 10, "nombre": "Alquiler"},
         {"id": 2, "categoria_id": 10, "nombre": "Supermercado"},
@@ -146,5 +146,6 @@ def test_get_monthly_needs_budget():
         subcategorias=subcats,
         categoria_necesidades_id=10,
     )
-    # 800 + 350 = 1150.0 (cine belongs to cat 20, excluded)
+    # 800 + 350 = 1150.0 € (cine pertenece a categoría 20, excluida)
     assert total_needs == 1150.0
+

@@ -6,13 +6,13 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 from backend.domain.models.base import Base
-from backend.domain.models import categorias as cat_models
-from backend.domain.models import presupuestos as pres_models
-from backend.domain.models import transacciones as trans_models
+from backend.domain.models import categories as cat_models
+from backend.domain.models import budgets as pres_models
+from backend.domain.models import transactions as trans_models
 from backend.database.componentes.sqlite_db import get_db
 from backend.api.main import app
 
-# In-memory SQLite engine for tests with StaticPool to keep schema in memory across threads
+# Motor SQLite en memoria con StaticPool para preservar el esquema entre hilos
 TEST_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -24,7 +24,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
-    """Provides a clean in-memory database session for each test."""
+    """Proporciona una sesión de base de datos aislada y limpia en memoria para cada prueba."""
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
@@ -35,7 +35,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture(scope="function")
 def client(db_session: Session) -> Generator[TestClient, None, None]:
-    """TestClient that uses the test database session."""
+    """Cliente de pruebas TestClient conectado a la base de datos de test mediante sobreescritura de dependencias."""
     def override_get_db():
         try:
             yield db_session
@@ -49,40 +49,42 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 
 @pytest.fixture(scope="function")
 def seed_data(db_session: Session) -> dict[str, int]:
-    """Seeds the standard 50/30/20 categories and essential subcategories."""
+    """Puebla las categorías estándar del sistema 50/30/20 y subcategorías esenciales para pruebas."""
     cats = [
-        {"nombre": "Ingresos Netos", "tipo": "ingreso"},
-        {"nombre": "Necesidades Básicas", "tipo": "gasto"},
-        {"nombre": "Deseos", "tipo": "gasto"},
-        {"nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+        {"name": "Ingresos Netos", "type": "ingreso"},
+        {"name": "Necesidades Básicas", "type": "gasto"},
+        {"name": "Deseos", "type": "gasto"},
+        {"name": "Ahorro e Inversión", "type": "ahorro"},
     ]
     created_cats = {}
     for c in cats:
-        cat_obj = cat_models.Categoria(nombre=c["nombre"], tipo=c["tipo"])
+        cat_obj = cat_models.Category(name=c["name"], type=c["type"])
         db_session.add(cat_obj)
         db_session.flush()
-        created_cats[c["nombre"]] = cat_obj.id
+        created_cats[c["name"]] = cat_obj.id
 
-    # Essential subcategories
-    sub_emergencia = cat_models.Subcategoria(
-        nombre="Fondo de emergencia",
-        categoria_id=created_cats["Ahorro e Inversión"]
+    # Subcategorías esenciales
+
+    sub_emergencia = cat_models.Subcategory(
+        name="Fondo de emergencia",
+        category_id=created_cats["Ahorro e Inversión"]
     )
-    sub_alquiler = cat_models.Subcategoria(
-        nombre="Alquiler / Hipoteca",
-        categoria_id=created_cats["Necesidades Básicas"]
+    sub_alquiler = cat_models.Subcategory(
+        name="Alquiler / Hipoteca",
+        category_id=created_cats["Necesidades Básicas"]
     )
-    sub_ocio = cat_models.Subcategoria(
-        nombre="Ocio y Salidas",
-        categoria_id=created_cats["Deseos"]
+    sub_ocio = cat_models.Subcategory(
+        name="Ocio y Salidas",
+        category_id=created_cats["Deseos"]
     )
-    sub_salario = cat_models.Subcategoria(
-        nombre="Nómina",
-        categoria_id=created_cats["Ingresos Netos"]
+    sub_salario = cat_models.Subcategory(
+        name="Nómina",
+        category_id=created_cats["Ingresos Netos"]
     )
 
     db_session.add_all([sub_emergencia, sub_alquiler, sub_ocio, sub_salario])
     db_session.commit()
+
 
     return {
         "cat_ingresos_id": created_cats["Ingresos Netos"],
