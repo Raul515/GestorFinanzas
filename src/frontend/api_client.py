@@ -224,3 +224,89 @@ def refresh_market_radar():
     except Exception as e:
         logger.error("Error inesperado en refresh_market_radar(): %s", e)
     return None
+
+
+def get_screener_universes():
+    """Obtiene la lista de universos predefinidos para el screener."""
+    url = f"{API_URL}/screener/universes"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar universos de screener (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar universos en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_screener_universes(): %s", e)
+    return []
+
+
+def get_screener_universe(
+    universe_id: str,
+    preset=None,
+    max_pe=None,
+    min_dividend_yield=None,
+    min_roe=None,
+    max_debt_to_equity=None,
+    max_expense_ratio=None,
+    search_query=None,
+):
+    """Consulta los activos de un universo aplicando filtros cuantitativos y de preset."""
+    url = f"{API_URL}/screener/universe/{universe_id}"
+    params = {}
+    if preset:
+        params["preset"] = preset
+    if max_pe is not None:
+        params["max_pe"] = max_pe
+    if min_dividend_yield is not None:
+        params["min_dividend_yield"] = min_dividend_yield
+    if min_roe is not None:
+        params["min_roe"] = min_roe
+    if max_debt_to_equity is not None:
+        params["max_debt_to_equity"] = max_debt_to_equity
+    if max_expense_ratio is not None:
+        params["max_expense_ratio"] = max_expense_ratio
+    if search_query:
+        params["search_query"] = search_query
+
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar universo '%s' (%s): %s", universe_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar screener universo '%s' en %s: %s", universe_id, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_screener_universe('%s'): %s", universe_id, e)
+    return None
+
+
+def get_screener_custom(tickers, filter_params=None):
+    """Consulta y filtra una lista personalizada de tickers (hasta 50)."""
+    url = f"{API_URL}/screener/custom"
+    payload = {"tickers": tickers, "filter_params": filter_params}
+    try:
+        response = requests.post(url, json=payload, timeout=35)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar tickers custom (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar tickers custom en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_screener_custom(): %s", e)
+    return None
+
+
+def refresh_screener_universe(universe_id: str):
+    """Fuerza la invalidación de la caché en SQLite y descarga datos frescos de Yahoo Finance."""
+    url = f"{API_URL}/screener/refresh/{universe_id}"
+    try:
+        response = requests.post(url, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al refrescar universo '%s' (%s): %s", universe_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al refrescar screener universo '%s' en %s: %s", universe_id, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en refresh_screener_universe('%s'): %s", universe_id, e)
+    return None

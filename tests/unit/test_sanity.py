@@ -61,6 +61,53 @@ def test_frontend_api_client_handles_errors_gracefully(mock_get):
     mock_resp.text = "Internal Server Error"
     mock_get.return_value = mock_resp
     assert api_client.get_market_news() is None
+    assert api_client.get_screener_universes() == []
+    assert api_client.get_screener_universe("ibex35") is None
+
+
+@patch("frontend.api_client.requests.get")
+@patch("frontend.api_client.requests.post")
+def test_frontend_api_client_screener_methods(mock_post, mock_get):
+    """Verifica las llamadas exitosas de los métodos de screener en el cliente del frontend."""
+    # Test get_screener_universes
+    mock_resp_u = MagicMock()
+    mock_resp_u.status_code = 200
+    mock_resp_u.json.return_value = [{"id": "ibex35", "name": "IBEX 35"}]
+    mock_get.return_value = mock_resp_u
+
+    univs = api_client.get_screener_universes()
+    assert len(univs) == 1
+    assert univs[0]["id"] == "ibex35"
+
+    # Test get_screener_universe
+    mock_resp_scr = MagicMock()
+    mock_resp_scr.status_code = 200
+    mock_resp_scr.json.return_value = {"universe": "ibex35", "items": [{"ticker": "ITX.MC"}]}
+    mock_get.return_value = mock_resp_scr
+
+    data = api_client.get_screener_universe("ibex35", preset="quality", max_pe=25.0)
+    assert data is not None
+    assert data["universe"] == "ibex35"
+    assert len(data["items"]) == 1
+
+    # Test get_screener_custom
+    mock_resp_cust = MagicMock()
+    mock_resp_cust.status_code = 200
+    mock_resp_cust.json.return_value = {"universe": "custom", "items": [{"ticker": "AAPL"}]}
+    mock_post.return_value = mock_resp_cust
+
+    custom_data = api_client.get_screener_custom(["AAPL"], filter_params={"search_query": "apple"})
+    assert custom_data is not None
+    assert custom_data["universe"] == "custom"
+
+    # Test refresh_screener_universe
+    mock_resp_ref = MagicMock()
+    mock_resp_ref.status_code = 200
+    mock_resp_ref.json.return_value = {"notes": "actualizado"}
+    mock_post.return_value = mock_resp_ref
+
+    ref_res = api_client.refresh_screener_universe("ibex35")
+    assert ref_res == {"notes": "actualizado"}
 
 
 
