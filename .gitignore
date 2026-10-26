@@ -422,6 +422,7 @@ src/backend/data/
 # ==========================================
 # REGLAS DE SEGURIDAD ESTRICTA Y SECRETOS LOCALES
 # ==========================================
+.env
 .env.*
 !.env.example
 *.key

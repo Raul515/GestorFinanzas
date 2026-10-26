@@ -36,16 +36,17 @@
 | **2026-10-23** | Spec 001 Fase 1 Completada | Instalación de dependencias externas (`yfinance`, `google-genai`, `feedparser`) y creación del modelo de caché de mercado con persistencia de 24h en SQLite (26/26 tests pasando). |
 | **2026-10-23** | Spec 001 Fase 2 Completada | Creación del servicio de datos macroeconómicos con extracción de IBEX 35, EuroStoxx 50, S&P 500, Nasdaq 100, Bono US 10A vía `yfinance`, y rendimientos de Bono Español y Bund Alemán 10A vía API SDMX del BCE. Cálculo de la Prima de Riesgo en puntos básicos (34/34 tests pasando). |
 | **2026-10-23** | Estándar Internacional de Lenguaje (Opción 1) y Seguridad Pre-Commit | Constitución y AGENTS.md actualizados a la Opción 1: backend, base de datos, modelos SQLAlchemy, esquemas Pydantic y endpoints de API 100% en inglés. Documentación, interfaz de usuario (Streamlit) y comunicación 100% en español. Carpetas de skills `.agents/` y `.claude/` excluidas explícitamente. Protocolo pre-commit obligatorio con `git status -u` y verificación activa de `.gitignore`. |
+| **2026-10-26** | Spec 001 Fase 3 Completada | Agregador de noticias financieras públicas (Yahoo Finance `^IBEX` y feeds RSS de España/Eurozona: elEconomista, Cinco Días, BCE) y analizador de impacto y síntesis neutral mediante Google Gemini (`google-genai`). Soporte seguro de `.env` vía `python-dotenv` registrado en `.gitignore`. Degradación elegante ante ausencia de clave o fallo de cuota. Suite ampliada a 48/48 tests pasando. |
+| **2026-10-26** | Regla de Implementación Estrictamente Fase a Fase | Gobernanza SDD actualizada en Constitución y AGENTS.md: toda spec debe implementarse fase a fase requiriendo confirmación y autorización explícita del usuario tras cada fase completada antes de iniciar la siguiente. Prohibido ejecutar múltiples fases de golpe. |
 
 ---
 
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
-2. **Hito Activo - Spec 001**: Radar Macroeconómico y Noticias (Fases 1 y 2 completadas; 34 pruebas pasando).
+2. **Hito Activo - Spec 001**: Radar Macroeconómico y Noticias (Fases 1, 2 y 3 completadas; 48 pruebas pasando).
 3. **Fases Pendientes de Spec 001**:
-   - Fase 3: Agregación de noticias RSS/Yahoo y análisis neutral con Gemini Pro.
-   - Fase 4: Endpoints REST `/mercado/*`.
-   - Fase 5: Pestaña en Streamlit "🌐 Radar Macro y Noticias".
-   - Fase 6: Validación global y pruebas de regresión.
+   - Fase 4: Endpoints REST `/market/*` (`/macro-indicators`, `/news`, `/refresh`) con caché SQLite de 24h.
+   - Fase 5: Pestaña en Streamlit "🌐 Radar Macro y Noticias" con sparklines Altair y filtros de impacto/temática.
+   - Fase 6: Validación global, pruebas de regresión y verificación de arranque limpio.
 4. **Especificaciones Posteriores**: Spec 002 (Screener), Spec 003 (Deep Dive contable), Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).
