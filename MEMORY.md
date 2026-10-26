@@ -41,15 +41,15 @@
 | **2026-10-26** | Spec 001 Fase 4 Completada | Endpoints REST en FastAPI (`/market/macro-indicators`, `/market/news`, `/market/refresh`) bajo router `src/backend/api/routers/market.py` con caché SQLite de 24 horas y tests de integración (`test_market_api.py`). Suite ampliada a 51/51 tests pasando. |
 | **2026-10-26** | Spec 001 Fase 5 Completada | Implementación de cliente en `api_client.py` y nueva pestaña en Streamlit "🌐 Radar Macro y Noticias" (`app.py`): tarjetas métricas con sparklines Altair a 30 días priorizando España/Eurozona, noticias con badges de impacto y categorías, filtros interactivos y botón de refresco forzado. Suite ampliada a 53/53 tests pasando. |
 | **2026-10-26** | Principio de Observabilidad y Prohibición de Fallos Silenciosos | Principio 13 añadido a la Constitución y directriz 9 a AGENTS.md: prohibido el silenciamiento de excepciones con 'pass' ciego. Refactorización de `api_client.py` con logging estructurado para códigos HTTP y RequestException. Suite ampliada a 54/54 tests pasando. |
+| **2026-10-26** | Spec 001 Completada al 100% | Radar Macroeconómico y Noticias finalizado con éxito: extracción de cotizaciones/deuda soberana, prima de riesgo España-Alemania, agregador RSS/Yahoo, análisis neutral con Google Gemini Pro, caché SQLite 24h, endpoints REST `/market/*` y pestaña interactiva en Streamlit. Cero regresiones y 54/54 pruebas pasando. |
 
 ---
 
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
-2. **Hito Activo - Spec 001**: Radar Macroeconómico y Noticias (Fases 1, 2, 3, 4 y 5 completadas; 54 pruebas pasando).
-3. **Fases Pendientes de Spec 001**:
-   - Fase 6: Validación global, pruebas de regresión y verificación de arranque limpio.
-4. **Especificaciones Posteriores**: Spec 002 (Screener), Spec 003 (Deep Dive contable), Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).
+2. **Spec 001 Completada**: Radar Macroeconómico y Noticias con foco en España/Eurozona (54 pruebas pasando al 100%).
+3. **Próximo Hito - Spec 002**: Screener Fundamental de Acciones y ETFs con métricas de solvencia y valoración.
+4. **Especificaciones Posteriores**: Spec 003 (Deep Dive contable), Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).
 5. **Mejoras Técnicas Futuras**:
    - Configuración de `RotatingFileHandler` para persistencia rotativa de logs en disco (`logs/app.log`).
