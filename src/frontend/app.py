@@ -738,8 +738,8 @@ with tab_base:
                     btn_save_ef = st.form_submit_button("Actualizar Fondo de Emergencia")
                     if btn_save_ef:
                         res_ef = api_client.update_emergency_fund_config(
-                            target_months=int(new_months),
-                            current_balance=float(new_balance),
+                            target_months=new_months,
+                            current_balance=new_balance,
                             mes="BASE",
                         )
                         if res_ef:
