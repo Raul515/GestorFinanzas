@@ -41,6 +41,10 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
    - **Commits en Git**: Estándar *Conventional Commits* con tipo y ámbito en inglés y descripción en español (`feat(scope): descripción en español`).
 8. **Exclusión de Carpetas de Habilidades de Terceros**:
    - Las carpetas `.agents/` y `.claude/` contienen skills y configuraciones de agentes descargadas de terceros; quedan excluidas de cualquier refactorización, traducción o modificación de idioma.
+9. **Observabilidad Obligatoria y Prohibición de Fallos Silenciosos (`Silent Failures`)**:
+   - Queda estrictamente prohibido silenciar excepciones mediante `pass` sin registrar el fallo en un log descriptivo.
+   - En clientes de red (`src/frontend/api_client.py`), servicios y controladores, se debe usar el módulo estándar `logging` con niveles adecuados (`logger.warning`, `logger.error`), registrando la URL invocada, códigos de error HTTP y el detalle del fallo.
+   - Preservar la privacidad: nunca imprimir ni loguear datos sensibles (claves API, tokens o credenciales).
 
 ---
 

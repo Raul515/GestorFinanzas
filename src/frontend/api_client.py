@@ -1,13 +1,17 @@
-import requests
+import logging
 import os
+import requests
+
+logger = logging.getLogger(__name__)
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 
 def get_categorias():
     """Obtiene el listado de categorías, normalizando claves para compatibilidad."""
+    url = f"{API_URL}/categories/"
     try:
-        response = requests.get(f"{API_URL}/categories/")
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for c in raw:
@@ -16,33 +20,41 @@ def get_categorias():
                 if "type" in c and "tipo" not in c:
                     c["tipo"] = c["type"]
             return raw
-    except Exception:
-        pass
+        logger.warning("Respuesta no exitosa al consultar categorías (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar categorías en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_categorias(): %s", e)
     return []
 
 
 def get_subcategorias(categoria_id=None):
     """Obtiene subcategorías, normalizando claves para compatibilidad."""
+    url = f"{API_URL}/categories/subcategories/"
     params = {}
     if categoria_id:
         params["category_id"] = categoria_id
     try:
-        response = requests.get(f"{API_URL}/categories/subcategories/", params=params)
+        response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for s in raw:
                 if "name" in s and "nombre" not in s:
                     s["nombre"] = s["name"]
             return raw
-    except Exception:
-        pass
+        logger.warning("Respuesta no exitosa al consultar subcategorías (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar subcategorías en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_subcategorias(): %s", e)
     return []
 
 
 def get_presupuestos(mes):
     """Obtiene presupuestos de un mes, normalizando claves para compatibilidad."""
+    url = f"{API_URL}/budgets/{mes}"
     try:
-        response = requests.get(f"{API_URL}/budgets/{mes}")
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for p in raw:
@@ -51,18 +63,22 @@ def get_presupuestos(mes):
                 if "amount" in p and "cantidad" not in p:
                     p["cantidad"] = p["amount"]
             return raw
-    except Exception:
-        pass
+        logger.warning("Respuesta no exitosa al consultar presupuestos de %s (%s): %s", mes, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar presupuestos en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_presupuestos(%s): %s", mes, e)
     return []
 
 
 def get_transacciones(mes=None):
     """Obtiene transacciones de un mes, normalizando claves para compatibilidad."""
+    url = f"{API_URL}/transactions/"
     params = {}
     if mes:
         params["month"] = mes
     try:
-        response = requests.get(f"{API_URL}/transactions/", params=params)
+        response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for t in raw:
@@ -73,12 +89,16 @@ def get_transacciones(mes=None):
                 if "description" in t and "concepto" not in t:
                     t["concepto"] = t["description"]
             return raw
-    except Exception:
-        pass
+        logger.warning("Respuesta no exitosa al consultar transacciones (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar transacciones en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_transacciones(): %s", e)
     return []
 
 
 def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
+    url = f"{API_URL}/transactions/"
     data = {
         "date": fecha.isoformat() if hasattr(fecha, "isoformat") else str(fecha),
         "subcategory_id": subcategoria_id,
@@ -86,7 +106,7 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
         "description": concepto,
     }
     try:
-        response = requests.post(f"{API_URL}/transactions/", json=data)
+        response = requests.post(url, json=data, timeout=10)
         if response.status_code == 200:
             res = response.json()
             if "date" in res and "fecha" not in res:
@@ -94,12 +114,16 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
             if "amount" in res and "cantidad" not in res:
                 res["cantidad"] = res["amount"]
             return res
-        return None
-    except Exception:
-        return None
+        logger.warning("Error al crear transacción (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al crear transacción en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_transaccion(): %s", e)
+    return None
 
 
 def save_presupuestos_bulk(presupuestos_list):
+    url = f"{API_URL}/budgets/bulk"
     payload = []
     for p in presupuestos_list:
         m = p.get("month") or p.get("mes")
@@ -107,26 +131,36 @@ def save_presupuestos_bulk(presupuestos_list):
         a = p.get("amount") if p.get("amount") is not None else p.get("cantidad", 0.0)
         payload.append({"month": m, "subcategory_id": s, "amount": a})
     try:
-        response = requests.post(f"{API_URL}/budgets/bulk", json=payload)
-        return response.json() if response.status_code == 200 else None
-    except Exception:
-        return None
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Error al guardar presupuestos en bloque (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al guardar presupuestos en bloque en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en save_presupuestos_bulk(): %s", e)
+    return None
 
 
 def get_safety_status(mes=None):
+    url = f"{API_URL}/advisor/safety-status"
     params = {}
     if mes:
         params["mes"] = mes
     try:
-        response = requests.get(f"{API_URL}/advisor/safety-status", params=params)
+        response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
-    except Exception:
-        pass
+        logger.warning("Respuesta no exitosa al consultar safety-status (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al consultar safety-status en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_safety_status(): %s", e)
     return None
 
 
 def update_emergency_fund_config(target_months=None, current_balance=None, mes=None):
+    url = f"{API_URL}/advisor/emergency-fund/config"
     params = {}
     if mes:
         params["mes"] = mes
@@ -136,9 +170,57 @@ def update_emergency_fund_config(target_months=None, current_balance=None, mes=N
     if current_balance is not None:
         data["current_balance"] = current_balance
     try:
-        response = requests.post(f"{API_URL}/advisor/emergency-fund/config", params=params, json=data)
+        response = requests.post(url, params=params, json=data, timeout=10)
         if response.status_code == 200:
             return response.json()
-    except Exception:
-        pass
+        logger.warning("Error al actualizar configuración del fondo de emergencia (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al actualizar fondo de emergencia en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_emergency_fund_config(): %s", e)
+    return None
+
+
+def get_macro_indicators():
+    """Obtiene los indicadores macroeconómicos y deuda soberana desde el backend."""
+    url = f"{API_URL}/market/macro-indicators"
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al obtener indicadores macro (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al obtener macro-indicators en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_macro_indicators(): %s", e)
+    return None
+
+
+def get_market_news(limit=15):
+    """Obtiene las noticias financieras depuradas con análisis de IA desde el backend."""
+    url = f"{API_URL}/market/news"
+    try:
+        response = requests.get(url, params={"limit": limit}, timeout=35)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al obtener noticias de mercado (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al obtener noticias en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_market_news(): %s", e)
+    return None
+
+
+def refresh_market_radar():
+    """Fuerza la invalidación y recarga manual del Radar de Mercado y Noticias."""
+    url = f"{API_URL}/market/refresh"
+    try:
+        response = requests.post(url, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al refrescar el radar de mercado (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al refrescar el radar en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en refresh_market_radar(): %s", e)
     return None

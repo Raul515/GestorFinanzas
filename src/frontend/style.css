@@ -8,3 +8,49 @@ div[data-testid="stMetricValue"] {
 }
 
 /* Permitir que Streamlit controle el fondo en Light y Dark mode */
+
+/* Tarjetas y Badges de Noticias del Radar */
+.news-card {
+    background: rgba(128, 128, 128, 0.05);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.badge-impact {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+.badge-impact-alto {
+    background-color: #ffebee;
+    color: #c62828;
+    border: 1px solid #ef9a9a;
+}
+
+.badge-impact-medio {
+    background-color: #fff8e1;
+    color: #f57f17;
+    border: 1px solid #ffe082;
+}
+
+.badge-impact-bajo {
+    background-color: #e8eaf6;
+    color: #283593;
+    border: 1px solid #c5cae9;
+}
+
+.badge-topic {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: 4px;
+    background-color: rgba(128, 128, 128, 0.15);
+    margin-left: 0.5rem;
+}
