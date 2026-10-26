@@ -48,6 +48,7 @@
 | **2026-10-26** | Spec 002 Fase 3 Completada | Router REST en `src/backend/api/routers/screener.py` con endpoints `/screener/universes`, `/screener/universe/{universe_id}`, `/screener/custom`, `/screener/refresh/{universe_id}` respaldados por caché de 24h en SQLite (`MarketCache`), y 6 pruebas de integración en `tests/integration/test_screener_api.py`. Suite global ampliada a 80/80 tests pasando. |
 | **2026-10-26** | Spec 002 Fase 4 Completada | Integración en Frontend: métodos cliente en `api_client.py`, nueva pestaña en Streamlit '🔍 Screener y Oportunidades' (`app.py`) con aviso preventivo de Salvaguarda de Seguridad (Principio 9), selector de universos modulares, presets rápidos, filtros avanzados manuales, tabla interactiva con formato numérico y exportación a CSV. Suite ampliada a 81/81 tests pasando. |
 | **2026-10-26** | Spec 002 Completada al 100% | Screener Fundamental y de Oportunidades finalizado con éxito: universos modulares bajo demanda (IBEX 35, EuroStoxx 50, S&P 500 Top 50, ETFs UCITS y Tickers Custom), ratios contables completos, presets estratégicos, caché SQLite de 24 horas, cero consumo de tokens de IA, banner preventivo de salvaguarda patrimonial y 81/81 pruebas pasando al 100%. |
+| **2026-10-26** | Spec 003 Aprobada: Análisis Fundamental Deep Dive & Quality Value | Definición de Spec 003 combinando motor contable local en Python (Balance, Resultados y FCF a 4 años, algoritmo Piotroski F-Score de 0 a 9 puntos con desglose de 9 criterios, métricas de calidad de caja y tabla SQLite `watchlist`) con Analista Agéntico en Google Gemini (3.1 Flash / 2.5 Pro configurable vía `GEMINI_DEEPDIVE_MODEL`) aplicando la metodología *Quality Value* (clasificación en 3 cuadrantes, evaluación de los 6 ingredientes, modelo y matriz de riesgos "¿Qué puede salir mal?" y proyección de valoración a 5 años con TIR exigida al 15%-20%). Plan técnico estructurado en 6 fases secuenciales estrictas. |
 
 ---
 
@@ -56,7 +57,7 @@
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
 2. **Spec 001 Completada**: Radar Macroeconómico y Noticias con foco en España/Eurozona (54 pruebas pasando al 100%).
 3. **Spec 002 Completada**: Screener Fundamental de Acciones y ETFs con métricas de solvencia, valoración, presets interactivos y caché SQLite de 24 horas (81 pruebas pasando al 100%).
-4. **Próximo Hito - Spec 003**: Análisis Fundamental en Profundidad (Deep Dive) — diagnóstico contable individual, F-Score de Piotroski, análisis de estados financieros y fosos defensivos (Moat).
+4. **Spec 003 Lista para Implementar**: Análisis Fundamental en Profundidad (Deep Dive) con metodología Quality Value, Piotroski Score (0-9), métricas FCF, persistencia de Watchlist en SQLite y síntesis agéntica con Gemini 3.1 Flash / 2.5 Pro.
 5. **Especificaciones Posteriores**: Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).
 6. **Mejoras Técnicas Futuras**:
    - Configuración de `RotatingFileHandler` para persistencia rotativa de logs en disco (`logs/app.log`).
