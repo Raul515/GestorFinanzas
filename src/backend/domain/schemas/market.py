@@ -69,3 +69,13 @@ class MarketNewsResponse(BaseModel):
     ai_analysis_available: bool = True
     notes: Optional[str] = None
 
+
+class MarketRefreshResponse(BaseModel):
+    """Respuesta consolidada tras forzar el refresco de indicadores y noticias."""
+    model_config = ConfigDict(from_attributes=True)
+
+    message: str = "Radar de mercado y noticias actualizado con éxito"
+    macro_indicators: MacroOverviewResponse
+    news: MarketNewsResponse
+
+

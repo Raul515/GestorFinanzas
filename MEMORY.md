@@ -38,15 +38,15 @@
 | **2026-10-23** | Estándar Internacional de Lenguaje (Opción 1) y Seguridad Pre-Commit | Constitución y AGENTS.md actualizados a la Opción 1: backend, base de datos, modelos SQLAlchemy, esquemas Pydantic y endpoints de API 100% en inglés. Documentación, interfaz de usuario (Streamlit) y comunicación 100% en español. Carpetas de skills `.agents/` y `.claude/` excluidas explícitamente. Protocolo pre-commit obligatorio con `git status -u` y verificación activa de `.gitignore`. |
 | **2026-10-26** | Spec 001 Fase 3 Completada | Agregador de noticias financieras públicas (Yahoo Finance `^IBEX` y feeds RSS de España/Eurozona: elEconomista, Cinco Días, BCE) y analizador de impacto y síntesis neutral mediante Google Gemini (`google-genai`). Soporte seguro de `.env` vía `python-dotenv` registrado en `.gitignore`. Degradación elegante ante ausencia de clave o fallo de cuota. Suite ampliada a 48/48 tests pasando. |
 | **2026-10-26** | Regla de Implementación Estrictamente Fase a Fase | Gobernanza SDD actualizada en Constitución y AGENTS.md: toda spec debe implementarse fase a fase requiriendo confirmación y autorización explícita del usuario tras cada fase completada antes de iniciar la siguiente. Prohibido ejecutar múltiples fases de golpe. |
+| **2026-10-26** | Spec 001 Fase 4 Completada | Endpoints REST en FastAPI (`/market/macro-indicators`, `/market/news`, `/market/refresh`) bajo router `src/backend/api/routers/market.py` con caché SQLite de 24 horas y tests de integración (`test_market_api.py`). Suite ampliada a 51/51 tests pasando. |
 
 ---
 
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
-2. **Hito Activo - Spec 001**: Radar Macroeconómico y Noticias (Fases 1, 2 y 3 completadas; 48 pruebas pasando).
+2. **Hito Activo - Spec 001**: Radar Macroeconómico y Noticias (Fases 1, 2, 3 y 4 completadas; 51 pruebas pasando).
 3. **Fases Pendientes de Spec 001**:
-   - Fase 4: Endpoints REST `/market/*` (`/macro-indicators`, `/news`, `/refresh`) con caché SQLite de 24h.
    - Fase 5: Pestaña en Streamlit "🌐 Radar Macro y Noticias" con sparklines Altair y filtros de impacto/temática.
    - Fase 6: Validación global, pruebas de regresión y verificación de arranque limpio.
 4. **Especificaciones Posteriores**: Spec 002 (Screener), Spec 003 (Deep Dive contable), Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).

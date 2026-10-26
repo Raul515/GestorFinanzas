@@ -9,6 +9,8 @@ from backend.domain.models.base import Base
 from backend.domain.models import categories as cat_models
 from backend.domain.models import budgets as pres_models
 from backend.domain.models import transactions as trans_models
+from backend.domain.models import emergency_fund as fund_models
+from backend.domain.models import market_cache as cache_models
 from backend.database.componentes.sqlite_db import get_db
 from backend.api.main import app
 

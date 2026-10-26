@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from backend.api.routers import categories, budgets, transactions, safety_guard
+from backend.api.routers import categories, budgets, transactions, safety_guard, market
 from backend.database.componentes.sqlite_db import init_db
 
 app = FastAPI(title="Gestor Finanzas API")
@@ -12,6 +12,7 @@ app.include_router(categories.router)
 app.include_router(budgets.router)
 app.include_router(transactions.router)
 app.include_router(safety_guard.router)
+app.include_router(market.router)
 
 
 
