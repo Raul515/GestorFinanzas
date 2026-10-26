@@ -45,6 +45,7 @@
 | **2026-10-26** | Spec 002 Aprobada: Universos Modulares Bajo Demanda | Definición de Spec 002 con Opción B (IBEX 35, EuroStoxx 50, Top 50 EE.UU., ETFs UCITS y Tickers Personalizados). Cero consumo de tokens de IA, caché de 24h en SQLite (`MarketCache`), extracción resiliente con `yfinance`, motor de presets y advertencia visual de la Salvaguarda de Seguridad (Principio 9). Plan técnico desglosado en 5 fases secuenciales estrictas. |
 | **2026-10-26** | Spec 002 Fase 1 Completada | Creación de esquemas Pydantic v2 en `src/backend/domain/schemas/screener.py` (`StockScreenerItem`, `ETFScreenerItem`, `UniverseInfo`, `ScreenerFilterParams`, `ScreenerResponse`, `ScreenerPresetEnum`) y suite unitaria en `tests/unit/test_screener_schemas.py`. Suite global ampliada a 61/61 tests pasando. |
 | **2026-10-26** | Spec 002 Fase 2 Completada | Servicio desacoplado `src/backend/services/screener_service.py` con 4 universos (IBEX 35, EuroStoxx 50, S&P 500 Top 50, UCITS ETFs), extracción resiliente con normalización matemática de porcentajes, motor de presets en memoria (Calidad, Alto Dividendo, Value, Crecimiento, ETFs Bajo Coste), y 13 pruebas unitarias mockeadas en `tests/unit/test_screener_service.py`. Suite global ampliada a 74/74 tests pasando. |
+| **2026-10-26** | Spec 002 Fase 3 Completada | Router REST en `src/backend/api/routers/screener.py` con endpoints `/screener/universes`, `/screener/universe/{universe_id}`, `/screener/custom`, `/screener/refresh/{universe_id}` respaldados por caché de 24h en SQLite (`MarketCache`), y 6 pruebas de integración en `tests/integration/test_screener_api.py`. Suite global ampliada a 80/80 tests pasando. |
 
 ---
 
@@ -52,7 +53,7 @@
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
 2. **Spec 001 Completada**: Radar Macroeconómico y Noticias con foco en España/Eurozona (54 pruebas pasando al 100%).
-3. **Spec 002 En Curso (Fase 3)**: Screener Fundamental de Acciones y ETFs con métricas de solvencia, valoración, presets interactivos y caché SQLite de 24 horas. Fases 1 y 2 completadas.
+3. **Spec 002 En Curso (Fase 4)**: Screener Fundamental de Acciones y ETFs con métricas de solvencia, valoración, presets interactivos y caché SQLite de 24 horas. Fases 1, 2 y 3 completadas.
 4. **Especificaciones Posteriores**: Spec 003 (Deep Dive contable), Spec 004 (Copiloto Patrimonial), Spec 005 (LangGraph).
 5. **Mejoras Técnicas Futuras**:
    - Configuración de `RotatingFileHandler` para persistencia rotativa de logs en disco (`logs/app.log`).

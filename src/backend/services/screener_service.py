@@ -296,7 +296,7 @@ def apply_screener_filters(
 ) -> List[ScreenerItem]:
     """Aplica filtros numéricos, presets y búsqueda en memoria a una colección de activos."""
     if not params:
-        return items
+        return list(items)
 
     filtered: List[ScreenerItem] = []
     query = params.search_query.strip().lower() if params.search_query else None

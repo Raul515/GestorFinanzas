@@ -104,3 +104,9 @@ class ScreenerResponse(BaseModel):
     filtered_count: int
     items: List[ScreenerItem] = Field(default_factory=list)
     notes: Optional[str] = None
+
+
+class CustomScreenerRequest(BaseModel):
+    """Petición para evaluar una lista personalizada de tickers."""
+    tickers: List[str] = Field(..., min_length=1, max_length=50, description="Lista de tickers a evaluar")
+    filter_params: Optional[ScreenerFilterParams] = None
