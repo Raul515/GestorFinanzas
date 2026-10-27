@@ -389,3 +389,88 @@ def remove_from_watchlist(ticker: str) -> bool:
         logger.error("Error inesperado en remove_from_watchlist('%s'): %s", clean_ticker, e)
     return False
 
+
+# ==========================================
+# 7. COPILOTO PATRIMONIAL (SPEC 004)
+# ==========================================
+
+def get_copilot_sessions():
+    """Obtiene el listado de sesiones históricas del Copiloto Patrimonial."""
+    url = f"{API_URL}/copilot/sessions"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al listar sesiones del copiloto (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar sesiones del copiloto en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_copilot_sessions(): %s", e)
+    return []
+
+
+def create_copilot_session(title=None):
+    """Crea una nueva sesión de conversación para el Copiloto."""
+    url = f"{API_URL}/copilot/sessions"
+    payload = {"title": title} if title else {}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Respuesta no exitosa al crear sesión del copiloto (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al crear sesión del copiloto en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_copilot_session(): %s", e)
+    return None
+
+
+def get_copilot_session_detail(session_id: int):
+    """Obtiene el detalle de una sesión con todos sus mensajes e historial."""
+    url = f"{API_URL}/copilot/sessions/{session_id}"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar sesión %d (%s): %s", session_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar sesión %d en %s: %s", session_id, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_copilot_session_detail(%d): %s", session_id, e)
+    return None
+
+
+def delete_copilot_session(session_id: int) -> bool:
+    """Elimina una sesión de conversación y todos sus mensajes."""
+    url = f"{API_URL}/copilot/sessions/{session_id}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Respuesta no exitosa al eliminar sesión %d (%s): %s", session_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al eliminar sesión %d en %s: %s", session_id, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_copilot_session(%d): %s", session_id, e)
+    return False
+
+
+def send_copilot_chat(message: str, session_id=None):
+    """
+    Envía un mensaje al Copiloto Patrimonial ejecutando el turno con Function Calling.
+    Timeout extendido a 60s para acomodar llamadas a LLM y herramientas.
+    """
+    url = f"{API_URL}/copilot/chat"
+    payload = {"message": message, "session_id": session_id}
+    try:
+        response = requests.post(url, json=payload, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al enviar chat al copiloto (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al enviar chat al copiloto en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en send_copilot_chat(): %s", e)
+    return None
+
+

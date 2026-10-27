@@ -8,14 +8,16 @@ from backend.domain.models import (
     emergency_fund as fund_model,
     market_cache as cache_model,
     watchlist as watchlist_model,
+    copilot as copilot_model,
 )
 from backend.domain.schemas import (
     categories as cat_schema,
     budgets as pres_schema,
     transactions as trans_schema,
     watchlist as watchlist_schema,
+    copilot as copilot_schema,
 )
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 import json
 import datetime
 
@@ -60,12 +62,15 @@ class SQLiteRepository(IRepository):
     def get_transactions(self, month: Optional[str] = None) -> List[trans_model.Transaction]:
         """Obtiene las transacciones registradas, filtrando opcionalmente por mes (YYYY-MM)."""
         query = self.db.query(trans_model.Transaction)
-        if month:
-            year, m = map(int, month.split('-'))
-            query = query.filter(
-                extract('year', trans_model.Transaction.date) == year,
-                extract('month', trans_model.Transaction.date) == m
-            )
+        if month and month != "BASE" and "-" in month:
+            try:
+                year, m = map(int, month.split('-'))
+                query = query.filter(
+                    extract('year', trans_model.Transaction.date) == year,
+                    extract('month', trans_model.Transaction.date) == m
+                )
+            except ValueError:
+                pass
         return query.all()
 
     def create_transaction(self, transaction: trans_schema.TransactionCreate) -> trans_model.Transaction:
@@ -312,4 +317,84 @@ class SQLiteRepository(IRepository):
         ).delete()
         self.db.commit()
         return deleted_count > 0
+
+    # 7. Copiloto Patrimonial (Sesiones y Mensajes)
+    def create_copilot_session(self, title: Optional[str] = None) -> copilot_model.CopilotSession:
+        """Crea una nueva sesión de conversación para el Copiloto."""
+        clean_title = title.strip()[:150] if title and title.strip() else "Nueva conversación"
+        session = copilot_model.CopilotSession(title=clean_title)
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
+    def get_copilot_sessions(self) -> List[copilot_model.CopilotSession]:
+        """Obtiene todas las sesiones ordenadas por última actividad descendente."""
+        return (
+            self.db.query(copilot_model.CopilotSession)
+            .order_by(copilot_model.CopilotSession.updated_at.desc())
+            .all()
+        )
+
+    def get_copilot_session(self, session_id: int) -> Optional[copilot_model.CopilotSession]:
+        """Recupera una sesión específica por su ID."""
+        return (
+            self.db.query(copilot_model.CopilotSession)
+            .filter(copilot_model.CopilotSession.id == session_id)
+            .first()
+        )
+
+    def delete_copilot_session(self, session_id: int) -> bool:
+        """Elimina una sesión de conversación y todos sus mensajes en cascada."""
+        session = self.get_copilot_session(session_id)
+        if not session:
+            return False
+        self.db.delete(session)
+        self.db.commit()
+        return True
+
+    def add_copilot_message(
+        self,
+        session_id: int,
+        role: str,
+        content: str,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
+    ) -> copilot_model.CopilotMessage:
+        """Registra un nuevo mensaje en la sesión indicada y actualiza su fecha de última actividad."""
+        session = self.get_copilot_session(session_id)
+        if not session:
+            raise ValueError(f"Sesión del copiloto con ID {session_id} no encontrada.")
+
+        tool_calls_json = (
+            json.dumps(tool_calls, ensure_ascii=False) if tool_calls is not None else None
+        )
+        message = copilot_model.CopilotMessage(
+            session_id=session_id,
+            role=role,
+            content=content,
+            tool_calls=tool_calls_json,
+        )
+        self.db.add(message)
+
+        # Actualizar timestamp de la sesión
+        now = datetime.datetime.now()
+        session.updated_at = now
+
+        # Si la sesión tiene el título por defecto y es el primer mensaje de usuario, auto-generar título
+        if session.title == "Nueva conversación" and role == "user":
+            snippet = content.strip().replace("\n", " ")
+            session.title = (snippet[:45] + "...") if len(snippet) > 45 else snippet
+
+        self.db.commit()
+        self.db.refresh(message)
+        return message
+
+    def get_copilot_messages(self, session_id: int) -> List[copilot_model.CopilotMessage]:
+        """Obtiene la lista de mensajes de una sesión ordenados cronológicamente."""
+        return (
+            self.db.query(copilot_model.CopilotMessage)
+            .filter(copilot_model.CopilotMessage.session_id == session_id)
+            .order_by(copilot_model.CopilotMessage.created_at.asc())
+            .all()
+        )
 

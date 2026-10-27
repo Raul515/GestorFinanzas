@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from backend.domain.schemas import categories as cat_schema, budgets as budget_schema, transactions as trans_schema
 
 
@@ -156,6 +156,46 @@ class IWatchlistRepository(ABC):
         pass
 
 
+class ICopilotRepository(ABC):
+    """Interfaz del repositorio de sesiones y mensajes del Copiloto Patrimonial."""
+
+    @abstractmethod
+    def create_copilot_session(self, title: Optional[str] = None) -> Any:
+        """Crea una nueva sesión de conversación para el Copiloto."""
+        pass
+
+    @abstractmethod
+    def get_copilot_sessions(self) -> List[Any]:
+        """Obtiene el listado histórico de sesiones de conversación ordenadas por actividad reciente."""
+        pass
+
+    @abstractmethod
+    def get_copilot_session(self, session_id: int) -> Optional[Any]:
+        """Recupera una sesión específica junto con sus mensajes asociados."""
+        pass
+
+    @abstractmethod
+    def delete_copilot_session(self, session_id: int) -> bool:
+        """Elimina una sesión de conversación y todos sus mensajes en cascada."""
+        pass
+
+    @abstractmethod
+    def add_copilot_message(
+        self,
+        session_id: int,
+        role: str,
+        content: str,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
+    ) -> Any:
+        """Registra un nuevo mensaje en la sesión indicada y actualiza su marca temporal."""
+        pass
+
+    @abstractmethod
+    def get_copilot_messages(self, session_id: int) -> List[Any]:
+        """Obtiene la lista cronológica de mensajes de una sesión."""
+        pass
+
+
 class IRepository(
     ICategoryRepository,
     IBudgetRepository,
@@ -163,6 +203,7 @@ class IRepository(
     IEmergencyFundRepository,
     IMarketCacheRepository,
     IWatchlistRepository,
+    ICopilotRepository,
     ABC,
 ):
     """Interfaz unificada del repositorio del sistema."""

@@ -170,5 +170,69 @@ def test_frontend_api_client_watchlist_methods(mock_del, mock_post, mock_get):
     assert deleted is True
 
 
+@patch("frontend.api_client.requests.get")
+@patch("frontend.api_client.requests.post")
+@patch("frontend.api_client.requests.delete")
+def test_frontend_api_client_copilot_methods(mock_del, mock_post, mock_get):
+    """Verifica las operaciones cliente del Copiloto Patrimonial (sesiones, detalle, borrado y chat)."""
+    # 1. get_copilot_sessions
+    mock_resp_list = MagicMock()
+    mock_resp_list.status_code = 200
+    mock_resp_list.json.return_value = [{"id": 1, "title": "Sesión 1", "message_count": 2}]
+    mock_get.return_value = mock_resp_list
+
+    sessions = api_client.get_copilot_sessions()
+    assert len(sessions) == 1
+    assert sessions[0]["title"] == "Sesión 1"
+
+    # 2. create_copilot_session
+    mock_resp_create = MagicMock()
+    mock_resp_create.status_code = 201
+    mock_resp_create.json.return_value = {"id": 2, "title": "Nueva sesión"}
+    mock_post.return_value = mock_resp_create
+
+    new_session = api_client.create_copilot_session("Nueva sesión")
+    assert new_session is not None
+    assert new_session["id"] == 2
+
+    # 3. get_copilot_session_detail
+    mock_resp_detail = MagicMock()
+    mock_resp_detail.status_code = 200
+    mock_resp_detail.json.return_value = {
+        "id": 1,
+        "title": "Sesión 1",
+        "messages": [{"id": 10, "role": "user", "content": "Hola"}],
+    }
+    mock_get.return_value = mock_resp_detail
+
+    detail = api_client.get_copilot_session_detail(1)
+    assert detail is not None
+    assert len(detail["messages"]) == 1
+
+    # 4. delete_copilot_session
+    mock_resp_del = MagicMock()
+    mock_resp_del.status_code = 200
+    mock_del.return_value = mock_resp_del
+
+    assert api_client.delete_copilot_session(1) is True
+
+    # 5. send_copilot_chat
+    mock_resp_chat = MagicMock()
+    mock_resp_chat.status_code = 200
+    mock_resp_chat.json.return_value = {
+        "session_id": 1,
+        "session_title": "Sesión 1",
+        "message": {"role": "assistant", "content": "Hola usuario", "tool_calls": None},
+        "tools_used": ["get_financial_profile"],
+    }
+    mock_post.return_value = mock_resp_chat
+
+    chat_res = api_client.send_copilot_chat("Hola", session_id=1)
+    assert chat_res is not None
+    assert chat_res["tools_used"] == ["get_financial_profile"]
+    assert chat_res["message"]["content"] == "Hola usuario"
+
+
+
 
 
