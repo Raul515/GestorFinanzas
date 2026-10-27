@@ -20,6 +20,9 @@ from backend.domain.schemas import (
 from typing import Optional, Any, List, Dict
 import json
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteRepository(IRepository):
@@ -69,8 +72,8 @@ class SQLiteRepository(IRepository):
                     extract('year', trans_model.Transaction.date) == year,
                     extract('month', trans_model.Transaction.date) == m
                 )
-            except ValueError:
-                pass
+            except ValueError as exc:
+                logger.warning("Formato de mes no interpretable en get_transactions ('%s'): %s", month, exc)
         return query.all()
 
     def create_transaction(self, transaction: trans_schema.TransactionCreate) -> trans_model.Transaction:

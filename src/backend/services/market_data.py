@@ -8,11 +8,14 @@ Proporciona series sparkline de 30 días y degradación elegante con datos base 
 """
 
 from datetime import datetime
+import logging
 from typing import List, Optional, Tuple
 import requests
 import yfinance as yf
 
 from backend.domain.schemas.market import MacroIndicator, MacroOverviewResponse
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_ticker_data(
@@ -47,8 +50,8 @@ def _extract_ticker_data(
                     sparkline_30d=closes,
                     last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Fallo al extraer cotización histórica para '%s': %s. Utilizando valores base de contingencia.", symbol, exc)
 
     # Valores base de contingencia en caso de indisponibilidad temporal de la API externa
     baseline_values = {
@@ -90,8 +93,8 @@ def _fetch_ecb_series(url: str, default_val: float) -> Tuple[float, float, List[
                         prev = vals[-2]
                         diff = round(cur - prev, 2)
                         return cur, diff, vals
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Fallo al consultar serie del BCE en '%s': %s. Utilizando valor base de contingencia.", url, exc)
     return default_val, 0.0, [default_val] * 10
 
 

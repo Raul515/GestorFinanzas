@@ -111,4 +111,110 @@ div[data-testid="stMetricValue"] {
     margin-bottom: 1.5rem;
 }
 
+/* Comité Asesor de Inversión Multiagente (Spec 005) */
+.committee-verdict-card {
+    background: rgba(128, 128, 128, 0.05);
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.committee-veto-banner {
+    background: rgba(198, 40, 40, 0.12);
+    border: 1px solid #ef5350;
+    border-left: 6px solid #c62828;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.committee-approved-banner {
+    background: rgba(46, 125, 50, 0.12);
+    border: 1px solid #66bb6a;
+    border-left: 6px solid #2e7d32;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.committee-step-card {
+    background: rgba(128, 128, 128, 0.04);
+    border: 1px solid rgba(128, 128, 128, 0.18);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.85rem;
+}
+
+.committee-bull-card {
+    background: rgba(46, 125, 50, 0.08);
+    border: 1px solid rgba(76, 175, 80, 0.35);
+    border-left: 5px solid #2e7d32;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    height: 100%;
+}
+
+.committee-bear-card {
+    background: rgba(198, 40, 40, 0.08);
+    border: 1px solid rgba(239, 83, 80, 0.35);
+    border-left: 5px solid #c62828;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    height: 100%;
+}
+
+.committee-action-card {
+    background: rgba(21, 101, 192, 0.08);
+    border: 1px solid rgba(33, 150, 243, 0.35);
+    border-left: 5px solid #1565c0;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.committee-agent-badge {
+    display: inline-block;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.4rem;
+}
+
+.badge-agent-safety {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #90caf9;
+}
+
+.badge-agent-macro {
+    background-color: #f3e5f5;
+    color: #6a1b9a;
+    border: 1px solid #ce93d8;
+}
+
+.badge-agent-fundamental {
+    background-color: #e0f2f1;
+    color: #00695c;
+    border: 1px solid #80cbc4;
+}
+
+.badge-agent-risk {
+    background-color: #ffebee;
+    color: #b71c1c;
+    border: 1px solid #ef9a9a;
+}
+
+.badge-agent-advisor {
+    background-color: #fff8e1;
+    color: #e65100;
+    border: 1px solid #ffe082;
+}
+
+
 

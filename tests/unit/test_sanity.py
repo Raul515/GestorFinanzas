@@ -233,6 +233,38 @@ def test_frontend_api_client_copilot_methods(mock_del, mock_post, mock_get):
     assert chat_res["message"]["content"] == "Hola usuario"
 
 
+@patch("frontend.api_client.requests.post")
+def test_frontend_api_client_committee_method(mock_post):
+    """Verifica la invocación del método cliente para el Comité Asesor Multiagente."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "ticker": "ITX.MC",
+        "month": "2026-10",
+        "veto_active": False,
+        "final_verdict": "Veredicto aprobado",
+        "bear_risks": ["Riesgo 1", "Riesgo 2"],
+    }
+    mock_post.return_value = mock_resp
+
+    res = api_client.run_investment_committee(
+        ticker="itx.mc",
+        month="2026-10",
+        initial_notes="Prueba unitaria de cliente",
+    )
+    assert res is not None
+    assert res["ticker"] == "ITX.MC"
+    assert res["veto_active"] is False
+    assert len(res["bear_risks"]) == 2
+    mock_post.assert_called_once()
+    args, kwargs = mock_post.call_args
+    assert "/committee/analyze" in args[0]
+    assert kwargs["json"]["ticker"] == "ITX.MC"
+    assert kwargs["json"]["month"] == "2026-10"
+    assert kwargs["json"]["initial_notes"] == "Prueba unitaria de cliente"
+
+
+
 
 
 

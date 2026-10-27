@@ -474,3 +474,36 @@ def send_copilot_chat(message: str, session_id=None):
     return None
 
 
+# ==========================================
+# 8. COMITÉ ASESOR MULTIAGENTE (SPEC 005)
+# ==========================================
+
+def run_investment_committee(ticker=None, month=None, initial_notes=None):
+    """
+    Convoca la deliberación del Comité Asesor de Inversión Multiagente (LangGraph).
+    Retorna el dictamen unificado, estado de salvaguarda, doble tesis y bitácora de los agentes.
+    Timeout extendido a 90s para permitir la ejecución de los agentes y llamadas LLM.
+    """
+    url = f"{API_URL}/committee/analyze"
+    payload = {
+        "ticker": ticker.strip().upper() if ticker and isinstance(ticker, str) and ticker.strip() else None,
+        "month": month.strip() if month and isinstance(month, str) and month.strip() else None,
+        "initial_notes": initial_notes.strip() if initial_notes and isinstance(initial_notes, str) and initial_notes.strip() else None,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=90)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al convocar Comité Asesor (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al convocar Comité Asesor en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en run_investment_committee(): %s", e)
+    return None
+
+
+
