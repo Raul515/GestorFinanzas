@@ -61,6 +61,8 @@
 | **2026-10-27** | Spec 004 Fase 4 Completada | Endpoints REST en FastAPI bajo `/copilot` (`/copilot/sessions`, `/copilot/sessions/{session_id}`, `/copilot/chat`) con persistencia en cascada, auto-generación de títulos, orquestación conversacional con historial y 11 pruebas de integración en `test_copilot_api.py`. Suite global ampliada a 158/158 tests pasando al 100%. |
 | **2026-10-27** | Spec 004 Fase 5 Completada | Integración en Frontend: métodos cliente en `api_client.py` con observabilidad estructurada, nueva pestaña interactiva en Streamlit '💬 Copiloto Patrimonial' (`app.py`), banner preventivo de salvaguarda patrimonial, selector y borrado de conversaciones, renderizado con `st.chat_message`, bloque expandible de tools consultadas, `st.chat_input` y descargo legal. Suite global ampliada a 159/159 tests pasando al 100%. |
 | **2026-10-27** | Spec 004 Completada al 100% | Copiloto Patrimonial finalizado con éxito: modelos ORM y persistencia en SQLite (`copilot_sessions`, `copilot_messages`), catálogo de herramientas bajo demanda (Function Calling estilo MCP), orquestación con Google Gemini (2.5 Pro / 3.1 Flash), veto constitucional a renta variable si el fondo es < 3 meses, doble tesis obligatoria (mínimo 2 riesgos bajistas), endpoints REST en FastAPI, interfaz conversacional en Streamlit y 159/159 pruebas pasando al 100% sin regresiones. |
+| **2026-10-27** | Spec 005 Definida: Orquestación Multiagente LangGraph | Definición técnica de Spec 005 bajo arquitectura modular desacoplada en `src/backend/` (`agents/`, `components/`, `domain/`, `external_components/`, `api/`). Adopción de `BaseAgent`, `InvestmentCommitteeState`, nodos de procesamiento de LangGraph (`SafetyValidatorNode`, `MacroEvaluationNode`, `FundamentalAnalysisNode`, `RiskDebateNode`, `SynthesisNode`), orquestador principal `MainInvestmentOrchestrator`, y visualización en Streamlit. Plan desglosado en 6 fases. |
+| **2026-10-27** | Spec 005 Fase 1 Completada | Instalación de `langgraph` y `langchain-core` en `requirements/backend.txt`, creación de estructura modular en `src/backend/` (`agents/`, `components/`, `domain/states/`, `external_components/data_ingestion/`), clase base `BaseAgent`, estado compartido `InvestmentCommitteeState`, esquemas Pydantic v2 `committee.py`, conector `LocalDocLoader` y 8 pruebas unitarias pasando al 100%. Suite global ampliada a 167/167 tests pasando. |
 
 ---
 
@@ -71,7 +73,7 @@
 3. **Spec 002 Completada**: Screener Fundamental de Acciones y ETFs con métricas de solvencia, valoración, presets interactivos y caché SQLite de 24 horas (81 pruebas pasando al 100%).
 4. **Spec 003 Completada**: Análisis Fundamental en Profundidad (Deep Dive) y Tesis Agéntica Quality Value con Piotroski F-Score, métricas de caja libre, Watchlist local en SQLite y síntesis IA con Gemini (120 pruebas pasando al 100%).
 5. **Spec 004 Completada**: Copiloto Patrimonial con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo (159 pruebas pasando al 100%).
-6. **Especificaciones Posteriores**: Spec 005 (Orquestación LangGraph).
+6. **Spec 005 En Curso (Fase 1 completada)**: Orquestación Multiagente con LangGraph bajo arquitectura modular en `src/backend/` (`agents/`, `components/`, `domain/`, `external_components/`). 167 pruebas pasando al 100%. Siguiente: Fase 2 (Nodos de Procesamiento, Herramientas y Prompts).
 7. **Mejoras Técnicas Futuras**:
    - Configuración de `RotatingFileHandler` para persistencia rotativa de logs en disco (`logs/app.log`).
 

@@ -10,7 +10,7 @@
 | **002** | [Screener y Oportunidades](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/002-screener-oportunidades/spec.md) | **Completada** | Filtrado cuantitativo de acciones y ETFs por múltiplos contables y volumen (Opción B: Universos Modulares). |
 | **003** | [Análisis Fundamental (Deep Dive)](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/003-analisis-fundamental/spec.md) | **Completada** | Diagnóstico contable individual, Piotroski F-Score (0-9), FCF, Watchlist y síntesis agéntica Quality Value con Gemini (3.1 Flash / 2.5 Pro). |
 | **004** | [Copiloto Patrimonial](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/004-copiloto-patrimonial/spec.md) | **Completada** | Asistente asesor con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo. |
-| **005** | Orquestación LangGraph | *Pendiente* | Grafo de agentes de mercado y conexión con Google Gemini Pro API. |
+| **005** | [Orquestación LangGraph](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/005-orquestacion-langgraph/spec.md) | **En Desarrollo (Fase 1 Completada)** | Comité Asesor de Inversión Multiagente con StateGraph de LangGraph, arquitectura modular (agents, components, domain, external_components) y doble tesis. |
 
 ---
 
