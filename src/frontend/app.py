@@ -30,14 +30,19 @@ MESES_NOMBRES = [
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
 
-# Pestañas de Navegación (Resumen Anual + 12 Meses + Presupuesto Base + Radar Macro + Screener)
-tabs_list = ["📊 Resumen Anual"] + MESES_NOMBRES + ["⚙️ Presupuesto Base", "🌐 Radar Macro y Noticias", "🔍 Screener y Oportunidades"]
+# Pestañas de Navegación (Resumen Anual + 12 Meses + Presupuesto Base + Radar Macro + Screener + Deep Dive)
+tabs_list = (
+    ["📊 Resumen Anual"]
+    + MESES_NOMBRES
+    + ["⚙️ Presupuesto Base", "🌐 Radar Macro y Noticias", "🔍 Screener y Oportunidades", "🔬 Análisis Fundamental (Deep Dive)"]
+)
 tabs = st.tabs(tabs_list)
 tab_anual = tabs[0]
 tabs_meses = tabs[1:13]
 tab_base = tabs[13]
 tab_radar = tabs[14]
 tab_screener = tabs[15]
+tab_deepdive = tabs[16]
 
 # Datos globales de categorías y subcategorías
 categorias = api_client.get_categorias()
@@ -1091,22 +1096,20 @@ with tab_screener:
                 ]
                 existing_cols = [c for c in col_order if c in df_screener.columns]
                 df_view = df_screener[existing_cols].copy()
-                df_view.rename(
-                    columns={
-                        "ticker": "Ticker",
-                        "name": "Nombre ETF",
-                        "category": "Categoría",
-                        "currency": "Divisa",
-                        "price": "Precio",
-                        "change_pct": "Var. Diaria",
-                        "expense_ratio": "TER (Costes)",
-                        "dividend_yield": "Div. Yield",
-                        "total_assets": "Patrimonio (AUM)",
-                        "avg_volume": "Volumen Medio",
-                        "beta": "Beta",
-                    },
-                    inplace=True,
-                )
+                etf_rename_map = {
+                    "ticker": "Ticker",
+                    "name": "Nombre ETF",
+                    "category": "Categoría",
+                    "currency": "Divisa",
+                    "price": "Precio",
+                    "change_pct": "Var. Diaria",
+                    "expense_ratio": "TER (Costes)",
+                    "dividend_yield": "Div. Yield",
+                    "total_assets": "Patrimonio (AUM)",
+                    "avg_volume": "Volumen Medio",
+                    "beta": "Beta",
+                }
+                df_view.columns = [etf_rename_map.get(str(c), str(c)) for c in df_view.columns]
 
                 col_config = {
                     "Precio": st.column_config.NumberColumn(format="%.2f"),
@@ -1126,27 +1129,25 @@ with tab_screener:
                 ]
                 existing_cols = [c for c in col_order if c in df_screener.columns]
                 df_view = df_screener[existing_cols].copy()
-                df_view.rename(
-                    columns={
-                        "ticker": "Ticker",
-                        "name": "Compañía",
-                        "sector": "Sector",
-                        "currency": "Divisa",
-                        "price": "Precio",
-                        "change_pct": "Var. Diaria",
-                        "pe_trailing": "PER (Hist.)",
-                        "pe_forward": "PER (Adel.)",
-                        "pb_ratio": "P/B",
-                        "ev_to_ebitda": "EV/EBITDA",
-                        "dividend_yield": "Div. Yield",
-                        "roe": "ROE",
-                        "operating_margin": "Margen Op.",
-                        "net_margin": "Margen Neto",
-                        "debt_to_equity": "Deuda/Patr.",
-                        "beta": "Beta",
-                    },
-                    inplace=True,
-                )
+                stock_rename_map = {
+                    "ticker": "Ticker",
+                    "name": "Compañía",
+                    "sector": "Sector",
+                    "currency": "Divisa",
+                    "price": "Precio",
+                    "change_pct": "Var. Diaria",
+                    "pe_trailing": "PER (Hist.)",
+                    "pe_forward": "PER (Adel.)",
+                    "pb_ratio": "P/B",
+                    "ev_to_ebitda": "EV/EBITDA",
+                    "dividend_yield": "Div. Yield",
+                    "roe": "ROE",
+                    "operating_margin": "Margen Op.",
+                    "net_margin": "Margen Neto",
+                    "debt_to_equity": "Deuda/Patr.",
+                    "beta": "Beta",
+                }
+                df_view.columns = [stock_rename_map.get(str(c), str(c)) for c in df_view.columns]
 
                 col_config = {
                     "Precio": st.column_config.NumberColumn(format="%.2f"),
@@ -1179,4 +1180,371 @@ with tab_screener:
                 mime="text/csv",
                 key="btn_download_screener_csv",
             )
+
+
+# ==========================================
+# PESTAÑA 16: ANÁLISIS FUNDAMENTAL (DEEP DIVE)
+# ==========================================
+with tab_deepdive:
+    st.header("🔬 Análisis Fundamental en Profundidad (Deep Dive)")
+    st.caption("Diagnóstico contable cuantitativo a 4 años, algoritmo Piotroski F-Score (0-9) y tesis agéntica Quality Value con IA.")
+
+    # 1. SALVAGUARDA DE SEGURIDAD (Principio 9 de la Constitución)
+    safety_status = api_client.get_safety_status(mes="BASE")
+    if safety_status:
+        is_safe = safety_status.get("is_safe", True)
+        cov_months = float(safety_status.get("coverage_months", 0.0))
+        target_months = float(safety_status.get("target_months", 3.0))
+        gap = float(safety_status.get("gap", 0.0))
+
+        if not is_safe or cov_months < 3.0:
+            st.warning(
+                f"⚠️ **Aviso de Salvaguarda Patrimonial (Principio 9 - Constitución)**: Tu fondo de emergencia actual cubre "
+                f"**{cov_months:.1f} meses** de gastos esenciales (mínimo constitucional: **{target_months:.1f} meses**; "
+                f"brecha: **{gap:,.2f} €**). La asignación de ahorro hacia instrumentos con riesgo está bloqueada en tus presupuestos. "
+                f"Este módulo tiene fines formativos y de diagnóstico contable previo.",
+                icon="⚠️",
+            )
+        else:
+            st.info(
+                f"🛡️ **Salvaguarda Patrimonial Cumplida**: Tu fondo de emergencia cubre **{cov_months:.1f} meses** de gastos esenciales. "
+                f"Asignación de capital a inversión permitida.",
+                icon="✅",
+            )
+
+    st.markdown("---")
+
+    # 2. SELECTOR DE TICKER Y GESTIÓN DE WATCHLIST
+    watchlist_items = api_client.get_watchlist()
+    watchlist_tickers = [w["ticker"] for w in watchlist_items] if watchlist_items else []
+
+    col_search, col_watch_sel, col_btn_analizar, col_btn_ref = st.columns([4, 4, 2, 2])
+
+    with col_search:
+        ticker_val = st.text_input(
+            "Símbolo Bursátil (Ticker)",
+            value=st.session_state.get("deepdive_selected_ticker", "ITX.MC"),
+            help="Introduce el ticker bursátil con su sufijo de mercado (ej. ITX.MC, SAN.MC, AAPL, MSFT)",
+            key="deepdive_input_ticker_field",
+        )
+        ticker_input = (ticker_val or "").strip().upper()
+
+    with col_watch_sel:
+        watch_options = ["-- Seleccionar de Watchlist --"] + [f"{w['ticker']} - {w['name']}" for w in watchlist_items]
+        selected_watch = st.selectbox(
+            "O carga un valor de tu Watchlist",
+            options=watch_options,
+            key="deepdive_watchlist_quick_selector",
+        )
+        if selected_watch != "-- Seleccionar de Watchlist --":
+            chosen_ticker = selected_watch.split(" - ")[0].strip().upper()
+            if chosen_ticker != ticker_input:
+                ticker_input = chosen_ticker
+                st.session_state["deepdive_selected_ticker"] = chosen_ticker
+
+    with col_btn_analizar:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        analizar_clicked = st.button("🔍 Analizar", use_container_width=True, key="btn_deepdive_analyze")
+
+    with col_btn_ref:
+        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+        refresh_clicked = st.button("🔄 Refrescar", use_container_width=True, key="btn_deepdive_refresh")
+
+    # Ejecución o recuperación del análisis
+    active_ticker = ticker_input or "ITX.MC"
+
+    if refresh_clicked:
+        with st.spinner(f"Invalidando caché y reanalizando {active_ticker}..."):
+            data = api_client.refresh_deepdive_analysis(active_ticker)
+            if data:
+                st.session_state[f"deepdive_data_{active_ticker}"] = data
+                st.success(f"¡Análisis de {active_ticker} actualizado con éxito!")
+            else:
+                st.error(f"No se pudieron refrescar los datos para '{active_ticker}'. Comprueba el ticker y mercado.")
+    elif analizar_clicked or f"deepdive_data_{active_ticker}" not in st.session_state:
+        with st.spinner(f"Cargando diagnóstico financiero para {active_ticker}..."):
+            data = api_client.get_deepdive_analysis(active_ticker)
+            if data:
+                st.session_state[f"deepdive_data_{active_ticker}"] = data
+            else:
+                st.error(f"No se pudieron encontrar estados financieros para '{active_ticker}'.")
+
+    data = st.session_state.get(f"deepdive_data_{active_ticker}")
+
+    if data:
+        # Estado de caché
+        if data.get("from_cache"):
+            st.caption(f"⚡ Datos servidos desde la caché local de 24h. Última actualización: {str(data.get('updated_at', ''))[:19]}")
+        else:
+            st.caption(f"✨ Datos actualizados en directo. Fecha de extracción: {str(data.get('updated_at', ''))[:19]}")
+
+        # Cabecera de la empresa
+        name = data.get("name") or active_ticker
+        sector = data.get("sector") or "General"
+        industry = data.get("industry") or ""
+        country = data.get("country") or ""
+        currency = data.get("currency") or "EUR"
+        curr_price = float(data.get("current_price", 0.0))
+        day_chg = data.get("day_change_pct")
+
+        chg_str = f"{day_chg:+.2f}%" if day_chg is not None else ""
+
+        col_h1, col_h2 = st.columns([9, 3])
+        with col_h1:
+            st.subheader(f"{name} ({active_ticker})")
+            st.write(f"🏢 **Sector**: {sector} | 🏭 **Industria**: {industry} | 📍 **País**: {country} | 💱 **Divisa**: {currency}")
+            if data.get("description"):
+                with st.expander("📖 Descripción del Negocio", expanded=False):
+                    st.write(data["description"])
+
+        with col_h2:
+            st.metric("Cotización Actual", f"{curr_price:,.2f} {currency}", delta=chg_str)
+
+        st.markdown("---")
+
+        # 3. FILA DE MÉTRICAS CLAVE Y MÚLTIPLOS (KPIs)
+        m_cap = data.get("market_cap")
+        if m_cap:
+            if m_cap >= 1e9:
+                m_cap_str = f"{m_cap / 1e9:,.2f} B {currency}"
+            else:
+                m_cap_str = f"{m_cap / 1e6:,.2f} M {currency}"
+        else:
+            m_cap_str = "N/D"
+
+        pe_t = data.get("pe_trailing")
+        pe_f = data.get("pe_forward")
+        ev_ebitda = data.get("ev_to_ebitda")
+        pb = data.get("price_to_book")
+        div_y = data.get("dividend_yield")
+        fcf_m = data.get("fcf_metrics") or {}
+        fcf_y = fcf_m.get("fcf_yield")
+        roe = fcf_m.get("roe")
+        roic = fcf_m.get("roic")
+
+        kpi_cols = st.columns(6)
+        kpi_cols[0].metric("Cap. Bursátil", m_cap_str)
+        kpi_cols[1].metric("PER Trailing", f"{pe_t:.1f}x" if pe_t is not None else "N/D")
+        kpi_cols[2].metric("EV/EBITDA", f"{ev_ebitda:.1f}x" if ev_ebitda is not None else "N/D")
+        kpi_cols[3].metric("Price / Book", f"{pb:.1f}x" if pb is not None else "N/D")
+        kpi_cols[4].metric("FCF Yield", f"{fcf_y:.1f}%" if fcf_y is not None else "N/D")
+        kpi_cols[5].metric("ROE / ROIC", f"{roe:.1f}% / {roic:.1f}%" if roe is not None and roic is not None else "N/D")
+
+        st.markdown("---")
+
+        # 4. DIAGNÓSTICO PIOTROSKI F-SCORE (0 A 9 PUNTOS)
+        piotroski = data.get("piotroski") or {}
+        total_p = piotroski.get("total_score", 0)
+        max_p = piotroski.get("max_score", 9)
+        rating_p = piotroski.get("rating", "Aceptable")
+
+        col_piot_score, col_piot_desc = st.columns([4, 8])
+        with col_piot_score:
+            if rating_p == "Excelente":
+                st.success(f"### Piotroski F-Score: {total_p} / {max_p}\n**Salud Contable Excelente** 🟢")
+            elif rating_p == "Aceptable":
+                st.warning(f"### Piotroski F-Score: {total_p} / {max_p}\n**Salud Contable Aceptable** 🟡")
+            else:
+                st.error(f"### Piotroski F-Score: {total_p} / {max_p}\n**Riesgo Contable / Debilidad** 🔴")
+
+            if data.get("is_financial_institution"):
+                st.caption("ℹ️ *Entidad Financiera (Banco/Seguros): Puntuación adaptada a 7 criterios al no aplicar Margen Bruto ni Ratio Corriente.*")
+
+        with col_piot_desc:
+            with st.expander("📋 Ver Desglose de los Criterios Contables Evaluados", expanded=True):
+                criteria_list = piotroski.get("criteria", [])
+                if criteria_list:
+                    p_data = []
+                    for c in criteria_list:
+                        icon = "✅ Cumple (1 pto)" if c.get("points") == 1 else "❌ No cumple (0 ptos)"
+                        p_data.append({
+                            "Regla": c.get("code"),
+                            "Categoría": c.get("category", "").capitalize(),
+                            "Evaluación": icon,
+                            "Descripción": c.get("description"),
+                        })
+                    st.dataframe(pd.DataFrame(p_data), use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # 5. GRÁFICOS HISTÓRICOS Y EVOLUCIÓN CONTABLE
+        statements = data.get("statements", [])
+        if statements:
+            st.subheader("📊 Historial Financiero Consolidado")
+
+            df_hist = pd.DataFrame(statements)
+            df_hist_sorted = df_hist.sort_values("year", ascending=True).copy()
+
+            col_g1, col_g2 = st.columns(2)
+            with col_g1:
+                st.markdown("**Evolución de Ingresos y Beneficio Neto (€)**")
+                chart_data_rev = df_hist_sorted[["year", "revenue", "net_income"]].copy()
+                chart_data_rev["year"] = chart_data_rev["year"].astype(str)
+                chart_rev = alt.Chart(chart_data_rev).transform_fold(
+                    ["revenue", "net_income"], as_=["Métrica", "Importe"]
+                ).mark_bar().encode(
+                    x=alt.X("year:O", title="Año"),
+                    y=alt.Y("Importe:Q", title="Importe (€)"),
+                    color=alt.Color("Métrica:N", scale=alt.Scale(domain=["revenue", "net_income"], range=["#1565c0", "#2e7d32"])),
+                    xOffset="Métrica:N",
+                    tooltip=["year:O", "Métrica:N", alt.Tooltip("Importe:Q", format=",.0f")]
+                ).properties(height=280)
+                st.altair_chart(chart_rev, use_container_width=True)
+
+            with col_g2:
+                st.markdown("**Generación de Flujos de Caja: CFO vs CapEx vs FCF (€)**")
+                chart_data_cf = df_hist_sorted[["year", "operating_cash_flow", "capital_expenditure", "free_cash_flow"]].copy()
+                chart_data_cf["year"] = chart_data_cf["year"].astype(str)
+                chart_cf = alt.Chart(chart_data_cf).transform_fold(
+                    ["operating_cash_flow", "capital_expenditure", "free_cash_flow"], as_=["Flujo", "Importe"]
+                ).mark_line(point=True).encode(
+                    x=alt.X("year:O", title="Año"),
+                    y=alt.Y("Importe:Q", title="Importe (€)"),
+                    color=alt.Color("Flujo:N", scale=alt.Scale(domain=["operating_cash_flow", "capital_expenditure", "free_cash_flow"], range=["#00838f", "#ef6c00", "#2e7d32"])),
+                    tooltip=["year:O", "Flujo:N", alt.Tooltip("Importe:Q", format=",.0f")]
+                ).properties(height=280)
+                st.altair_chart(chart_cf, use_container_width=True)
+
+            # Tabla resumen de estados contables
+            with st.expander("📑 Ver Tabla Completa de Estados Financieros Históricos"):
+                disp_cols = [
+                    "year", "revenue", "gross_profit", "operating_income", "net_income",
+                    "operating_cash_flow", "capital_expenditure", "free_cash_flow",
+                    "total_assets", "total_debt", "cash_and_equivalents"
+                ]
+                existing_cols = [c for c in disp_cols if c in df_hist.columns]
+                df_table = df_hist[existing_cols].copy()
+                table_rename_map = {
+                    "year": "Año",
+                    "revenue": "Ingresos",
+                    "gross_profit": "Beneficio Bruto",
+                    "operating_income": "EBIT / Beneficio Op.",
+                    "net_income": "Beneficio Neto",
+                    "operating_cash_flow": "CFO (Caja Operativa)",
+                    "capital_expenditure": "CapEx",
+                    "free_cash_flow": "FCF (Caja Libre)",
+                    "total_assets": "Activo Total",
+                    "total_debt": "Deuda Total",
+                    "cash_and_equivalents": "Efectivo",
+                }
+                df_table.columns = [table_rename_map.get(str(c), str(c)) for c in df_table.columns]
+                st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+
+        # 6. INFORME AGÉNTICO QUALITY VALUE (IA CON GEMINI)
+        st.subheader("🤖 Tesis Agéntica de Inversión (Quality Value)")
+        report = data.get("quality_value_report")
+
+        if report:
+            quadrant = report.get("quadrant", "Quality Value")
+            if quadrant == "Quality Value":
+                st.markdown(
+                    f"<div class='quadrant-quality-value'><h3>💎 Cuadrante: {quadrant}</h3>"
+                    f"<p>Excelente negocio con retornos sostenibles sobre el capital, foso defensivo y cotizando a múltiplo razonable.</p></div>",
+                    unsafe_allow_html=True,
+                )
+            elif quadrant == "Calidad Cara":
+                st.markdown(
+                    f"<div class='quadrant-calidad-cara'><h3>⭐ Cuadrante: {quadrant}</h3>"
+                    f"<p>Gran negocio con sólidas ventajas competitivas pero cotizando a múltiplos muy exigentes que reducen el margen de seguridad.</p></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<div class='quadrant-trampa-valor'><h3>⚠️ Cuadrante: {quadrant}</h3>"
+                    f"<p>Negocio aparentemente barato por múltiplos simples pero con deterioro estructural de foso o quema de caja.</p></div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(f"**Tesis Ejecutiva**: {report.get('summary_thesis')}")
+
+            # 6 Ingredientes
+            st.markdown("#### 🔍 Evaluación de los 6 Ingredientes Clave")
+            ingredients = report.get("six_ingredients") or {}
+            ing_cols1, ing_cols2 = st.columns(2)
+            with ing_cols1:
+                st.info(f"**📈 Crecimiento a Largo Plazo**: {ingredients.get('long_term_growth', 'N/D')}")
+                st.info(f"**🌬️ Vientos de Cola**: {ingredients.get('tailwinds', 'N/D')}")
+                st.info(f"**👑 Liderazgo de Mercado**: {ingredients.get('market_leadership', 'N/D')}")
+            with ing_cols2:
+                st.info(f"**🏰 Foso Defensivo (Moat)**: {ingredients.get('moat', 'N/D')}")
+                st.info(f"**💰 Rentabilidad sobre Capital (ROIC/ROE)**: {ingredients.get('high_returns_on_capital', 'N/D')}")
+                st.info(f"**⏳ Dificultades Temporales / Descuento**: {ingredients.get('temporary_headwinds', 'N/D')}")
+
+            # Doble Tesis y Matriz de Riesgos
+            st.markdown("#### 🛡️ Matriz de Riesgos: \"¿Qué puede salir mal y cuánto beneficio destruiría?\"")
+            b_model = report.get("business_model_and_risks") or {}
+            if b_model:
+                st.write(f"**Dinámica de Negocio**: {b_model.get('business_model', b_model.get('cash_cycle', 'Generación recurrente de caja.'))}")
+
+            bearish = report.get("bearish_risks") or []
+            for r in bearish:
+                st.error(f"🔻 **Riesgo Bajista**: {r}")
+
+            # Valoración y Zona de Entrada por TIR
+            st.markdown("#### 🎯 Valoración a 5 Años y Zona de Entrada Ideal (TIR 15% - 20%)")
+            st.success(f"**Zona de Compra con Margen de Seguridad**: {report.get('target_irr_entry_zone', 'N/D')}")
+            val_proj = report.get("valuation_projections") or {}
+            if val_proj:
+                with st.expander("🔎 Ver Proyecciones Detalladas a 5 Años (Base vs Estrés)"):
+                    st.json(val_proj)
+        else:
+            st.info(
+                "ℹ️ **Síntesis Agéntica con IA no disponible**: Los datos cuantitativos, ratios contables y Piotroski Score "
+                "están calculados con precisión matemática local en Python. La generación de la tesis cualitativa requiere configurar "
+                "la clave `GEMINI_API_KEY` en tu archivo `.env`.",
+                icon="ℹ️",
+            )
+
+        st.markdown("---")
+
+        # 7. GESTIÓN DE LA WATCHLIST PARA EL VALOR ACTUAL
+        st.subheader("⭐ Lista de Seguimiento (Watchlist)")
+        is_in_watch = active_ticker in watchlist_tickers
+
+        col_w_info, col_w_act = st.columns([8, 4])
+        with col_w_info:
+            if is_in_watch:
+                matched_w = [w for w in watchlist_items if w["ticker"] == active_ticker][0]
+                st.write(f"📌 **Guardado en Watchlist**: Añadido a **{matched_w.get('price_at_addition', 0):,.2f} {currency}**.")
+                if matched_w.get("notes"):
+                    st.caption(f"📝 Notas: {matched_w['notes']}")
+            else:
+                st.write(f"Este activo no está en tu lista de seguimiento.")
+
+        with col_w_act:
+            if is_in_watch:
+                if st.button("🗑️ Eliminar de Watchlist", key="btn_del_from_watchlist"):
+                    if api_client.remove_from_watchlist(active_ticker):
+                        st.success(f"¡{active_ticker} eliminado de la Watchlist!")
+                        st.rerun()
+                    else:
+                        st.error("Error al eliminar el activo.")
+            else:
+                notes_input = st.text_input("Notas u objetivo de compra", key="notes_for_watchlist")
+                if st.button("⭐ Añadir a Watchlist", key="btn_add_to_watchlist"):
+                    add_payload = {
+                        "ticker": active_ticker,
+                        "name": name,
+                        "sector": sector,
+                        "currency": currency,
+                        "price_at_addition": curr_price,
+                        "notes": notes_input or None,
+                    }
+                    res_add = api_client.add_to_watchlist(add_payload)
+                    if res_add:
+                        st.success(f"¡{active_ticker} guardado en tu Watchlist!")
+                        st.rerun()
+                    else:
+                        st.error("Error al guardar en Watchlist.")
+
+        # 8. DESCARGO LEGAL AL PIE (Principio 10 de la Constitución)
+        st.markdown("---")
+        st.caption(
+            "⚖️ **Descargo Legal (Disclaimer)**: Esta herramienta de diagnóstico y la síntesis generada por IA "
+            "tienen carácter exclusivamente formativo e informativo. No constituyen recomendación de compra o venta "
+            "ni asesoramiento financiero regulado. Los rendimientos pasados no garantizan rentabilidades futuras."
+        )
+
 

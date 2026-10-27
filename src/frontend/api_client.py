@@ -310,3 +310,82 @@ def refresh_screener_universe(universe_id: str):
     except Exception as e:
         logger.error("Error inesperado en refresh_screener_universe('%s'): %s", universe_id, e)
     return None
+
+
+def get_deepdive_analysis(ticker: str):
+    """Consulta el diagnóstico contable en profundidad (Deep Dive) con caché SQLite de 24 horas."""
+    clean_ticker = ticker.strip().upper()
+    url = f"{API_URL}/deepdive/{clean_ticker}"
+    try:
+        response = requests.get(url, timeout=40)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar Deep Dive para '%s' (%s): %s", clean_ticker, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar Deep Dive para '%s' en %s: %s", clean_ticker, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_deepdive_analysis('%s'): %s", clean_ticker, e)
+    return None
+
+
+def refresh_deepdive_analysis(ticker: str):
+    """Fuerza la invalidación de caché y regenera el análisis Deep Dive para un ticker."""
+    clean_ticker = ticker.strip().upper()
+    url = f"{API_URL}/deepdive/refresh/{clean_ticker}"
+    try:
+        response = requests.post(url, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al refrescar Deep Dive para '%s' (%s): %s", clean_ticker, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al refrescar Deep Dive para '%s' en %s: %s", clean_ticker, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en refresh_deepdive_analysis('%s'): %s", clean_ticker, e)
+    return None
+
+
+def get_watchlist():
+    """Recupera la lista de activos en seguimiento guardados en la base de datos local SQLite."""
+    url = f"{API_URL}/watchlist"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa al consultar la watchlist (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar la watchlist en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_watchlist(): %s", e)
+    return []
+
+
+def add_to_watchlist(item: dict):
+    """Añade o actualiza un activo con sus notas en la lista de seguimiento local."""
+    url = f"{API_URL}/watchlist"
+    try:
+        response = requests.post(url, json=item, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Respuesta no exitosa al guardar en watchlist (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al guardar en watchlist en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en add_to_watchlist(): %s", e)
+    return None
+
+
+def remove_from_watchlist(ticker: str) -> bool:
+    """Elimina un activo de la lista de seguimiento local."""
+    clean_ticker = ticker.strip().upper()
+    url = f"{API_URL}/watchlist/{clean_ticker}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Respuesta no exitosa al eliminar de watchlist '%s' (%s): %s", clean_ticker, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al eliminar de watchlist '%s' en %s: %s", clean_ticker, url, e)
+    except Exception as e:
+        logger.error("Error inesperado en remove_from_watchlist('%s'): %s", clean_ticker, e)
+    return False
+

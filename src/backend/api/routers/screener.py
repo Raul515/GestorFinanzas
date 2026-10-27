@@ -87,7 +87,7 @@ def get_universe_screener(
 
     items: List[ScreenerItem] = []
     from_cache = False
-    updated_at: datetime
+    updated_at: datetime = datetime.now(timezone.utc)
 
     if cached_data and "items" in cached_data:
         try:

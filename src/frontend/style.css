@@ -54,3 +54,37 @@ div[data-testid="stMetricValue"] {
     background-color: rgba(128, 128, 128, 0.15);
     margin-left: 0.5rem;
 }
+
+/* Deep Dive & Quality Value */
+.deepdive-card {
+    background: rgba(128, 128, 128, 0.05);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.quadrant-quality-value {
+    background: rgba(46, 125, 50, 0.12);
+    border-left: 5px solid #2e7d32;
+    padding: 0.8rem 1.2rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.quadrant-calidad-cara {
+    background: rgba(245, 127, 23, 0.12);
+    border-left: 5px solid #f57f17;
+    padding: 0.8rem 1.2rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.quadrant-trampa-valor {
+    background: rgba(198, 40, 40, 0.12);
+    border-left: 5px solid #c62828;
+    padding: 0.8rem 1.2rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+

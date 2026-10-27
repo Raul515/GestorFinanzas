@@ -7,8 +7,14 @@ from backend.domain.models import (
     transactions as trans_model,
     emergency_fund as fund_model,
     market_cache as cache_model,
+    watchlist as watchlist_model,
 )
-from backend.domain.schemas import categories as cat_schema, budgets as pres_schema, transactions as trans_schema
+from backend.domain.schemas import (
+    categories as cat_schema,
+    budgets as pres_schema,
+    transactions as trans_schema,
+    watchlist as watchlist_schema,
+)
 from typing import Optional, Any, List
 import json
 import datetime
@@ -261,4 +267,49 @@ class SQLiteRepository(IRepository):
         else:
             self.db.query(cache_model.MarketCache).delete()
         self.db.commit()
+
+    # 6. Lista de Seguimiento (Watchlist)
+    def get_watchlist(self) -> List[watchlist_model.WatchlistItem]:
+        """Recupera todos los activos guardados en la lista de seguimiento ordenados por fecha de adición descendente."""
+        return self.db.query(watchlist_model.WatchlistItem).order_by(
+            watchlist_model.WatchlistItem.created_at.desc()
+        ).all()
+
+    def add_to_watchlist(self, item: watchlist_schema.WatchlistCreate) -> watchlist_model.WatchlistItem:
+        """Añade o actualiza un activo en la lista de seguimiento con ticker normalizado a mayúsculas."""
+        normalized_ticker = item.ticker.strip().upper()
+        existing = self.db.query(watchlist_model.WatchlistItem).filter(
+            watchlist_model.WatchlistItem.ticker == normalized_ticker
+        ).first()
+
+        if existing:
+            existing.name = item.name
+            existing.sector = item.sector
+            existing.currency = item.currency
+            existing.price_at_addition = item.price_at_addition
+            existing.notes = item.notes
+            db_item = existing
+        else:
+            db_item = watchlist_model.WatchlistItem(
+                ticker=normalized_ticker,
+                name=item.name,
+                sector=item.sector,
+                currency=item.currency,
+                price_at_addition=item.price_at_addition,
+                notes=item.notes,
+            )
+            self.db.add(db_item)
+
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def remove_from_watchlist(self, ticker: str) -> bool:
+        """Elimina un activo de la lista de seguimiento por su símbolo bursátil."""
+        normalized_ticker = ticker.strip().upper()
+        deleted_count = self.db.query(watchlist_model.WatchlistItem).filter(
+            watchlist_model.WatchlistItem.ticker == normalized_ticker
+        ).delete()
+        self.db.commit()
+        return deleted_count > 0
 

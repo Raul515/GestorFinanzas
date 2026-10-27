@@ -137,7 +137,35 @@ class IMarketCacheRepository(ABC):
         pass
 
 
-class IRepository(ICategoryRepository, IBudgetRepository, ITransactionRepository, IEmergencyFundRepository, IMarketCacheRepository, ABC):
+class IWatchlistRepository(ABC):
+    """Interfaz del repositorio de lista de seguimiento (watchlist)."""
+
+    @abstractmethod
+    def get_watchlist(self) -> List[Any]:
+        """Obtiene el listado completo de activos en la lista de seguimiento."""
+        pass
+
+    @abstractmethod
+    def add_to_watchlist(self, item: Any) -> Any:
+        """Añade o actualiza un activo en la lista de seguimiento."""
+        pass
+
+    @abstractmethod
+    def remove_from_watchlist(self, ticker: str) -> bool:
+        """Elimina un activo de la lista de seguimiento por su ticker."""
+        pass
+
+
+class IRepository(
+    ICategoryRepository,
+    IBudgetRepository,
+    ITransactionRepository,
+    IEmergencyFundRepository,
+    IMarketCacheRepository,
+    IWatchlistRepository,
+    ABC,
+):
     """Interfaz unificada del repositorio del sistema."""
     pass
+
 
