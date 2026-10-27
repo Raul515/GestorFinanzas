@@ -4,7 +4,8 @@ Compatible con el StateGraph de LangGraph mediante TypedDict y reducers acumulat
 """
 
 import operator
-from typing import Annotated, Any, Dict, List, Optional, TypedDict
+from typing import Annotated, Any, Dict, List, Optional
+from typing_extensions import TypedDict
 
 
 class InvestmentCommitteeState(TypedDict, total=False):

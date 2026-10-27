@@ -44,7 +44,7 @@ class BaseAgent(ABC):
             self._compiled_graph = self.build_graph()
         return self._compiled_graph
 
-    def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, state: Any) -> Any:
         """
         Ejecuta el grafo compilado del agente pasando el estado correspondiente.
         """

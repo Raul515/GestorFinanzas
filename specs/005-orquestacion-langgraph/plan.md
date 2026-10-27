@@ -35,18 +35,20 @@ El plan se divide en 6 fases secuenciales estrictas, con pruebas automatizadas y
 
 ---
 
-### Fase 3: Agentes Cognitivos y Orquestador Principal (`MainInvestmentOrchestrator`)
+### Fase 3: Agentes Cognitivos y Orquestador Principal (`MainInvestmentOrchestrator`) (COMPLETADA)
 - **Objetivo**: Implementar los agentes especializados que implementan `BaseAgent` y el orquestador principal que compila el `StateGraph` de LangGraph con bifurcaciones condicionales (veto constitucional si fondo < 3 meses).
 - **Archivos a crear/modificar**:
-  - `src/backend/agents/safety_guard_agent.py` [NUEVO]
-  - `src/backend/agents/macro_agent.py` [NUEVO]
-  - `src/backend/agents/fundamental_agent.py` [NUEVO]
-  - `src/backend/agents/risk_thesis_agent.py` [NUEVO]
-  - `src/backend/agents/portfolio_advisor_agent.py` [NUEVO]
-  - `src/backend/components/orchestrator/main_investment_orchestrator.py` [NUEVO: StateGraph de LangGraph]
-  - `tests/unit/test_committee_orchestrator.py` [NUEVO]
+  - `src/backend/agents/safety_guard_agent.py` [CREADO]
+  - `src/backend/agents/macro_agent.py` [CREADO]
+  - `src/backend/agents/fundamental_agent.py` [CREADO]
+  - `src/backend/agents/risk_thesis_agent.py` [CREADO]
+  - `src/backend/agents/portfolio_advisor_agent.py` [CREADO]
+  - `src/backend/agents/__init__.py` [MODIFICADO]
+  - `src/backend/components/orchestrator/main_investment_orchestrator.py` [CREADO: StateGraph de LangGraph]
+  - `src/backend/components/orchestrator/__init__.py` [MODIFICADO]
+  - `tests/unit/test_committee_orchestrator.py` [CREADO]
 - **Puerta de Verificación**:
-  - `.\venv\Scripts\pytest tests/unit/test_committee_orchestrator.py` al 100%.
+  - `.\venv\Scripts\pytest tests/unit/test_committee_orchestrator.py` al 100% (9/9 superadas).
 
 ---
 
