@@ -19,19 +19,19 @@ El plan se divide en 6 fases secuenciales estrictas, con pruebas automatizadas y
 
 ---
 
-### Fase 2: Nodos de Procesamiento, Herramientas y Prompts
+### Fase 2: Nodos de Procesamiento, Herramientas y Prompts (COMPLETADA)
 - **Objetivo**: Desarrollar los nodos individuales de procesamiento del grafo, herramientas deterministas reutilizando servicios existentes y plantillas de prompts parametrizados.
 - **Archivos a crear/modificar**:
-  - `src/backend/components/prompts/committee_prompts.py` [NUEVO: prompts estructurados por rol]
-  - `src/backend/components/tools/committee_tools.py` [NUEVO: wrappers deterministas de servicios existentes]
-  - `src/backend/components/nodes/safety_validator_node.py` [NUEVO: validación de fondo de 3 meses]
-  - `src/backend/components/nodes/macro_evaluation_node.py` [NUEVO: evaluación de entorno monetario/deuda]
-  - `src/backend/components/nodes/fundamental_analysis_node.py` [NUEVO: auditoría contable y Piotroski]
-  - `src/backend/components/nodes/risk_debate_node.py` [NUEVO: formulación obligatoria de doble tesis]
-  - `src/backend/components/nodes/synthesis_node.py` [NUEVO: consolidación y veredicto patrimonial]
-  - `tests/unit/test_committee_nodes.py` [NUEVO]
+  - `src/backend/components/prompts/committee_prompts.py` [CREADO: prompts estructurados por rol]
+  - `src/backend/components/tools/committee_tools.py` [CREADO: wrappers deterministas de servicios existentes]
+  - `src/backend/components/nodes/safety_validator_node.py` [CREADO: validación de fondo de 3 meses]
+  - `src/backend/components/nodes/macro_evaluation_node.py` [CREADO: evaluación de entorno monetario/deuda]
+  - `src/backend/components/nodes/fundamental_analysis_node.py` [CREADO: auditoría contable y Piotroski]
+  - `src/backend/components/nodes/risk_debate_node.py` [CREADO: formulación obligatoria de doble tesis]
+  - `src/backend/components/nodes/synthesis_node.py` [CREADO: consolidación y veredicto patrimonial]
+  - `tests/unit/test_committee_nodes.py` [CREADO]
 - **Puerta de Verificación**:
-  - `.\venv\Scripts\pytest tests/unit/test_committee_nodes.py` al 100%.
+  - `.\venv\Scripts\pytest tests/unit/test_committee_nodes.py` al 100% (19/19 superadas).
 
 ---
 
