@@ -52,14 +52,14 @@ El plan se divide en 6 fases secuenciales estrictas, con pruebas automatizadas y
 
 ---
 
-### Fase 4: Endpoints REST en FastAPI
+### Fase 4: Endpoints REST en FastAPI (COMPLETADA)
 - **Objetivo**: Exponer la ejecución del Comité de Inversión Multiagente a través de la API REST.
 - **Archivos a crear/modificar**:
-  - `src/backend/api/routers/committee.py` [NUEVO: endpoint `/committee/analyze`]
+  - `src/backend/api/routers/committee.py` [CREADO: endpoint `/committee/analyze`]
   - `src/backend/api/main.py` [MODIFICADO: inclusión del router `/committee`]
-  - `tests/integration/test_committee_api.py` [NUEVO]
+  - `tests/integration/test_committee_api.py` [CREADO: 5 pruebas de integración]
 - **Puerta de Verificación**:
-  - `.\venv\Scripts\pytest tests/integration/test_committee_api.py` al 100%.
+  - `.\venv\Scripts\pytest tests/integration/test_committee_api.py` al 100% (5/5 superadas).
 
 ---
 
