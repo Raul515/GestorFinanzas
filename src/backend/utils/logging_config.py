@@ -64,16 +64,34 @@ class PrivacyFilter(logging.Filter):
         """
         if isinstance(record.msg, str):
             record.msg = self.sanitize(record.msg)
+        elif not isinstance(record.msg, (int, float, bool, type(None))):
+            record.msg = self.sanitize(str(record.msg))
 
         if record.args:
             if isinstance(record.args, dict):
                 record.args = {
-                    k: (self.sanitize(v) if isinstance(v, str) else v)
+                    k: (
+                        self.sanitize(v)
+                        if isinstance(v, str)
+                        else (
+                            self.sanitize(str(v))
+                            if not isinstance(v, (int, float, bool, type(None)))
+                            else v
+                        )
+                    )
                     for k, v in record.args.items()
                 }
             elif isinstance(record.args, (tuple, list)):
                 record.args = tuple(
-                    (self.sanitize(v) if isinstance(v, str) else v)
+                    (
+                        self.sanitize(v)
+                        if isinstance(v, str)
+                        else (
+                            self.sanitize(str(v))
+                            if not isinstance(v, (int, float, bool, type(None)))
+                            else v
+                        )
+                    )
                     for v in record.args
                 )
 

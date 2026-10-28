@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+import logging
+import os
+import time
+from fastapi import FastAPI, Request
+from backend.utils.logging_config import setup_logging
 from backend.api.routers import (
     categories,
     budgets,
@@ -13,10 +17,47 @@ from backend.api.routers import (
 )
 from backend.database.componentes.sqlite_db import init_db
 
+# Configurar logging persistente rotativo con filtro de privacidad
+backend_log_file = os.getenv("BACKEND_LOG_FILE", "logs/backend.log")
+setup_logging(backend_log_file)
+logger = logging.getLogger("backend.api.main")
+logger.info("Inicializando servicio Backend FastAPI y base de datos")
+
 app = FastAPI(title="Gestor Finanzas API")
 
 # Inicializar la base de datos
 init_db()
+
+
+@app.middleware("http")
+async def log_requests_middleware(request: Request, call_next):
+    """Middleware de observabilidad para registrar método, ruta, código HTTP y latencia."""
+    start_time = time.perf_counter()
+    method = request.method
+    query = request.url.query
+    path_with_query = f"{request.url.path}?{query}" if query else request.url.path
+
+    try:
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.info(
+            "HTTP %s %s completed with status %d in %.2f ms",
+            method,
+            path_with_query,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+    except Exception as exc:
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.error(
+            "HTTP %s %s failed with exception: %s after %.2f ms",
+            method,
+            path_with_query,
+            str(exc),
+            duration_ms,
+        )
+        raise
 
 # Routers principales en estándar internacional
 app.include_router(categories.router)
