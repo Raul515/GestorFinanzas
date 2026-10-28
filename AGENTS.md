@@ -46,6 +46,16 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
    - Queda estrictamente prohibido silenciar excepciones mediante `pass` sin registrar el fallo en un log descriptivo.
    - En clientes de red (`src/frontend/api_client.py`), servicios y controladores, se debe usar el módulo estándar `logging` con niveles adecuados (`logger.warning`, `logger.error`), registrando la URL invocada, códigos de error HTTP y el detalle del fallo.
    - Preservar la privacidad: nunca imprimir ni loguear datos sensibles (claves API, tokens o credenciales).
+10. **Estrategia de Ramas en Git (SDD Branching Model)**:
+    - **Estructura de Ramas**:
+      - `main`: Rama de producción y estabilidad consolidada. Contiene exclusivamente versiones probadas y validadas en uso real por el usuario.
+      - `develop`: Rama base de integración continua donde residen las especificaciones completamente concluidas y verificadas.
+      - `feat/spec-XXX-nombre`: Rama de trabajo efímera que nace de `develop` para cada nueva especificación aprobada (a partir de la Spec 008).
+    - **Ciclo de Vida de una Especificación**:
+      1. Antes de iniciar la Fase 1 de una nueva spec, el agente creará y cambiará a la rama efímera desde `develop`: `git checkout -b feat/spec-XXX-nombre develop`.
+      2. Todas las fases de la especificación se desarrollan, prueban y commitean secuencialmente en dicha rama.
+      3. Al concluir la totalidad de las fases y pasar el 100% de las pruebas, se solicita confirmación al usuario para fusionar a `develop` (`git checkout develop` + `git merge feat/spec-XXX-nombre`) y eliminar la rama efímera (`git branch -d feat/spec-XXX-nombre`).
+      4. El paso de `develop` a `main` se realiza mediante fast-forward / merge atómico cuando el usuario valide en uso real las especificaciones integradas en `develop`.
 
 ---
 
@@ -53,6 +63,16 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
 
 Verifica siempre los cambios utilizando el entorno virtual local oficial (`venv`):
 
+- **Gestión de Ramas por Especificación**:
+  ```powershell
+  # Crear rama para nueva spec
+  git checkout -b feat/spec-XXX-nombre develop
+
+  # Fusionar a develop al finalizar la spec
+  git checkout develop
+  git merge feat/spec-XXX-nombre
+  git branch -d feat/spec-XXX-nombre
+  ```
 - **Ejecutar Pruebas de la Fase / Especificación Activa**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_<modulo>.py tests/integration/test_<modulo>.py
