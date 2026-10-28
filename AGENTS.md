@@ -25,9 +25,10 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
 3. **Arquitectura Desacoplada**:
    - Los algoritmos financieros (presupuesto 50/30/20, desviaciones, cálculos de fondos de seguridad e indicadores) y las herramientas de agentes deben implementarse como servicios o funciones puras testeables bajo `src/backend/services/`.
    - La interfaz de Streamlit (`src/frontend/`) es exclusivamente una capa de presentación visual.
-4. **Veracidad Cuantitativa y Pruebas Obligatorias**:
+4. **Veracidad Cuantitativa y Ámbito Acotado de Pruebas**:
    - Prohibido simular, alucinar o falsear métricas financieras en código de producción.
-   - Toda lógica financiera y herramienta de agente requiere pruebas automatizadas con `pytest` pasando al 100% antes de considerar completada cualquier fase.
+   - **Ámbito Acotado de Pruebas (Sin Suite Global Innecesaria)**: Durante el desarrollo de cada fase, **queda prohibido ejecutar la suite global completa de pruebas del sistema**. Se deben ejecutar únicamente las pruebas de la fase recién implementada y las pruebas asociadas a la especificación activa (`.\venv\Scripts\pytest -v <pruebas_de_la_spec>`). No se deben volver a ejecutar pruebas de componentes consolidados que no han sido tocados.
+   - Toda lógica desarrollada requiere que las pruebas de la fase y de la especificación pasen al 100% antes de considerar completada cualquier fase.
 5. **Protección Patrimonial y Salvaguarda de Seguridad**:
    - **Regla innegociable**: Jamás sugerir, asignar o permitir inversiones con riesgo si el fondo de emergencia no cubre al menos 3 meses de gastos fijos esenciales.
 6. **Seguridad Pre-Commit y Verificación de `.gitignore`**:
@@ -52,9 +53,9 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
 
 Verifica siempre los cambios utilizando el entorno virtual local oficial (`venv`):
 
-- **Ejecutar Pruebas Automatizadas**:
+- **Ejecutar Pruebas de la Fase / Especificación Activa**:
   ```powershell
-  .\venv\Scripts\pytest -v
+  .\venv\Scripts\pytest -v tests/unit/test_<modulo>.py tests/integration/test_<modulo>.py
   ```
 - **Comprobación de Sintaxis Python**:
   ```powershell
