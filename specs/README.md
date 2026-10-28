@@ -12,7 +12,7 @@
 | **004** | [Copiloto Patrimonial](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/004-copiloto-patrimonial/spec.md) | **Completada** | Asistente asesor con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo. |
 | **005** | [Orquestación LangGraph](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/005-orquestacion-langgraph/spec.md) | **Completada** | Comité Asesor de Inversión Multiagente con StateGraph de LangGraph, arquitectura modular (agents, components, domain, external_components), veto constitucional vinculante (Principio 9) y doble tesis obligatoria (Principio 12). |
 | **006** | [Gestión de Transacciones](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/006-gestion-transacciones/spec.md) | **Completada** | Visor de historial mensual, eliminación segura con confirmación y reversión automática del saldo del Fondo de Emergencia. |
-| **007** | [Sistema de Logs Rotativos](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/007-sistema-logs-rotativos/spec.md) | **Definida** | Logs independientes (backend.log y frontend.log), rotación por tamaño (5 MB, 3 backups), nivel INFO por defecto y PrivacyFilter. |
+| **007** | [Sistema de Logs Rotativos](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/007-sistema-logs-rotativos/spec.md) | **Completada** | Logs independientes (backend.log y frontend.log), rotación por tamaño (5 MB, 3 backups), middleware de latencia, nivel INFO por defecto y PrivacyFilter. |
 
 
 ---

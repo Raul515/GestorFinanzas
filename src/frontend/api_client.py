@@ -1,7 +1,17 @@
 import logging
 import os
+import sys
 import requests
 
+# Asegurar que src esté en el sys.path si se invoca directamente desde el frontend
+SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
+from backend.utils.logging_config import setup_logging
+
+frontend_log_file = os.getenv("FRONTEND_LOG_FILE", "logs/frontend.log")
+setup_logging(frontend_log_file)
 logger = logging.getLogger(__name__)
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")

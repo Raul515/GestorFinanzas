@@ -76,6 +76,7 @@
 | **2026-10-28** | Spec 006 Fase 3 Completada | Integración en Frontend: método cliente `delete_transaction` con logging estructurado en `api_client.py`, expander interactivo `"📋 Historial de Transacciones de {nombre_mes}"` en cada pestaña mensual de Streamlit (`app.py`) con popover de confirmación segura, notificación con `st.toast`, reactividad inmediata con `st.rerun()`, y prueba unitaria en `test_sanity.py`. Suite global ampliada a 211/211 pruebas pasando al 100%. |
 | **2026-10-28** | Spec 006 Completada al 100% | Historial y Gestión de Transacciones finalizado con éxito: persistencia desacoplada en SQLite con reversión atómica automática del saldo del Fondo de Emergencia (`EmergencyFund`), endpoint REST `DELETE /transactions/{transaction_id}`, cliente frontend con observabilidad de red (Principio 13), interfaz interactiva en Streamlit con confirmación de borrado y cero regresiones con 211/211 pruebas pasando al 100%. |
 | **2026-10-28** | Spec 007 Definida: Sistema de Logs Rotativos Persistentes | Especificación técnica acordada para logs desacoplados en disco (`logs/backend.log` y `logs/frontend.log`), rotación por tamaño (5 MB con 3 copias de respaldo), nivel `INFO` por defecto configurable vía `.env`, filtro de sanitización de secretos (`PrivacyFilter`) y acceso exclusivo en servidor/disco sin visor UI. |
+| **2026-10-28** | Spec 007 Completada al 100% | Sistema de Observabilidad y Logs Rotativos Persistentes finalizado con éxito: persistencia desacoplada en disco (`logs/backend.log` y `logs/frontend.log`), motor `RotatingFileHandler` (5 MB, 3 backups), middleware de latencia HTTP en FastAPI, filtro de sanitización de seguridad (`PrivacyFilter`) con ofuscación de claves Gemini, tokens Bearer y contraseñas a `[REDACTED]`, integración en cliente frontend Streamlit (`api_client.py`), blindaje en `.gitignore` y 26/26 pruebas de la spec pasando al 100%. |
 
 ---
 
@@ -88,7 +89,7 @@
 5. **Spec 004 Completada**: Copiloto Patrimonial con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo (159 pruebas pasando al 100%).
 6. **Spec 005 Completada**: Orquestación Multiagente con LangGraph bajo arquitectura modular en `src/backend/` (`agents/`, `components/`, `domain/`, `external_components/`, `api/`). 201 pruebas pasando al 100%.
 7. **Spec 006 Completada**: Historial y Gestión de Transacciones (Eliminación segura con confirmación directa y reversión automática del saldo del Fondo de Emergencia). 211 pruebas pasando al 100%.
-8. **Spec 007 Definida**: Sistema de Logs Rotativos Persistentes (Ficheros independientes `logs/backend.log` y `logs/frontend.log`, 5 MB, 3 backups y sanitización de privacidad).
+8. **Spec 007 Completada**: Sistema de Logs Rotativos Persistentes (`logs/backend.log` y `logs/frontend.log`, 5 MB, 3 backups, middleware de latencia en FastAPI y sanitización de privacidad con `PrivacyFilter`).
 9. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
    - **Arquitectura Multi-Perfil para Parejas / Finanzas Compartidas (Privacidad Real y Cuenta Conjunta Sincronizada)**:
      - **Problema de Privacidad Real**: Si ambos perfiles residen en la misma base de datos sin cifrar en un único PC, el administrador/dueño del equipo puede inspeccionar el fichero SQLite en bruto (`raw`), vulnerando el aislamiento aunque el frontend pida contraseña.

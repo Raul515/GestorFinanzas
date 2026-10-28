@@ -291,6 +291,30 @@ def test_frontend_api_client_delete_transaction(mock_delete):
     assert api_client.delete_transaction(42) is False
 
 
+def test_frontend_logging_initialization_and_sanitization(tmp_path):
+    """Verifica que el cliente frontend inicialice setup_logging en su propio fichero y ofusque datos sensibles."""
+    import logging
+    from backend.utils.logging_config import setup_logging
+
+    log_file = tmp_path / "frontend_test.log"
+    setup_logging(str(log_file), log_level="INFO")
+
+    logger = logging.getLogger("frontend.api_client")
+    fake_key = "AIzaSyD-1234567890abcdef1234567890abcde"
+    logger.info("Petición saliente con clave %s", fake_key)
+    logger.info("Autenticado con Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI...")
+
+    for h in logging.getLogger().handlers:
+        h.flush()
+
+    assert log_file.exists()
+    content = log_file.read_text(encoding="utf-8")
+    assert fake_key not in content
+    assert "Bearer [REDACTED]" in content
+    assert "[REDACTED]" in content
+
+
+
 
 
 
