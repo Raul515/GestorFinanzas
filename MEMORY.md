@@ -90,11 +90,35 @@
 7. **Spec 006 Completada**: Historial y Gestión de Transacciones (Eliminación segura con confirmación directa y reversión automática del saldo del Fondo de Emergencia). 211 pruebas pasando al 100%.
 8. **Spec 007 Definida**: Sistema de Logs Rotativos Persistentes (Ficheros independientes `logs/backend.log` y `logs/frontend.log`, 5 MB, 3 backups y sanitización de privacidad).
 9. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
-   - **Arquitectura Multi-Perfil para Parejas / Finanzas Compartidas (Perfiles Privados y Cuenta Conjunta)**:
-     - Selector de perfiles en la aplicación:
-       1. **Perfiles Individuales** (ej. Persona 1 / Persona 2) protegidos por contraseña privada individual, manteniendo información contable, gastos personales y patrimonio aislados.
-       2. **Perfil Conjunto / Mixto** (compartido): visualización de aportaciones netas de cada miembro hacia la cuenta común, gastos compartidos del hogar y seguimiento de metas conjuntas.
-       3. **Reglas patrimoniales y salvaguardas específicas**: fondos conjuntos orientados a objetivos vitales comunes (ej. fondo de amortización para entrada de vivienda o hipoteca, fondo de emergencia conjunto o fondo monetario), con opción de veto total a renta variable/bolsa en la cuenta común.
+   - **Arquitectura Multi-Perfil para Parejas / Finanzas Compartidas (Privacidad Real y Cuenta Conjunta Sincronizada)**:
+     - **Problema de Privacidad Real**: Si ambos perfiles residen en la misma base de datos sin cifrar en un único PC, el administrador/dueño del equipo puede inspeccionar el fichero SQLite en bruto (`raw`), vulnerando el aislamiento aunque el frontend pida contraseña.
+     - **Modelos de Privacidad Evaluados**:
+       1. *Opción A: Perfiles Físicamente Distribuidos (Un PC/dispositivo por persona - Recomendada)*: Cada usuario mantiene su base de datos local y privada (`user_a.db` / `user_b.db`) en su propio ordenador. La cuenta conjunta reside como un módulo sincronizable entre ambos sin tocar datos personales.
+       2. *Opción B: Cifrado Zero-Knowledge en Base de Datos Local Compartida*: Si se comparte un único equipo o fichero, los registros personales se cifran a nivel de campo o de fichero (ej. SQLCipher / AES-256-GCM) derivando una clave privada en memoria RAM desde la contraseña de cada usuario (Argon2id). Ni el administrador del sistema puede leer los datos personales de la pareja sin su clave maestra.
+     - **Mecanismos de Sincronización Segura para la Cuenta Conjunta (Sin Git ni exposición pública)**:
+       - *Prohibición expresa*: Jamás sincronizar datos financieros reales mediante Git o repositorios.
+       - *Entorno Multiplataforma (Windows + Mac)*: Se descarta la carpeta compartida nativa de Windows (SMB) debido a fricciones críticas (macOS desmonta automáticamente unidades de red en reposo/cierre de tapa, bloqueo de puertos y discrepancia de rutas).
+       - *Alternativas técnicas viables*:
+         - **Caja de Sincronización Asíncrona con Syncthing (Recomendada)**: Intercambio de deltas o eventos de la cuenta conjunta (`mis_gastos_conjuntos.json`) mediante carpetas sincronizadas P2P punto a punto con TLS. Para el backend Python es una lectura/escritura en disco 100% local (`Path` estándar sin código de red ni sockets). No requiere que ambos equipos coincidan encendidos al mismo segundo exacto; la sincronización ocurre en segundo plano al conectar ambos a la red. Resolución de conflictos mediante UUIDs y marcas de tiempo (Event Sourcing / CRDTs).
+         - **Sincronización P2P en Red Local / WireGuard / Tailscale**: Comunicación directa máquina a máquina vía endpoint REST seguro (`/sync/joint-account`) cuando ambos dispositivos coinciden activos en la misma red.
+     - **Estructura Funcional de Perfiles**:
+       1. **Perfiles Individuales**: Gastos personales, patrimonio privado y fondos aislados con privacidad criptográfica estricta.
+       2. **Perfil Conjunto / Mixto**: Aportaciones netas de cada miembro hacia la cuenta común, reparto de gastos del hogar y seguimiento de metas compartidas.
+       3. **Reglas Patrimoniales y Salvaguardas Específicas**: Fondos orientados a objetivos vitales (fondo de emergencia conjunto, amortización de hipoteca/entrada de vivienda), con opción de veto total a renta variable/riesgo en la cuenta común.
+   - **Companion Móvil para Captura Rápida de Gastos ("Quick-Capture")**:
+     - *Filosofía y Alcance*: Micro-aplicación móvil enfocada exclusivamente en la operativa transaccional rápida del día a día (anotar en 5 segundos un café, cena o supermercado, asignando categoría y si es personal o conjunto). Quedan excluidos del móvil los módulos pesados de IA (Radar Macroeconómico, Deep Dive, Screener y Comité Asesor), que se reservan para el ordenador.
+     - *Diferenciación Técnica por Plataforma*:
+       - **Android (APK Directa / Sideloading - Máxima Viabilidad)**:
+         - Desarrollo en framework ligero multiplataforma (ej. Flutter, React Native/Expo o Flet/Capacitor).
+         - Distribución trivial: generación de archivo `.apk` instalable directamente en el dispositivo Android sin pasar por Google Play Store ni pagar cuotas de desarrollador.
+         - Sincronización local fluida: Android cuenta con cliente oficial nativo de Syncthing (`Syncthing-Fork`), permitiendo volcar transacciones locales y sincronizarlas de forma desatendida con el PC al llegar a la red Wi-Fi de casa.
+       - **iOS / iPhone (PWA - Progressive Web App)**:
+         - *Motivo de la elección*: Apple bloquea la instalación directa de ejecutables (`.ipa`) sin cuenta de desarrollador anual de pago (99$/año) o firmas temporales con caducidad semanal (AltStore).
+         - *Implementación PWA*: Aplicación web responsiva ligera que se añade a la pantalla de inicio desde Safari ("Añadir a pantalla de inicio"), comportándose visualmente como una app nativa con su propio icono sin coste de licencias.
+         - *Capacidades*: Soporte de almacenamiento local sin conexión (IndexedDB/LocalStorage) para guardar gastos al vuelo y sincronización automática contra la API cuando detecta conectividad en la red doméstica o enlace seguro.
+   - **Modernización y Evolución de Interfaz de Usuario / Frontend (Visión a Largo Plazo)**:
+     - *Fase 1 (Streamlit Avanzado)*: Inyección de componentes personalizados, diseño visual refinado con CSS/Tailwind embebido, micro-interacciones y mejora de layouts para elevar la estética actual sin romper la agilidad de desarrollo.
+     - *Fase 2 (Frontend Desacoplado Moderno)*: Transición a más largo plazo hacia un stack frontend dedicado (ej. React, Next.js, Vue o empaquetado nativo desktop ligero con Tauri) que consuma la API FastAPI existente (`src/backend/`). Permitirá máxima libertad de diseño UI/UX, gráficos interactivos de alto rendimiento, navegación ultrafluida sin recarga de estado y adaptabilidad móvil impecable.
    - **Sincronización Colaborativa de Caché de Análisis Fundamental (Ahorro de Tokens de IA)**:
      - Mecanismo de compartición o sincronización de análisis cualitativos y cuantitativos de mercado (Deep Dive / Quality Value) entre diferentes usuarios o instancias amigas.
      - Permite que si un usuario analiza una empresa (ej. `ITX.MC`), el informe estructurado y métricas puedan ser reutilizados por otro usuario dentro de la ventana de validez (TTL de 14 días), evitando llamadas redundantes a la API de Google Gemini y optimizando el consumo colectivo de cuota/tokens.
@@ -103,7 +127,7 @@
    - **Conector MCP / Gmail para Newsletters Financieras (Ingesta y Síntesis Agéntica de Tesis de Inversión)**:
      - Servidor MCP o conector seguro a la API de Gmail con permiso restringido (`gmail.readonly`) filtrado estrictamente por remitente (ej. newsletters especializadas como *Visual Faktory*) o etiqueta específica (`newsletter-inversion`).
      - Procesamiento y síntesis inteligente mediante el motor de LLM (ampliando el Radar de Noticias y el Copiloto):
-       1. **Extracción de Tesis y Estrategias Clave**: síntesis ejecutiva de conceptos avanzados (ej. inversión por dividendos crecientes DGI vs trampas de alto rendimiento/yield traps, fiscalidad nacional e internacional como W-8BEN, payout sostenible).
+       1. **Extracción de Tesis y Estrategias Clave**: resuemen para lectura en unos 3 minutos,síntesis ejecutiva de conceptos avanzados (ej. inversión por dividendos crecientes DGI vs trampas de alto rendimiento/yield traps, fiscalidad nacional e internacional como W-8BEN, payout sostenible).
        2. **Generación Automática de Filtros Cuantitativos**: traducción de pautas sugeridas en la newsletter (ej. Yield 2.5% - 6.0%, Payout < 70%, dividendos crecientes por > 10 años) hacia nuevos presets del Screener (`screener_service.py`) o candidatos para la Watchlist.
        3. **Privacidad Absoluta (Principios 10 y 11)**: aislamiento estricto del buzón; prohibido procesar correos personales ajenos a los filtros autorizados.
 
