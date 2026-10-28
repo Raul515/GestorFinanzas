@@ -100,6 +100,45 @@ class SQLiteRepository(IRepository):
 
         return db_item
 
+    def delete_transaction(self, transaction_id: int) -> bool:
+        """
+        Elimina físicamente una transacción contable por su identificador.
+        Si la transacción pertenecía a la subcategoría 'Fondo de emergencia',
+        revierte el saldo en la entidad EmergencyFund deduciendo su importe.
+        Retorna True si la transacción existía y fue eliminada, o False en caso contrario.
+        """
+        try:
+            db_item = (
+                self.db.query(trans_model.Transaction)
+                .filter(trans_model.Transaction.id == transaction_id)
+                .first()
+            )
+            if not db_item:
+                logger.info("Intento de eliminar transacción inexistente con ID %s", transaction_id)
+                return False
+
+            subcat = (
+                self.db.query(cat_model.Subcategory)
+                .filter(cat_model.Subcategory.id == db_item.subcategory_id)
+                .first()
+            )
+            if subcat and "fondo de emergencia" in subcat.name.lower():
+                logger.info(
+                    "Revirtiendo saldo de fondo de emergencia: deduciendo %.2f por eliminación de transacción %s",
+                    db_item.amount,
+                    db_item.id,
+                )
+                self.adjust_emergency_fund_balance(-db_item.amount)
+
+            self.db.delete(db_item)
+            self.db.commit()
+            logger.info("Transacción con ID %s eliminada exitosamente", transaction_id)
+            return True
+        except Exception as exc:
+            self.db.rollback()
+            logger.error("Error al eliminar la transacción con ID %s: %s", transaction_id, exc)
+            raise
+
     # 3. Presupuestos Mensuales
     def get_budgets(self, month: str) -> List[pres_model.MonthlyBudget]:
         """

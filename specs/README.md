@@ -11,6 +11,8 @@
 | **003** | [Análisis Fundamental (Deep Dive)](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/003-analisis-fundamental/spec.md) | **Completada** | Diagnóstico contable individual, Piotroski F-Score (0-9), FCF, Watchlist y síntesis agéntica Quality Value con Gemini (3.1 Flash / 2.5 Pro). |
 | **004** | [Copiloto Patrimonial](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/004-copiloto-patrimonial/spec.md) | **Completada** | Asistente asesor con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo. |
 | **005** | [Orquestación LangGraph](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/005-orquestacion-langgraph/spec.md) | **Completada** | Comité Asesor de Inversión Multiagente con StateGraph de LangGraph, arquitectura modular (agents, components, domain, external_components), veto constitucional vinculante (Principio 9) y doble tesis obligatoria (Principio 12). |
+| **006** | [Gestión de Transacciones](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/006-gestion-transacciones/spec.md) | **Completada** | Visor de historial mensual, eliminación segura con confirmación y reversión automática del saldo del Fondo de Emergencia. |
+
 
 ---
 

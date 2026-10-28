@@ -88,12 +88,20 @@ class ITransactionRepository(ABC):
         """Registra una nueva transacción y ejecuta sincronizaciones colaterales."""
         pass
 
+    @abstractmethod
+    def delete_transaction(self, transaction_id: int) -> bool:
+        """Elimina una transacción existente y revierte efectos colaterales (ej. fondo de emergencia)."""
+        pass
+
     # Métodos alias para compatibilidad
     def get_transacciones(self, mes: Optional[str] = None) -> List[Any]:
         return self.get_transactions(mes)
 
     def create_transaccion(self, transaccion: Any) -> Any:
         return self.create_transaction(transaccion)
+
+    def delete_transaccion(self, transaccion_id: int) -> bool:
+        return self.delete_transaction(transaccion_id)
 
 
 ITransaccionRepository = ITransactionRepository

@@ -89,21 +89,21 @@ with tab_anual:
             transacciones_m = api_client.get_transacciones(mes_key)
             
             for cat in categorias:
-                cat_subcats = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                cat_subcats = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
                 p_sum = 0.0
                 r_sum = 0.0
                 for s in cat_subcats:
                     s_id = s['id']
                     p_val = 0.0
                     if presupuestos_m:
-                        p_match = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        p_match = [p for p in presupuestos_m if (p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')) == s_id]
                         if p_match:
-                            p_val = p_match[0]['cantidad']
+                            p_val = p_match[0].get('cantidad') if p_match[0].get('cantidad') is not None else p_match[0].get('amount', 0.0)
                     p_sum += p_val
                     
                     t_val = 0.0
                     if transacciones_m:
-                        r_match = [t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id]
+                        r_match = [t.get('cantidad', t.get('amount', 0.0)) for t in transacciones_m if (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) == s_id]
                         t_val = sum(r_match)
                     
                     r_sum += (p_val + t_val)
@@ -231,7 +231,7 @@ with tab_anual:
                 )),
                 tooltip=['Bloque', alt.Tooltip('Valor:Q', format=',.2f')]
             ).properties(height=200)
-            st.altair_chart(donut_chart, use_container_width=True)
+            st.altair_chart(donut_chart, width="stretch")
             
         with c_bar:
             st.markdown("<p style='text-align: center; font-weight: bold; font-size: 13px; margin: 0;'>Gasto vs Ahorro mensual</p>", unsafe_allow_html=True)
@@ -252,7 +252,7 @@ with tab_anual:
                 )),
                 tooltip=['Mes', 'Bloque', alt.Tooltip('Monto:Q', format=',.2f')]
             ).properties(height=200)
-            st.altair_chart(bar_chart, use_container_width=True)
+            st.altair_chart(bar_chart, width="stretch")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -271,7 +271,7 @@ with tab_anual:
             y=alt.Y('Ahorro Acumulado:Q', title="Euros (€)"),
             tooltip=['Mes', alt.Tooltip('Ahorro Acumulado:Q', format=',.2f')]
         ).properties(height=220)
-        st.altair_chart(line_chart, use_container_width=True)
+        st.altair_chart(line_chart, width="stretch")
 
         # 4. TABLA MATRIZ MENSUAL CONSOLIDADA (Enero a Diciembre + Total)
         st.markdown("##### Detalle Mensual Consolidado")
@@ -387,12 +387,12 @@ for idx, tab in enumerate(tabs_meses, start=1):
                     s_id = s['id']
                     pval = 0.0
                     if presupuestos_m:
-                        pm = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        pm = [p for p in presupuestos_m if (p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')) == s_id]
                         if pm:
-                            pval = pm[0]['cantidad']
+                            pval = pm[0].get('cantidad') if pm[0].get('cantidad') is not None else pm[0].get('amount', 0.0)
                     rval_trans = 0.0
                     if transacciones_m:
-                        rval_trans = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                        rval_trans = sum(t.get('cantidad', t.get('amount', 0.0)) for t in transacciones_m if (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) == s_id)
                     rval_total = pval + rval_trans
                     
                     chart_data_cat.append({"Concepto": s['nombre'], "Tipo": "Presupuesto", "Monto": pval})
@@ -418,7 +418,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
                         xOffset='Tipo:N',
                         tooltip=['Concepto', 'Tipo', alt.Tooltip('Monto:Q', format=',.2f')]
                     ).properties(height=220, title=f"{n_cat}")
-                    st.altair_chart(chart_bars, use_container_width=True)
+                    st.altair_chart(chart_bars, width="stretch")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -434,7 +434,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
             cat_sel_id = st.selectbox("Categoría", options=list(cat_options.keys()), format_func=lambda x: cat_options[x], key=f"cat_sb_{mes_key}")
             
         with f_col3:
-            subcats_filtradas = [s for s in todas_subcats if s['categoria_id'] == cat_sel_id]
+            subcats_filtradas = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat_sel_id]
             subcat_opts = {s['id']: s['nombre'] for s in subcats_filtradas}
             subcat_sel_id = st.selectbox("Subcategoría", options=list(subcat_opts.keys()), format_func=lambda x: subcat_opts[x], key=f"subcat_sb_{mes_key}") if subcat_opts else None
             
@@ -446,7 +446,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
             
         with f_col6:
             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-            btn_add = st.button("Guardar", key=f"btn_add_{mes_key}", use_container_width=True)
+            btn_add = st.button("Guardar", key=f"btn_add_{mes_key}", width="stretch")
             
         if btn_add:
             if subcat_sel_id and cant_val > 0:
@@ -456,16 +456,82 @@ for idx, tab in enumerate(tabs_meses, start=1):
             else:
                 st.error("Por favor, selecciona una subcategoría y una cantidad mayor a 0.")
 
+        # Historial de Transacciones del Mes (Spec 006)
+        with st.expander(f"📋 Historial de Transacciones de {nombre_mes}"):
+            if not transacciones_m:
+                st.info("No hay transacciones registradas en este mes.")
+            else:
+                st.caption(f"Listado de transacciones registradas para {nombre_mes}. Pulsa en 🗑️ para eliminar un apunte.")
+                h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([1.5, 2.2, 2.2, 1.8, 2.8, 1.2])
+                with h_col1:
+                    st.markdown("**Fecha**")
+                with h_col2:
+                    st.markdown("**Concepto / Subcat.**")
+                with h_col3:
+                    st.markdown("**Categoría**")
+                with h_col4:
+                    st.markdown("**Importe**")
+                with h_col5:
+                    st.markdown("**Descripción**")
+                with h_col6:
+                    st.markdown("**Acción**")
+                st.markdown("<hr style='margin: 4px 0 10px 0;'>", unsafe_allow_html=True)
+
+                subcat_map = {s['id']: s for s in todas_subcats}
+                cat_map = {c['id']: c for c in categorias}
+
+                sorted_transacciones = sorted(
+                    transacciones_m,
+                    key=lambda x: str(x.get('fecha') or x.get('date') or ''),
+                    reverse=True,
+                )
+
+                for tx in sorted_transacciones:
+                    tx_id = tx.get("id")
+                    tx_sub_id = tx.get("subcategoria_id") if tx.get("subcategoria_id") is not None else tx.get("subcategory_id")
+                    tx_sub = subcat_map.get(tx_sub_id)
+                    sub_nombre = tx_sub["nombre"] if tx_sub else f"Subcategoría #{tx_sub_id}"
+
+                    cat_id = (tx_sub.get("categoria_id") if tx_sub.get("categoria_id") is not None else tx_sub.get("category_id")) if tx_sub else None
+                    cat_obj = cat_map.get(cat_id) if cat_id else None
+                    cat_nombre = cat_obj["nombre"] if cat_obj else "—"
+
+                    tx_fecha = str(tx.get("fecha") or tx.get("date") or "—")
+                    tx_monto = float(tx.get("cantidad") if tx.get("cantidad") is not None else tx.get("amount", 0.0))
+                    tx_desc = tx.get("concepto") or tx.get("description") or "—"
+
+                    r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([1.5, 2.2, 2.2, 1.8, 2.8, 1.2])
+                    with r_col1:
+                        st.write(tx_fecha)
+                    with r_col2:
+                        st.write(sub_nombre)
+                    with r_col3:
+                        st.write(cat_nombre)
+                    with r_col4:
+                        st.write(f"{tx_monto:,.2f} €")
+                    with r_col5:
+                        st.write(tx_desc)
+                    with r_col6:
+                        with st.popover("🗑️", help="Eliminar transacción"):
+                            st.markdown(f"¿Eliminar apunte de **{tx_monto:,.2f} €**?")
+                            st.caption(f"{sub_nombre} ({tx_fecha})")
+                            if st.button("Confirmar", key=f"btn_del_tx_{mes_key}_{tx_id}", type="primary", width="stretch"):
+                                if api_client.delete_transaction(tx_id):
+                                    st.toast("Transacción eliminada correctamente", icon="🗑️")
+                                    st.rerun()
+                                else:
+                                    st.error("Error al intentar eliminar la transacción.")
+
         # Personalizar Presupuesto del Mes (Opcional)
         with st.expander(f"✏️ Personalizar Presupuesto de {nombre_mes} (Opcional)"):
             st.caption("Si este mes tiene un gasto o ingreso presupuestado excepcional, puedes modificarlo aquí. De lo contrario, usará los valores por defecto de tu Presupuesto Base.")
             with st.form(key=f"form_pres_mes_{mes_key}"):
                 mes_pres_nuevos = []
-                p_mes_map = {p['subcategoria_id']: p['cantidad'] for p in presupuestos_m} if presupuestos_m else {}
+                p_mes_map = {(p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')): (p.get('cantidad') if p.get('cantidad') is not None else p.get('amount', 0.0)) for p in presupuestos_m} if presupuestos_m else {}
                 
                 for cat in categorias:
                     n_cat = cat['nombre']
-                    subcats_c = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                    subcats_c = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
                     if not subcats_c:
                         continue
                     st.markdown(f"**{n_cat}**")
@@ -486,7 +552,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
                                 "cantidad": nv
                             })
                 
-                btn_save_m = st.form_submit_button(f"💾 Guardar Presupuesto de {nombre_mes}", use_container_width=True)
+                btn_save_m = st.form_submit_button(f"💾 Guardar Presupuesto de {nombre_mes}", width="stretch")
                 if btn_save_m:
                     res_m = api_client.save_presupuestos_bulk(mes_pres_nuevos)
                     if res_m is not None:
@@ -522,13 +588,13 @@ for idx, tab in enumerate(tabs_meses, start=1):
                     
                     pval = 0.0
                     if presupuestos_m:
-                        pm = [p for p in presupuestos_m if p['subcategoria_id'] == s_id]
+                        pm = [p for p in presupuestos_m if (p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')) == s_id]
                         if pm:
-                            pval = pm[0]['cantidad']
+                            pval = pm[0].get('cantidad') if pm[0].get('cantidad') is not None else pm[0].get('amount', 0.0)
                     
                     rval_trans = 0.0
                     if transacciones_m:
-                        rval_trans = sum(t['cantidad'] for t in transacciones_m if t['subcategoria_id'] == s_id)
+                        rval_trans = sum(t.get('cantidad', t.get('amount', 0.0)) for t in transacciones_m if (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) == s_id)
                     
                     rval_total = pval + rval_trans
                     
@@ -612,7 +678,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
                     tooltip=["Bloque", alt.Tooltip("Porcentaje:Q", format=".1f", title="Porcentaje (%)"), alt.Tooltip("Monto:Q", format=",.2f", title="Monto Real (€)")]
                 ).properties(height=340, title="Porcentajes Reales de los Bloques")
                 
-                st.altair_chart(pie_chart, use_container_width=True)
+                st.altair_chart(pie_chart, width="stretch")
                 
             with p_col2:
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -669,14 +735,14 @@ with tab_base:
         st.info("La base de datos está vacía.")
     else:
         presupuestos_base = api_client.get_presupuestos("BASE")
-        base_map = {p['subcategoria_id']: p['cantidad'] for p in presupuestos_base} if presupuestos_base else {}
+        base_map = {(p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')): (p.get('cantidad') if p.get('cantidad') is not None else p.get('amount', 0.0)) for p in presupuestos_base} if presupuestos_base else {}
         
         with st.form("form_presupuesto_base"):
             nuevos_presupuestos = []
             
             for cat in categorias:
                 n_cat = cat['nombre']
-                subcats_c = [s for s in todas_subcats if s['categoria_id'] == cat['id']]
+                subcats_c = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
                 if not subcats_c:
                     continue
                     
@@ -703,7 +769,7 @@ with tab_base:
                         })
             
             st.markdown("<br>", unsafe_allow_html=True)
-            btn_save_base = st.form_submit_button("💾 Guardar Presupuesto Base", use_container_width=True)
+            btn_save_base = st.form_submit_button("💾 Guardar Presupuesto Base", width="stretch")
             if btn_save_base:
                 res = api_client.save_presupuestos_bulk(nuevos_presupuestos)
                 if res is not None:
@@ -773,7 +839,7 @@ with tab_radar:
         st.header("🌐 Radar Macroeconómico y Noticias")
         st.caption("Monitor ejecutivo de mercados con foco prioritario en España y la Eurozona, y canal de noticias financieras depurado con IA.")
     with col_r_btn:
-        if st.button("🔄 Actualizar Radar", use_container_width=True, key="btn_refresh_radar"):
+        if st.button("🔄 Actualizar Radar", width="stretch", key="btn_refresh_radar"):
             with st.spinner("Actualizando indicadores y analizando noticias financieras..."):
                 refresh_res = api_client.refresh_market_radar()
                 if refresh_res:
@@ -837,7 +903,7 @@ with tab_radar:
                     st.metric(label=ind["name"], value=val_str, delta=delta_str)
                     chart = _render_sparkline_chart(ind.get("sparkline_30d", []))
                     if chart:
-                        st.altair_chart(chart, use_container_width=True)
+                        st.altair_chart(chart, width="stretch")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -860,7 +926,7 @@ with tab_radar:
                     st.metric(label=ind["name"], value=val_str, delta=delta_str)
                     chart = _render_sparkline_chart(ind.get("sparkline_30d", []))
                     if chart:
-                        st.altair_chart(chart, use_container_width=True)
+                        st.altair_chart(chart, width="stretch")
 
     st.markdown("---")
 
@@ -992,7 +1058,7 @@ with tab_screener:
     with col_u_ref:
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
         if selected_universe != "custom":
-            if st.button("🔄 Actualizar Universo", use_container_width=True, key="btn_refresh_screener_univ"):
+            if st.button("🔄 Actualizar Universo", width="stretch", key="btn_refresh_screener_univ"):
                 with st.spinner("Descargando datos actualizados desde Yahoo Finance..."):
                     ref_res = api_client.refresh_screener_universe(selected_universe)
                     if ref_res:
@@ -1175,7 +1241,7 @@ with tab_screener:
 
             st.dataframe(
                 df_view,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config=col_config,
             )
@@ -1253,11 +1319,11 @@ with tab_deepdive:
 
     with col_btn_analizar:
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        analizar_clicked = st.button("🔍 Analizar", use_container_width=True, key="btn_deepdive_analyze")
+        analizar_clicked = st.button("🔍 Analizar", width="stretch", key="btn_deepdive_analyze")
 
     with col_btn_ref:
         st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        refresh_clicked = st.button("🔄 Refrescar", use_container_width=True, key="btn_deepdive_refresh")
+        refresh_clicked = st.button("🔄 Refrescar", width="stretch", key="btn_deepdive_refresh")
 
     # Ejecución o recuperación del análisis
     active_ticker = ticker_input or "ITX.MC"
@@ -1372,7 +1438,7 @@ with tab_deepdive:
                             "Evaluación": icon,
                             "Descripción": c.get("description"),
                         })
-                    st.dataframe(pd.DataFrame(p_data), use_container_width=True, hide_index=True)
+                    st.dataframe(pd.DataFrame(p_data), width="stretch", hide_index=True)
 
         st.markdown("---")
 
@@ -1398,7 +1464,7 @@ with tab_deepdive:
                     xOffset="Métrica:N",
                     tooltip=["year:O", "Métrica:N", alt.Tooltip("Importe:Q", format=",.0f")]
                 ).properties(height=280)
-                st.altair_chart(chart_rev, use_container_width=True)
+                st.altair_chart(chart_rev, width="stretch")
 
             with col_g2:
                 st.markdown("**Generación de Flujos de Caja: CFO vs CapEx vs FCF (€)**")
@@ -1412,7 +1478,7 @@ with tab_deepdive:
                     color=alt.Color("Flujo:N", scale=alt.Scale(domain=["operating_cash_flow", "capital_expenditure", "free_cash_flow"], range=["#00838f", "#ef6c00", "#2e7d32"])),
                     tooltip=["year:O", "Flujo:N", alt.Tooltip("Importe:Q", format=",.0f")]
                 ).properties(height=280)
-                st.altair_chart(chart_cf, use_container_width=True)
+                st.altair_chart(chart_cf, width="stretch")
 
             # Tabla resumen de estados contables
             with st.expander("📑 Ver Tabla Completa de Estados Financieros Históricos"):
@@ -1437,7 +1503,7 @@ with tab_deepdive:
                     "cash_and_equivalents": "Efectivo",
                 }
                 df_table.columns = [table_rename_map.get(str(c), str(c)) for c in df_table.columns]
-                st.dataframe(df_table, use_container_width=True, hide_index=True)
+                st.dataframe(df_table, width="stretch", hide_index=True)
 
         st.markdown("---")
 
@@ -1493,10 +1559,126 @@ with tab_deepdive:
 
             # Valoración y Zona de Entrada por TIR
             st.markdown("#### 🎯 Valoración a 5 Años y Zona de Entrada Ideal (TIR 15% - 20%)")
-            st.success(f"**Zona de Compra con Margen de Seguridad**: {report.get('target_irr_entry_zone', 'N/D')}")
+            target_zone = report.get("target_irr_entry_zone", "N/D")
+
+            # 1. Tarjeta destacada de Zona de Compra con Margen de Seguridad
+            st.markdown(
+                f"<div class='valuation-entry-zone-card'>"
+                f"<div style='display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;'>"
+                f"  <div>"
+                f"    <span style='font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: #2e7d32;'>🎯 Zona de Compra con Margen de Seguridad</span>"
+                f"    <div style='font-size: 1.45rem; font-weight: 800; margin-top: 0.2rem;'>{target_zone}</div>"
+                f"  </div>"
+                f"  <div style='text-align: right;'>"
+                f"    <span style='font-size: 0.82rem; color: gray;'>Cotización Actual</span>"
+                f"    <div style='font-size: 1.25rem; font-weight: 700;'>{curr_price:,.2f} {currency}</div>"
+                f"  </div>"
+                f"</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+            # 2. Análisis y Comparación de Escenarios Proyectados a 5 Años
             val_proj = report.get("valuation_projections") or {}
+
+            def _clean_val(val):
+                if val is None:
+                    return None
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    clean = val.replace("€", "").replace("$", "").replace("%", "").replace("x", "").replace("X", "").strip()
+                    try:
+                        return float(clean)
+                    except ValueError:
+                        return None
+                return None
+
+            base_raw = val_proj.get("scenario_base") or val_proj.get("base") or {}
+            stress_raw = val_proj.get("scenario_stress") or val_proj.get("stress") or {}
+
+            base_target = _clean_val(base_raw.get("target_price", base_raw.get("precio_objetivo")))
+            base_pe = _clean_val(base_raw.get("exit_multiple", base_raw.get("multiplo_salida")))
+            base_irr = _clean_val(base_raw.get("expected_irr", base_raw.get("tir_esperada", base_raw.get("irr"))))
+
+            stress_target = _clean_val(stress_raw.get("target_price", stress_raw.get("precio_objetivo")))
+            stress_pe = _clean_val(stress_raw.get("exit_multiple", stress_raw.get("multiplo_salida")))
+            stress_irr = _clean_val(stress_raw.get("expected_irr", stress_raw.get("tir_esperada", stress_raw.get("irr"))))
+
+            delta_base_str = None
+            delta_stress_str = None
+
+            if base_target is not None or stress_target is not None:
+                col_sc_base, col_sc_stress = st.columns(2)
+
+                with col_sc_base:
+                    st.markdown(
+                        "<div class='valuation-scenario-card valuation-scenario-card-base'>"
+                        "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;'>"
+                        "  <strong style='font-size: 1.05rem;'>📈 Escenario Base (Central)</strong>"
+                        "  <span class='valuation-badge-base'>Probabilidad Central</span>"
+                        "</div>"
+                        "<p style='font-size: 0.84rem; color: gray; margin-bottom: 0.75rem;'>"
+                        "Crecimiento secular de ingresos, mantenimiento de márgenes operativos y conversión de caja sólida a 5 años."
+                        "</p>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                    m1, m2, m3 = st.columns(3)
+                    delta_base = ((base_target - curr_price) / curr_price * 100.0) if (base_target and curr_price) else None
+                    delta_base_str = f"{delta_base:+.1f}%" if delta_base is not None else None
+                    m1.metric("Precio Obj. 5A", f"{base_target:,.2f} {currency}" if base_target else "N/D", delta=delta_base_str)
+                    m2.metric("TIR Esperada", f"{base_irr:.1f}% / año" if base_irr is not None else "N/D", help="Tasa Interna de Retorno anualizada esperada a 5 años")
+                    m3.metric("Múltiplo PER", f"{base_pe:.1f}x" if base_pe is not None else "N/D", help="Múltiplo de salida proyectado al año 5")
+
+                with col_sc_stress:
+                    st.markdown(
+                        "<div class='valuation-scenario-card valuation-scenario-card-stress'>"
+                        "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;'>"
+                        "  <strong style='font-size: 1.05rem;'>🛡️ Escenario de Estrés (Conservador)</strong>"
+                        "  <span class='valuation-badge-stress'>Margen de Seguridad</span>"
+                        "</div>"
+                        "<p style='font-size: 0.84rem; color: gray; margin-bottom: 0.75rem;'>"
+                        "Compresión de múltiplos por tipos altos, desaceleración macro o presiones competitivas transitorias."
+                        "</p>"
+                        "</div>",
+                        unsafe_allow_html=True,
+                    )
+                    s1, s2, s3 = st.columns(3)
+                    delta_stress = ((stress_target - curr_price) / curr_price * 100.0) if (stress_target and curr_price) else None
+                    delta_stress_str = f"{delta_stress:+.1f}%" if delta_stress is not None else None
+                    s1.metric("Precio Obj. 5A", f"{stress_target:,.2f} {currency}" if stress_target else "N/D", delta=delta_stress_str)
+                    s2.metric("TIR Esperada", f"{stress_irr:.1f}% / año" if stress_irr is not None else "N/D", help="Tasa Interna de Retorno anualizada en escenario de estrés")
+                    s3.metric("Múltiplo PER", f"{stress_pe:.1f}x" if stress_pe is not None else "N/D", help="Múltiplo de salida comprimido al año 5")
+
+                # Tabla Comparativa Sintética
+                summary_data = [
+                    {
+                        "Métrica Financiera a 5 Años": "Precio Objetivo por Acción",
+                        "Escenario de Estrés 🛡️": f"{stress_target:,.2f} {currency} ({delta_stress_str})" if stress_target else "N/D",
+                        "Cotización Actual 📍": f"{curr_price:,.2f} {currency}",
+                        "Escenario Base 📈": f"{base_target:,.2f} {currency} ({delta_base_str})" if base_target else "N/D",
+                        "Zona de Entrada Óptima 🎯": target_zone,
+                    },
+                    {
+                        "Métrica Financiera a 5 Años": "Múltiplo de Salida (PER)",
+                        "Escenario de Estrés 🛡️": f"{stress_pe:.1f}x" if stress_pe else "N/D",
+                        "Cotización Actual 📍": f"{pe_t:.1f}x" if pe_t is not None else "N/D",
+                        "Escenario Base 📈": f"{base_pe:.1f}x" if base_pe else "N/D",
+                        "Zona de Entrada Óptima 🎯": "Margen de Seguridad",
+                    },
+                    {
+                        "Métrica Financiera a 5 Años": "Rentabilidad Anual Compuesta (TIR)",
+                        "Escenario de Estrés 🛡️": f"{stress_irr:.1f}% / año" if stress_irr is not None else "N/D",
+                        "Cotización Actual 📍": "—",
+                        "Escenario Base 📈": f"{base_irr:.1f}% / año" if base_irr is not None else "N/D",
+                        "Zona de Entrada Óptima 🎯": "15.0% - 20.0% / año",
+                    },
+                ]
+                st.dataframe(pd.DataFrame(summary_data), width="stretch", hide_index=True)
+
             if val_proj:
-                with st.expander("🔎 Ver Proyecciones Detalladas a 5 Años (Base vs Estrés)"):
+                with st.expander("🔎 Ver JSON técnico estructurado"):
                     st.json(val_proj)
         else:
             st.info(
@@ -1625,7 +1807,7 @@ with tab_copilot:
     with sess_col2:
         st.write("")
         st.write("")
-        if st.button("➕ Nueva conversación", key="btn_new_copilot_sess", use_container_width=True):
+        if st.button("➕ Nueva conversación", key="btn_new_copilot_sess", width="stretch"):
             new_sess = api_client.create_copilot_session()
             if new_sess and "id" in new_sess:
                 st.session_state["copilot_session_id"] = new_sess["id"]
@@ -1635,7 +1817,7 @@ with tab_copilot:
         st.write("")
         st.write("")
         if st.session_state["copilot_session_id"]:
-            if st.button("🗑️ Eliminar conversación", key="btn_del_copilot_sess", use_container_width=True):
+            if st.button("🗑️ Eliminar conversación", key="btn_del_copilot_sess", width="stretch"):
                 api_client.delete_copilot_session(st.session_state["copilot_session_id"])
                 st.session_state["copilot_session_id"] = None
                 st.rerun()
@@ -1822,7 +2004,7 @@ with tab_committee:
     btn_deliberar = st.button(
         "🚀 Convocar Deliberación del Comité Asesor",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="btn_run_committee",
     )
 
@@ -1964,7 +2146,7 @@ with tab_committee:
             with tab_diag_m:
                 if macro_sum and "indicators" in macro_sum:
                     df_macro = pd.DataFrame(macro_sum["indicators"])
-                    st.dataframe(df_macro, use_container_width=True)
+                    st.dataframe(df_macro, width="stretch")
                 else:
                     st.info("Sin datos macroeconómicos requeridos en esta consulta.")
 

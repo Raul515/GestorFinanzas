@@ -8,7 +8,7 @@ API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 
 def get_categorias():
-    """Obtiene el listado de categorías, normalizando claves para compatibilidad."""
+    """Obtiene el listado de categorías, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/categories/"
     try:
         response = requests.get(url, timeout=10)
@@ -17,8 +17,21 @@ def get_categorias():
             for c in raw:
                 if "name" in c and "nombre" not in c:
                     c["nombre"] = c["name"]
+                if "nombre" in c and "name" not in c:
+                    c["name"] = c["nombre"]
                 if "type" in c and "tipo" not in c:
                     c["tipo"] = c["type"]
+                if "tipo" in c and "type" not in c:
+                    c["type"] = c["tipo"]
+                for s in c.get("subcategories", []):
+                    if "name" in s and "nombre" not in s:
+                        s["nombre"] = s["name"]
+                    if "nombre" in s and "name" not in s:
+                        s["name"] = s["nombre"]
+                    if "category_id" in s and "categoria_id" not in s:
+                        s["categoria_id"] = s["category_id"]
+                    if "categoria_id" in s and "category_id" not in s:
+                        s["category_id"] = s["categoria_id"]
             return raw
         logger.warning("Respuesta no exitosa al consultar categorías (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -29,7 +42,7 @@ def get_categorias():
 
 
 def get_subcategorias(categoria_id=None):
-    """Obtiene subcategorías, normalizando claves para compatibilidad."""
+    """Obtiene subcategorías, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/categories/subcategories/"
     params = {}
     if categoria_id:
@@ -41,6 +54,12 @@ def get_subcategorias(categoria_id=None):
             for s in raw:
                 if "name" in s and "nombre" not in s:
                     s["nombre"] = s["name"]
+                if "nombre" in s and "name" not in s:
+                    s["name"] = s["nombre"]
+                if "category_id" in s and "categoria_id" not in s:
+                    s["categoria_id"] = s["category_id"]
+                if "categoria_id" in s and "category_id" not in s:
+                    s["category_id"] = s["categoria_id"]
             return raw
         logger.warning("Respuesta no exitosa al consultar subcategorías (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -51,7 +70,7 @@ def get_subcategorias(categoria_id=None):
 
 
 def get_presupuestos(mes):
-    """Obtiene presupuestos de un mes, normalizando claves para compatibilidad."""
+    """Obtiene presupuestos de un mes, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/budgets/{mes}"
     try:
         response = requests.get(url, timeout=10)
@@ -60,8 +79,16 @@ def get_presupuestos(mes):
             for p in raw:
                 if "month" in p and "mes" not in p:
                     p["mes"] = p["month"]
+                if "mes" in p and "month" not in p:
+                    p["month"] = p["mes"]
                 if "amount" in p and "cantidad" not in p:
                     p["cantidad"] = p["amount"]
+                if "cantidad" in p and "amount" not in p:
+                    p["amount"] = p["cantidad"]
+                if "subcategory_id" in p and "subcategoria_id" not in p:
+                    p["subcategoria_id"] = p["subcategory_id"]
+                if "subcategoria_id" in p and "subcategory_id" not in p:
+                    p["subcategory_id"] = p["subcategoria_id"]
             return raw
         logger.warning("Respuesta no exitosa al consultar presupuestos de %s (%s): %s", mes, response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -72,7 +99,7 @@ def get_presupuestos(mes):
 
 
 def get_transacciones(mes=None):
-    """Obtiene transacciones de un mes, normalizando claves para compatibilidad."""
+    """Obtiene transacciones de un mes, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/transactions/"
     params = {}
     if mes:
@@ -84,10 +111,20 @@ def get_transacciones(mes=None):
             for t in raw:
                 if "date" in t and "fecha" not in t:
                     t["fecha"] = t["date"]
+                if "fecha" in t and "date" not in t:
+                    t["date"] = t["fecha"]
                 if "amount" in t and "cantidad" not in t:
                     t["cantidad"] = t["amount"]
+                if "cantidad" in t and "amount" not in t:
+                    t["amount"] = t["cantidad"]
                 if "description" in t and "concepto" not in t:
                     t["concepto"] = t["description"]
+                if "concepto" in t and "description" not in t:
+                    t["description"] = t["concepto"]
+                if "subcategory_id" in t and "subcategoria_id" not in t:
+                    t["subcategoria_id"] = t["subcategory_id"]
+                if "subcategoria_id" in t and "subcategory_id" not in t:
+                    t["subcategory_id"] = t["subcategoria_id"]
             return raw
         logger.warning("Respuesta no exitosa al consultar transacciones (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -113,6 +150,10 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
                 res["fecha"] = res["date"]
             if "amount" in res and "cantidad" not in res:
                 res["cantidad"] = res["amount"]
+            if "subcategory_id" in res and "subcategoria_id" not in res:
+                res["subcategoria_id"] = res["subcategory_id"]
+            if "description" in res and "concepto" not in res:
+                res["concepto"] = res["description"]
             return res
         logger.warning("Error al crear transacción (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -122,18 +163,55 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
     return None
 
 
+def delete_transaction(transaction_id: int) -> bool:
+    """
+    Elimina una transacción por su identificador en el backend.
+    Registra cualquier fallo de red o error HTTP en el logger (Principio 13).
+    """
+    url = f"{API_URL}/transactions/{transaction_id}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            logger.info("Transacción %s eliminada exitosamente en el backend", transaction_id)
+            return True
+        logger.error(
+            "Error al eliminar transacción %s en %s (HTTP %s): %s",
+            transaction_id,
+            url,
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al eliminar transacción en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_transaction(%s): %s", transaction_id, e)
+    return False
+
+
+delete_transaccion = delete_transaction
+
+
 def save_presupuestos_bulk(presupuestos_list):
     url = f"{API_URL}/budgets/bulk"
     payload = []
     for p in presupuestos_list:
         m = p.get("month") or p.get("mes")
-        s = p.get("subcategory_id")
+        s = p.get("subcategory_id") if p.get("subcategory_id") is not None else p.get("subcategoria_id")
         a = p.get("amount") if p.get("amount") is not None else p.get("cantidad", 0.0)
         payload.append({"month": m, "subcategory_id": s, "amount": a})
     try:
         response = requests.post(url, json=payload, timeout=10)
         if response.status_code == 200:
-            return response.json()
+            res = response.json()
+            if isinstance(res, list):
+                for p in res:
+                    if "month" in p and "mes" not in p:
+                        p["mes"] = p["month"]
+                    if "amount" in p and "cantidad" not in p:
+                        p["cantidad"] = p["amount"]
+                    if "subcategory_id" in p and "subcategoria_id" not in p:
+                        p["subcategoria_id"] = p["subcategory_id"]
+            return res
         logger.warning("Error al guardar presupuestos en bloque (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red o conexión al guardar presupuestos en bloque en %s: %s", url, e)

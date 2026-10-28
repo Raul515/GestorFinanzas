@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from backend.domain.schemas import transactions as schemas
 from backend.database.componentes.sqlite_db import get_db
 from backend.database.componentes.sqlite_crud import SQLiteRepository
@@ -23,4 +23,19 @@ def read_transactions(month: Optional[str] = None, repo: ITransactionRepository 
 def create_transaction(transaction: schemas.TransactionCreate, repo: ITransactionRepository = Depends(get_repo)):
     """Registra una nueva transacción y sincroniza automáticamente el fondo de emergencia si corresponde."""
     return repo.create_transaction(transaction)
+
+
+@router.delete("/{transaction_id}", response_model=Dict[str, Any])
+def delete_transaction(transaction_id: int, repo: ITransactionRepository = Depends(get_repo)) -> Dict[str, Any]:
+    """
+    Elimina físicamente una transacción contable por su identificador y revierte
+    automáticamente su impacto en el fondo de emergencia si correspondía a dicha subcategoría.
+    """
+    deleted = repo.delete_transaction(transaction_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transaction not found",
+        )
+    return {"status": "deleted", "transaction_id": transaction_id}
 

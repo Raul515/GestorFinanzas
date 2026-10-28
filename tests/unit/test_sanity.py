@@ -264,6 +264,33 @@ def test_frontend_api_client_committee_method(mock_post):
     assert kwargs["json"]["initial_notes"] == "Prueba unitaria de cliente"
 
 
+@patch("frontend.api_client.requests.delete")
+def test_frontend_api_client_delete_transaction(mock_delete):
+    """Verifica las llamadas del método cliente para la eliminación de transacciones y su gestión de errores."""
+    import requests
+
+    # 1. Éxito: HTTP 200
+    mock_resp_ok = MagicMock()
+    mock_resp_ok.status_code = 200
+    mock_resp_ok.json.return_value = {"status": "deleted", "transaction_id": 42}
+    mock_delete.return_value = mock_resp_ok
+
+    assert api_client.delete_transaction(42) is True
+    assert api_client.delete_transaccion(42) is True
+
+    # 2. Error HTTP 404
+    mock_resp_err = MagicMock()
+    mock_resp_err.status_code = 404
+    mock_resp_err.text = "Transaction not found"
+    mock_delete.return_value = mock_resp_err
+
+    assert api_client.delete_transaction(9999) is False
+
+    # 3. Error de red (ConnectionError)
+    mock_delete.side_effect = requests.exceptions.ConnectionError("Connection refused")
+    assert api_client.delete_transaction(42) is False
+
+
 
 
 
