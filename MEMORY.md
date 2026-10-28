@@ -75,6 +75,7 @@
 | **2026-10-28** | Spec 006 Fase 2 Completada | Endpoint REST `DELETE /transactions/{transaction_id}` en `src/backend/api/routers/transactions.py` con respuesta 200 OK y 404 Not Found, reversión verificada del fondo de emergencia y 4 pruebas de integración en `test_transactions_api.py`. Suite global ampliada a 210/210 pruebas pasando al 100%. |
 | **2026-10-28** | Spec 006 Fase 3 Completada | Integración en Frontend: método cliente `delete_transaction` con logging estructurado en `api_client.py`, expander interactivo `"📋 Historial de Transacciones de {nombre_mes}"` en cada pestaña mensual de Streamlit (`app.py`) con popover de confirmación segura, notificación con `st.toast`, reactividad inmediata con `st.rerun()`, y prueba unitaria en `test_sanity.py`. Suite global ampliada a 211/211 pruebas pasando al 100%. |
 | **2026-10-28** | Spec 006 Completada al 100% | Historial y Gestión de Transacciones finalizado con éxito: persistencia desacoplada en SQLite con reversión atómica automática del saldo del Fondo de Emergencia (`EmergencyFund`), endpoint REST `DELETE /transactions/{transaction_id}`, cliente frontend con observabilidad de red (Principio 13), interfaz interactiva en Streamlit con confirmación de borrado y cero regresiones con 211/211 pruebas pasando al 100%. |
+| **2026-10-28** | Spec 007 Definida: Sistema de Logs Rotativos Persistentes | Especificación técnica acordada para logs desacoplados en disco (`logs/backend.log` y `logs/frontend.log`), rotación por tamaño (5 MB con 3 copias de respaldo), nivel `INFO` por defecto configurable vía `.env`, filtro de sanitización de secretos (`PrivacyFilter`) y acceso exclusivo en servidor/disco sin visor UI. |
 
 ---
 
@@ -87,7 +88,24 @@
 5. **Spec 004 Completada**: Copiloto Patrimonial con Function Calling bajo demanda, doble tesis, persistencia local en SQLite y salvaguarda de riesgo (159 pruebas pasando al 100%).
 6. **Spec 005 Completada**: Orquestación Multiagente con LangGraph bajo arquitectura modular en `src/backend/` (`agents/`, `components/`, `domain/`, `external_components/`, `api/`). 201 pruebas pasando al 100%.
 7. **Spec 006 Completada**: Historial y Gestión de Transacciones (Eliminación segura con confirmación directa y reversión automática del saldo del Fondo de Emergencia). 211 pruebas pasando al 100%.
-8. **Mejoras Técnicas Futuras**:
-   - Configuración de `RotatingFileHandler` para persistencia rotativa de logs en disco (`logs/app.log`).
+8. **Spec 007 Definida**: Sistema de Logs Rotativos Persistentes (Ficheros independientes `logs/backend.log` y `logs/frontend.log`, 5 MB, 3 backups y sanitización de privacidad).
+9. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
+   - **Arquitectura Multi-Perfil para Parejas / Finanzas Compartidas (Perfiles Privados y Cuenta Conjunta)**:
+     - Selector de perfiles en la aplicación:
+       1. **Perfiles Individuales** (ej. Persona 1 / Persona 2) protegidos por contraseña privada individual, manteniendo información contable, gastos personales y patrimonio aislados.
+       2. **Perfil Conjunto / Mixto** (compartido): visualización de aportaciones netas de cada miembro hacia la cuenta común, gastos compartidos del hogar y seguimiento de metas conjuntas.
+       3. **Reglas patrimoniales y salvaguardas específicas**: fondos conjuntos orientados a objetivos vitales comunes (ej. fondo de amortización para entrada de vivienda o hipoteca, fondo de emergencia conjunto o fondo monetario), con opción de veto total a renta variable/bolsa en la cuenta común.
+   - **Sincronización Colaborativa de Caché de Análisis Fundamental (Ahorro de Tokens de IA)**:
+     - Mecanismo de compartición o sincronización de análisis cualitativos y cuantitativos de mercado (Deep Dive / Quality Value) entre diferentes usuarios o instancias amigas.
+     - Permite que si un usuario analiza una empresa (ej. `ITX.MC`), el informe estructurado y métricas puedan ser reutilizados por otro usuario dentro de la ventana de validez (TTL de 14 días), evitando llamadas redundantes a la API de Google Gemini y optimizando el consumo colectivo de cuota/tokens.
+   - **Métricas de Rendimiento y Profiling de Latencia en APIs Externas**:
+     - Monitorización de tiempos de respuesta en milisegundos para llamadas a Yahoo Finance, BCE y Gemini para diagnosticar cuellos de botella de red y optimizar tiempos de carga.
+   - **Conector MCP / Gmail para Newsletters Financieras (Ingesta y Síntesis Agéntica de Tesis de Inversión)**:
+     - Servidor MCP o conector seguro a la API de Gmail con permiso restringido (`gmail.readonly`) filtrado estrictamente por remitente (ej. newsletters especializadas como *Visual Faktory*) o etiqueta específica (`newsletter-inversion`).
+     - Procesamiento y síntesis inteligente mediante el motor de LLM (ampliando el Radar de Noticias y el Copiloto):
+       1. **Extracción de Tesis y Estrategias Clave**: síntesis ejecutiva de conceptos avanzados (ej. inversión por dividendos crecientes DGI vs trampas de alto rendimiento/yield traps, fiscalidad nacional e internacional como W-8BEN, payout sostenible).
+       2. **Generación Automática de Filtros Cuantitativos**: traducción de pautas sugeridas en la newsletter (ej. Yield 2.5% - 6.0%, Payout < 70%, dividendos crecientes por > 10 años) hacia nuevos presets del Screener (`screener_service.py`) o candidatos para la Watchlist.
+       3. **Privacidad Absoluta (Principios 10 y 11)**: aislamiento estricto del buzón; prohibido procesar correos personales ajenos a los filtros autorizados.
+
 
 
