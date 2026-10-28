@@ -436,7 +436,7 @@ src/backend/data/
 *.bak
 *secret*
 *credential*
-*.log
+*.log*
 logs/
 .DS_Store
 Thumbs.db
