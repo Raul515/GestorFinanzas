@@ -24,7 +24,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COPILOT_MODEL = "gemini-2.5-pro"
+DEFAULT_COPILOT_MODEL = "gemini-3.5-flash-lite"
 
 SYSTEM_INSTRUCTION = """
 Eres el 'Copiloto Patrimonial', un asistente sénior de inteligencia financiera y asesoría patrimonial integrado en la aplicación de gestión de finanzas personales.

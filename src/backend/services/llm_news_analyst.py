@@ -22,7 +22,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemma-4-31b-it"
 
 SYSTEM_INSTRUCTION = """
 Eres un analista macroeconómico y financiero sénior, extremadamente riguroso, sobrio y objetivo.
@@ -85,7 +85,7 @@ def analyze_news_batch(
     model_name: Optional[str] = None,
 ) -> Tuple[List[AnalyzedNewsItem], bool]:
     """
-    Analiza un lote de noticias financieras mediante la API de Google Gemini Pro.
+    Analiza un lote de noticias financieras mediante la API de Google Gemini / Gemma.
     Retorna una tupla con (lista de noticias analizadas, ai_analysis_available).
     En caso de falta de clave o fallo de red/cuota, degrada elegantemente sin lanzar excepción.
     """
@@ -101,7 +101,12 @@ def analyze_news_batch(
         )
         return fallback, False
 
-    raw_model = model_name or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+    raw_model = (
+        model_name
+        or os.getenv("GEMINI_NEWS_MODEL")
+        or os.getenv("GEMINI_MODEL")
+        or DEFAULT_GEMINI_MODEL
+    )
     target_model = raw_model.strip().strip("'\"") or DEFAULT_GEMINI_MODEL
 
     # Construir contenido optimizado para el lote (RNF-3: economía de tokens)
@@ -114,69 +119,80 @@ def analyze_news_batch(
         + json.dumps(items_payload, ensure_ascii=False, indent=2)
     )
 
-    try:
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            response_mime_type="application/json",
-            temperature=0.2,
-        )
+    models_to_try = [target_model]
+    if target_model != "gemma-4-26b-a4b-it" and "gemma" in target_model.lower():
+        models_to_try.append("gemma-4-26b-a4b-it")
 
-        response = client.models.generate_content(
-            model=target_model,
-            contents=prompt_text,
-            config=config,
-        )
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_INSTRUCTION,
+        response_mime_type="application/json",
+        temperature=0.2,
+    )
 
-        raw_text = response.text or "[]"
-        parsed_results = json.loads(raw_text)
+    last_error = None
+    parsed_results = None
 
-        if not isinstance(parsed_results, list):
-            raise ValueError(f"La respuesta del modelo no es una lista JSON: {type(parsed_results)}")
-
-        # Mapear los resultados por id
-        results_by_id = {}
-        for entry in parsed_results:
-            if isinstance(entry, dict) and "id" in entry:
-                results_by_id[str(entry["id"])] = entry
-
-        valid_impacts = {i.value for i in ImpactLevel}
-        valid_topics = {t.value for t in NewsTopic}
-
-        analyzed_items: List[AnalyzedNewsItem] = []
-        for item in news_items:
-            analysis = results_by_id.get(item.id, {})
-            impact = analysis.get("impact", ImpactLevel.MEDIUM.value)
-            if impact not in valid_impacts:
-                impact = ImpactLevel.MEDIUM.value
-
-            topic = analysis.get("topic", NewsTopic.MACROECONOMY.value)
-            if topic not in valid_topics:
-                topic = NewsTopic.MACROECONOMY.value
-
-            summary = analysis.get("summary") or item.title
-
-            analyzed_items.append(
-                AnalyzedNewsItem(
-                    id=item.id,
-                    title=item.title,
-                    link=item.link,
-                    source=item.source,
-                    published_at=item.published_at,
-                    impact=impact,
-                    topic=topic,
-                    summary=summary,
-                )
+    for m in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=m,
+                contents=prompt_text,
+                config=config,
             )
+            raw_text = response.text or "[]"
+            parsed_results = json.loads(raw_text)
+            if not isinstance(parsed_results, list):
+                raise ValueError(f"La respuesta del modelo no es una lista JSON: {type(parsed_results)}")
+            target_model = m
+            break
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Error durante el análisis de noticias con ({m}): {e}")
 
-        return analyzed_items, True
-
-    except Exception as e:
-        logger.warning(f"Error durante el análisis de noticias con Gemini ({target_model}): {e}")
+    if parsed_results is None:
+        logger.warning(f"Todos los modelos de noticias fallaron. Último error: {last_error}")
         fallback = _fallback_analyzed_items(
             news_items,
-            reason_message="Análisis de IA no disponible temporalmente (error al consultar Gemini API).",
+            reason_message="Análisis de IA no disponible temporalmente (error al consultar Gemini/Gemma API).",
         )
         return fallback, False
+
+    # Mapear los resultados por id
+    results_by_id = {}
+    for entry in parsed_results:
+        if isinstance(entry, dict) and "id" in entry:
+            results_by_id[str(entry["id"])] = entry
+
+    valid_impacts = {i.value for i in ImpactLevel}
+    valid_topics = {t.value for t in NewsTopic}
+
+    analyzed_items: List[AnalyzedNewsItem] = []
+    for item in news_items:
+        analysis = results_by_id.get(item.id, {})
+        impact = analysis.get("impact", ImpactLevel.MEDIUM.value)
+        if impact not in valid_impacts:
+            impact = ImpactLevel.MEDIUM.value
+
+        topic = analysis.get("topic", NewsTopic.MACROECONOMY.value)
+        if topic not in valid_topics:
+            topic = NewsTopic.MACROECONOMY.value
+
+        summary = analysis.get("summary") or item.title
+
+        analyzed_items.append(
+            AnalyzedNewsItem(
+                id=item.id,
+                title=item.title,
+                link=item.link,
+                source=item.source,
+                published_at=item.published_at,
+                impact=impact,
+                topic=topic,
+                summary=summary,
+            )
+        )
+
+    return analyzed_items, True
 
 
 def get_analyzed_market_news(

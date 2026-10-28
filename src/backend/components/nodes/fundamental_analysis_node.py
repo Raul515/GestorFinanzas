@@ -92,7 +92,7 @@ def fundamental_analysis_node(
     if api_key or client is not None:
         try:
             genai_client = client or genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-2.5-pro"
+            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 
             prompt_user = (
                 f"Analiza la siguiente información contable cuantitativa de '{company_name}' ({clean_ticker}) "

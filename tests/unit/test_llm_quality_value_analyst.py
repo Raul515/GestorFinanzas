@@ -93,7 +93,7 @@ def test_get_configured_deepdive_model_precedence():
 
     # 4. Fallback por defecto si no hay variables
     with patch.dict(os.environ, {}, clear=True):
-        assert get_configured_deepdive_model() == "gemini-2.5-pro"
+        assert get_configured_deepdive_model() == "gemini-3.5-flash-lite"
 
 
 @patch.dict(os.environ, {}, clear=True)

@@ -84,7 +84,7 @@ def synthesis_node(
     if api_key or client is not None:
         try:
             genai_client = client or genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-2.5-pro"
+            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 
             risks_formatted = "\n".join(f"- {r}" for r in bear_risks) if bear_risks else "- Sin riesgos particulares reportados."
 

@@ -19,7 +19,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DEEPDIVE_MODEL = "gemini-2.5-pro"
+DEFAULT_DEEPDIVE_MODEL = "gemini-3.5-flash-lite"
 
 SYSTEM_INSTRUCTION = """
 Eres un analista de inversión institucional sénior especializado en la metodología 'Quality Value'.
