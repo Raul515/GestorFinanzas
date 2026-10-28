@@ -22,30 +22,43 @@ def calculate_category_totals(
     totales_m: Dict[str, Dict[str, Any]] = {}
 
     for cat in categorias:
-        cat_subcats = [s for s in todas_subcats if s["categoria_id"] == cat["id"]]
+        cat_id = cat.get("id")
+        cat_subcats = [
+            s for s in todas_subcats 
+            if (s.get("categoria_id") if s.get("categoria_id") is not None else s.get("category_id")) == cat_id
+        ]
         t_pres = 0.0
         t_real = 0.0
 
         for s in cat_subcats:
-            s_id = s["id"]
+            s_id = s.get("id")
             pval = 0.0
             if presupuestos_m:
-                p_match = [p for p in presupuestos_m if p["subcategoria_id"] == s_id]
+                p_match = [
+                    p for p in presupuestos_m 
+                    if (p.get("subcategoria_id") if p.get("subcategoria_id") is not None else p.get("subcategory_id")) == s_id
+                ]
                 if p_match:
-                    pval = p_match[0]["cantidad"]
+                    pval = p_match[0].get("cantidad") if p_match[0].get("cantidad") is not None else p_match[0].get("amount", 0.0)
             t_pres += pval
 
             tval = 0.0
             if transacciones_m:
-                r_match = [t["cantidad"] for t in transacciones_m if t["subcategoria_id"] == s_id]
+                r_match = [
+                    t.get("cantidad") if t.get("cantidad") is not None else t.get("amount", 0.0)
+                    for t in transacciones_m 
+                    if (t.get("subcategoria_id") if t.get("subcategoria_id") is not None else t.get("subcategory_id")) == s_id
+                ]
                 tval = sum(r_match)
 
             t_real += (pval + tval)
 
-        totales_m[cat["nombre"]] = {
+        c_name = cat.get("nombre") or cat.get("name", "")
+        c_type = cat.get("tipo") or cat.get("type", "")
+        totales_m[c_name] = {
             "presupuesto": t_pres,
             "real": t_real,
-            "tipo": cat["tipo"],
+            "tipo": c_type,
             "subcategorias": cat_subcats,
         }
 
@@ -129,10 +142,14 @@ def get_monthly_needs_budget(
     Extrae el total presupuestado en Necesidades Básicas para un mes determinado o plantilla BASE.
     Filtra las subcategorías correspondientes a categoria_necesidades_id.
     """
-    nec_subcat_ids = {s["id"] for s in subcategorias if s.get("categoria_id") == categoria_necesidades_id}
+    nec_subcat_ids = {
+        s["id"] for s in subcategorias 
+        if (s.get("categoria_id") if s.get("categoria_id") is not None else s.get("category_id")) == categoria_necesidades_id
+    }
     total_needs = 0.0
     for p in presupuestos:
-        if p.get("subcategoria_id") in nec_subcat_ids:
-            total_needs += float(p.get("cantidad", 0.0))
+        sub_id = p.get("subcategoria_id") if p.get("subcategoria_id") is not None else p.get("subcategory_id")
+        if sub_id in nec_subcat_ids:
+            total_needs += float(p.get("cantidad") if p.get("cantidad") is not None else p.get("amount", 0.0))
     return total_needs
 

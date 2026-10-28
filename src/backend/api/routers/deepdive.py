@@ -3,6 +3,7 @@ Router REST para el Análisis Fundamental en Profundidad (Deep Dive) con caché 
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/deepdive", tags=["deepdive"])
 
 CACHE_KEY_PREFIX = "deepdive_"
-DEFAULT_TTL_HOURS = 24
+DEFAULT_CACHE_TTL_DAYS = int(os.getenv("DEEPDIVE_CACHE_TTL_DAYS", "14"))
+DEFAULT_TTL_HOURS = DEFAULT_CACHE_TTL_DAYS * 24
 
 
 def get_repo(db: Session = Depends(get_db)) -> IRepository:

@@ -88,6 +88,50 @@ div[data-testid="stMetricValue"] {
     margin-bottom: 1rem;
 }
 
+/* Proyecciones de Valoración a 5 Años (Quality Value) */
+.valuation-entry-zone-card {
+    background: rgba(46, 125, 50, 0.08);
+    border: 1px solid rgba(76, 175, 80, 0.35);
+    border-left: 6px solid #2e7d32;
+    border-radius: 10px;
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1.25rem;
+}
+
+.valuation-scenario-card {
+    background: rgba(128, 128, 128, 0.04);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.valuation-scenario-card-base {
+    border-top: 4px solid #1976d2;
+}
+
+.valuation-scenario-card-stress {
+    border-top: 4px solid #f57f17;
+}
+
+.valuation-badge-base {
+    background-color: rgba(25, 118, 210, 0.12);
+    color: #1976d2;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.valuation-badge-stress {
+    background-color: rgba(245, 127, 23, 0.12);
+    color: #f57f17;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
 /* Copiloto Patrimonial */
 .copilot-tool-badge {
     display: inline-block;

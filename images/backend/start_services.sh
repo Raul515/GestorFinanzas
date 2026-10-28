@@ -8,6 +8,7 @@ term_handler() {
 
 trap 'term_handler' SIGTERM SIGINT
 
+python -m backend.init_db_data
 python -m uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
