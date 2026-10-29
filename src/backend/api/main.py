@@ -14,6 +14,7 @@ from backend.api.routers import (
     watchlist,
     copilot,
     committee,
+    guidelines,
 )
 from backend.database.componentes.sqlite_db import init_db
 
@@ -70,6 +71,7 @@ app.include_router(deepdive.router)
 app.include_router(watchlist.router)
 app.include_router(copilot.router)
 app.include_router(committee.router)
+app.include_router(guidelines.router)
 
 
 

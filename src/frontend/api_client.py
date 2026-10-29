@@ -594,4 +594,73 @@ def run_investment_committee(ticker=None, month=None, initial_notes=None):
     return None
 
 
+# ==========================================
+# 9. PAUTAS DETERMINISTAS DE GESTIÓN (SPEC 008)
+# ==========================================
+
+def get_monthly_guidelines(
+    month_key: str,
+    month_name: str,
+    real_income: float,
+    budget_income: float,
+    real_needs: float,
+    real_wants: float,
+    real_savings: float,
+    safety_status=None,
+):
+    """
+    Solicita al backend la evaluación determinista de pautas y compensación para un mes.
+    Retorna el informe tipado serializado a diccionario, o None si ocurre un fallo.
+    """
+    url = f"{API_URL}/guidelines/monthly"
+    payload = {
+        "month_key": month_key,
+        "month_name": month_name,
+        "real_income": float(real_income or 0.0),
+        "budget_income": float(budget_income or 0.0),
+        "real_needs": float(real_needs or 0.0),
+        "real_wants": float(real_wants or 0.0),
+        "real_savings": float(real_savings or 0.0),
+        "safety_status": safety_status,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al consultar pautas mensuales (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar pautas mensuales en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_monthly_guidelines(): %s", e)
+    return None
+
+
+def get_annual_guidelines(metrics):
+    """
+    Solicita al backend el diagnóstico estructural y pautas anuales consolidadas.
+    Retorna el informe tipado serializado a diccionario, o None si ocurre un fallo.
+    """
+    url = f"{API_URL}/guidelines/annual"
+    payload = {"metrics": metrics}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al consultar pautas anuales (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar pautas anuales en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_annual_guidelines(): %s", e)
+    return None
+
+
+
 

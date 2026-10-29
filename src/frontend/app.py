@@ -18,8 +18,6 @@ try:
         calculate_annual_metrics,
     )
     from frontend.services.guidelines_view import (
-        evaluate_monthly_guidelines,
-        evaluate_annual_guidelines,
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
@@ -30,8 +28,6 @@ except ImportError:
         calculate_annual_metrics,
     )
     from services.guidelines_view import (  # type: ignore
-        evaluate_monthly_guidelines,
-        evaluate_annual_guidelines,
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
@@ -283,8 +279,9 @@ with tab_anual:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Spec 008: Diagnóstico Estructural y Pautas Anuales
-        annual_guideline_report = evaluate_annual_guidelines(ann_metrics)
-        render_annual_guidelines_expander(annual_guideline_report, expanded=False)
+        annual_guideline_report = api_client.get_annual_guidelines(ann_metrics)
+        if annual_guideline_report:
+            render_annual_guidelines_expander(annual_guideline_report, expanded=False)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -740,7 +737,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
 
         # Spec 008: Pautas Deterministas de Gestión y Compensación Presupuestaria
         safety_status_m = api_client.get_safety_status(mes_key)
-        monthly_guideline_report = evaluate_monthly_guidelines(
+        monthly_guideline_report = api_client.get_monthly_guidelines(
             month_key=mes_key,
             month_name=nombre_mes,
             real_income=real_ing,
@@ -750,8 +747,9 @@ for idx, tab in enumerate(tabs_meses, start=1):
             real_savings=real_aho_m,
             safety_status=safety_status_m,
         )
-        st.markdown("<br>", unsafe_allow_html=True)
-        render_monthly_guidelines_expander(monthly_guideline_report, expanded=False)
+        if monthly_guideline_report:
+            st.markdown("<br>", unsafe_allow_html=True)
+            render_monthly_guidelines_expander(monthly_guideline_report, expanded=False)
 
         # 5. TARJETA RESUMEN DEL FONDO DE EMERGENCIA (SAFETY GUARD)
         if safety_status_m:

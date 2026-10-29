@@ -1,56 +1,93 @@
 """
 Utilidades de Presentación y Renderizado para Pautas Deterministas de Gestión (Spec 008).
 Genera tablas sinópticas, tarjetas de estrategia con cifras reales y jerarquías de compensación
-compatibles con Streamlit (Light y Dark mode).
+compatibles con Streamlit (Light y Dark mode), completamente desacopladas del backend.
 """
 
-import os
-import sys
-from typing import Optional
-
-# Garantizar que src esté en sys.path
-SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
-
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, Union
 import streamlit as st
-from backend.domain.schemas.guidelines import (
-    AnnualGuidelineReport,
-    GuidelineSeverity,
-    MonthlyGuidelineReport,
-    MonthlyScenarioType,
-)
-from backend.services.guidelines_service import (
-    evaluate_monthly_guidelines,
-    evaluate_annual_guidelines,
-)
-
-__all__ = [
-    "evaluate_monthly_guidelines",
-    "evaluate_annual_guidelines",
-    "render_monthly_guidelines_expander",
-    "render_annual_guidelines_expander",
-]
 
 
-def _get_severity_colors(severity: GuidelineSeverity) -> tuple:
+class GuidelineSeverity(str, Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ALERT = "alert"
+
+
+class _DataNode:
+    """Adaptador ligero que permite acceder tanto por clave como por atributo a datos estructurados."""
+
+    def __init__(self, data: Any):
+        self._data = data
+
+    def __getattr__(self, name: str) -> Any:
+        if isinstance(self._data, dict):
+            val = self._data.get(name)
+        else:
+            val = getattr(self._data, name, None)
+
+        if isinstance(val, dict):
+            return _DataNode(val)
+        if isinstance(val, list):
+            return [_DataNode(x) if isinstance(x, (dict, list)) else x for x in val]
+        return val
+
+    def __getitem__(self, item: Any) -> Any:
+        if isinstance(self._data, dict):
+            val = self._data[item]
+        else:
+            val = getattr(self._data, str(item))
+        if isinstance(val, dict):
+            return _DataNode(val)
+        return val
+
+    def __bool__(self) -> bool:
+        return bool(self._data)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if isinstance(self._data, dict):
+            val = self._data.get(key, default)
+        else:
+            val = getattr(self._data, key, default)
+        if isinstance(val, dict):
+            return _DataNode(val)
+        return val
+
+
+def _to_node(data: Any) -> Any:
+    if data is None or isinstance(data, _DataNode):
+        return data
+    return _DataNode(data)
+
+
+def _get_severity_colors(severity: Any) -> Tuple[str, str, str]:
     """Retorna tupla de (color_borde, color_fondo, icono) según la severidad."""
-    if severity == GuidelineSeverity.ALERT:
+    sev_str = str(getattr(severity, "value", severity)).lower()
+    if sev_str == "alert":
         return "#c62828", "rgba(198, 40, 40, 0.08)", "🚨"
-    if severity == GuidelineSeverity.WARNING:
+    if sev_str == "warning":
         return "#ef6c00", "rgba(239, 108, 0, 0.08)", "⚠️"
     return "#1565c0", "rgba(21, 101, 192, 0.08)", "💡"
 
 
 def render_monthly_guidelines_expander(
-    report: MonthlyGuidelineReport,
+    report_data: Any,
     expanded: bool = False,
 ) -> None:
-    """Renderiza el componente desplegable de pautas de actuación y compensación mensual en Streamlit."""
+    """
+    Renderiza el componente desplegable de pautas de actuación y compensación mensual en Streamlit.
+    Acepta tanto diccionarios provenientes de la API como objetos serializados.
+    """
+    if not report_data:
+        return
+
+    report = _to_node(report_data)
     border_color, bg_color, icon = _get_severity_colors(report.status_severity)
 
+    overall_status = report.overall_status or "Evaluación Presupuestaria"
     expander_title = (
-        f"{icon} Pautas de Actuación y Compensación Presupuestaria ({report.overall_status})"
+        f"{icon} Pautas de Actuación y Compensación Presupuestaria ({overall_status})"
     )
 
     with st.expander(expander_title, expanded=expanded):
@@ -59,13 +96,13 @@ def render_monthly_guidelines_expander(
             f"""
             <div style="background: {bg_color}; border-left: 5px solid {border_color}; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
                 <span style="font-weight: 700; font-size: 14px; text-transform: uppercase; color: {border_color};">
-                    {icon} Diagnóstico del Mes: {report.overall_status}
+                    {icon} Diagnóstico del Mes: {overall_status}
                 </span><br>
                 <span style="font-size: 13px; opacity: 0.9;">
-                    Ingresos Reales: <strong>{report.real_income:,.2f} €</strong> | 
-                    Necesidades (50% meta): <strong>{report.real_needs:,.2f} €</strong> | 
-                    Deseos (30% meta): <strong>{report.real_wants:,.2f} €</strong> | 
-                    Ahorro Real: <strong>{report.real_savings:,.2f} € ({report.savings_rate:.1f}%)</strong>
+                    Ingresos Reales: <strong>{float(report.real_income or 0.0):,.2f} €</strong> | 
+                    Necesidades (50% meta): <strong>{float(report.real_needs or 0.0):,.2f} €</strong> | 
+                    Deseos (30% meta): <strong>{float(report.real_wants or 0.0):,.2f} €</strong> | 
+                    Ahorro Real: <strong>{float(report.real_savings or 0.0):,.2f} € ({float(report.savings_rate or 0.0):.1f}%)</strong>
                 </span>
             </div>
             """,
@@ -73,16 +110,19 @@ def render_monthly_guidelines_expander(
         )
 
         # 2. Tabla Sinóptica de Decisión Rápida
-        if report.synoptic_table:
+        synoptic_table = report.synoptic_table or []
+        if synoptic_table:
             st.markdown("##### 📋 Tabla Sinóptica de Compensación Rápida")
             table_rows_html = ""
-            for row in report.synoptic_table:
+            for row in synoptic_table:
+                touch_ef = str(row.touch_emergency_fund or "")
+                ef_color = "#ef5350" if "NUNCA" in touch_ef or "NO" in touch_ef else "#2e7d32"
                 table_rows_html += f"""
                 <tr style="border-bottom: 1px solid rgba(128, 128, 128, 0.2);">
                     <td style="padding: 8px 10px; font-weight: 600; color: inherit;">{row.scenario_name}</td>
                     <td style="padding: 8px 10px; color: inherit;">{row.funding_source}</td>
-                    <td style="padding: 8px 10px; text-align: center; font-weight: bold; color: {'#ef5350' if 'NUNCA' in row.touch_emergency_fund or 'NO' in row.touch_emergency_fund else '#2e7d32'};">
-                        {row.touch_emergency_fund}
+                    <td style="padding: 8px 10px; text-align: center; font-weight: bold; color: {ef_color};">
+                        {touch_ef}
                     </td>
                     <td style="padding: 8px 10px; color: inherit;">{row.budget_action}</td>
                 </tr>
@@ -110,9 +150,10 @@ def render_monthly_guidelines_expander(
             )
 
         # 3. Detalle de Pautas y Estrategias Activas
+        guidelines = report.guidelines or []
         st.markdown("##### 🔍 Pautas Operativas y Asignación con Cifras Reales")
 
-        for idx, g in enumerate(report.guidelines):
+        for g in guidelines:
             g_border, g_bg, g_icon = _get_severity_colors(g.severity)
 
             st.markdown(
@@ -133,15 +174,20 @@ def render_monthly_guidelines_expander(
             )
 
             # A. Jerarquía de Compensación (si aplica: déficit)
-            if g.compensation_hierarchy:
+            comp_steps = g.compensation_hierarchy or []
+            if comp_steps:
                 st.markdown("**Jerarquía de Compensación Presupuestaria:**")
-                for step in g.compensation_hierarchy:
-                    ef_tag = "⚠️ REQUIERE FUERZA MAYOR" if step.can_touch_emergency_fund else "🔒 GASTO CORRIENTE"
+                for step in comp_steps:
+                    can_touch = bool(step.can_touch_emergency_fund)
+                    ef_tag = "⚠️ REQUIERE FUERZA MAYOR" if can_touch else "🔒 GASTO CORRIENTE"
+                    amt = float(step.amount or 0.0)
+                    amt_color = "#ef5350" if amt > 0 else "inherit"
+                    border_step = "#ef5350" if can_touch else "#1565c0"
                     st.markdown(
                         f"""
-                        <div style="padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; background: rgba(128,128,128,0.08); border-left: 4px solid {'#ef5350' if step.can_touch_emergency_fund else '#1565c0'}; font-size: 13px;">
+                        <div style="padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; background: rgba(128,128,128,0.08); border-left: 4px solid {border_step}; font-size: 13px;">
                             <span style="font-weight: 700;">Línea {step.priority} ({step.source_block}):</span> 
-                            <strong style="color: {'#ef5350' if step.amount > 0 else 'inherit'};">{step.amount:,.2f} €</strong> — {step.action_text} 
+                            <strong style="color: {amt_color};">{amt:,.2f} €</strong> — {step.action_text} 
                             <span style="font-size: 11px; float: right; opacity: 0.8; font-weight: 600;">{ef_tag}</span>
                         </div>
                         """,
@@ -149,12 +195,14 @@ def render_monthly_guidelines_expander(
                     )
 
             # B. Estrategias de Asignación (si aplica: excedente o bonus)
-            if g.strategies:
+            strategies = g.strategies or []
+            if strategies:
                 st.markdown("**Estrategias de Asignación con Cifras Reales:**")
-                cols = st.columns(len(g.strategies))
-                for s_idx, strat in enumerate(g.strategies):
+                cols = st.columns(len(strategies))
+                for s_idx, strat in enumerate(strategies):
                     with cols[s_idx]:
-                        items_html = "".join([f"<li style='margin-bottom: 5px;'>{it}</li>" for it in strat.breakdown_items])
+                        raw_items = strat.breakdown_items or []
+                        items_html = "".join([f"<li style='margin-bottom: 5px;'>{it}</li>" for it in raw_items])
                         st.markdown(
                             f"""
                             <div style="background: rgba(128,128,128,0.06); border: 1px solid rgba(128,128,128,0.2); border-radius: 8px; padding: 12px; height: 100%;">
@@ -172,56 +220,76 @@ def render_monthly_guidelines_expander(
                         )
 
             # Recomendación clave
-            st.caption(f"💡 **Recomendación Operativa:** {g.key_recommendation}")
+            if g.key_recommendation:
+                st.caption(f"💡 **Recomendación Operativa:** {g.key_recommendation}")
 
 
 def render_annual_guidelines_expander(
-    report: AnnualGuidelineReport,
+    report_data: Any,
     expanded: bool = False,
 ) -> None:
-    """Renderiza el componente de diagnóstico y pautas anuales en la Pestaña 0 de Streamlit."""
+    """
+    Renderiza el componente de diagnóstico y pautas anuales en la Pestaña 0 de Streamlit.
+    Acepta tanto diccionarios de la API como objetos serializados.
+    """
+    if not report_data:
+        return
+
+    report = _to_node(report_data)
     border_color, bg_color, icon = _get_severity_colors(report.status_severity)
 
+    overall_health = report.overall_health or "Consolidado Anual"
     expander_title = (
-        f"{icon} Diagnóstico Estructural y Pautas Anuales ({report.overall_health})"
+        f"{icon} Diagnóstico Estructural y Pautas Anuales ({overall_health})"
     )
 
     with st.expander(expander_title, expanded=expanded):
+        avg_savings = float(report.average_savings_rate or 0.0)
+        summary = report.summary_text or ""
         st.markdown(
             f"""
             <div style="background: {bg_color}; border-left: 5px solid {border_color}; padding: 12px 16px; border-radius: 6px; margin-bottom: 14px;">
                 <span style="font-weight: 700; font-size: 14px; text-transform: uppercase; color: {border_color};">
-                    {icon} Estado Anual Consolidado: {report.overall_health}
+                    {icon} Estado Anual Consolidado: {overall_health}
                 </span><br>
                 <span style="font-size: 13.5px; opacity: 0.95;">
-                    Tasa de Ahorro Media Anual: <strong>{report.average_savings_rate:.2f}%</strong> (Meta mínima: 20.00%) — {report.summary_text}
+                    Tasa de Ahorro Media Anual: <strong>{avg_savings:.2f}%</strong> (Meta mínima: 20.00%) — {summary}
                 </span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown("##### 🔬 Análisis de Factores Estructurales")
-        for g in report.guidelines:
-            g_border, g_bg, g_icon = _get_severity_colors(g.severity)
-            st.markdown(
-                f"""
-                <div style="background: {g_bg}; border: 1px solid {g_border}; border-left: 5px solid {g_border}; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <h5 style="margin: 0; font-size: 15px; font-weight: 700; color: inherit;">
-                            {g_icon} {g.title}
-                        </h5>
-                        <span style="background: {g_border}; color: white; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">
-                            {g.metric_value_text}
-                        </span>
+        guidelines = report.guidelines or []
+        if guidelines:
+            st.markdown("##### 🔬 Análisis de Factores Estructurales")
+            for g in guidelines:
+                g_border, g_bg, g_icon = _get_severity_colors(g.severity)
+                st.markdown(
+                    f"""
+                    <div style="background: {g_bg}; border: 1px solid {g_border}; border-left: 5px solid {g_border}; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <h5 style="margin: 0; font-size: 15px; font-weight: 700; color: inherit;">
+                                {g_icon} {g.title}
+                            </h5>
+                            <span style="background: {g_border}; color: white; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">
+                                {g.metric_value_text}
+                            </span>
+                        </div>
+                        <p style="margin: 0 0 8px 0; font-size: 13px; line-height: 1.45; color: inherit;">
+                            {g.description}
+                        </p>
+                        <div style="background: rgba(0,0,0,0.05); padding: 8px 12px; border-radius: 6px; font-size: 12.5px;">
+                            <strong>🛠️ Plan de Calibración:</strong> {g.action_plan}
+                        </div>
                     </div>
-                    <p style="margin: 0 0 8px 0; font-size: 13px; line-height: 1.45; color: inherit;">
-                        {g.description}
-                    </p>
-                    <div style="background: rgba(0,0,0,0.05); padding: 8px 12px; border-radius: 6px; font-size: 12.5px;">
-                        <strong>🛠️ Plan de Calibración:</strong> {g.action_plan}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+__all__ = [
+    "GuidelineSeverity",
+    "render_monthly_guidelines_expander",
+    "render_annual_guidelines_expander",
+]
