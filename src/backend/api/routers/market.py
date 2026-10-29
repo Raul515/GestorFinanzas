@@ -64,18 +64,24 @@ def get_market_news(
     """
     cached_data = repo.get_market_cache(CACHE_KEY_NEWS)
     if cached_data:
-        try:
-            cached_data["is_cached"] = True
-            return MarketNewsResponse(**cached_data)
-        except Exception as e:
-            logger.warning(f"Error deserializando caché de '{CACHE_KEY_NEWS}': {e}. Regenerando datos.")
+        # Solo servir desde caché si el análisis de IA fue exitoso.
+        # Si la caché contiene una degradación temporal previa, reintentar consulta fresca.
+        if cached_data.get("ai_analysis_available", True):
+            try:
+                cached_data["is_cached"] = True
+                return MarketNewsResponse(**cached_data)
+            except Exception as e:
+                logger.warning(f"Error deserializando caché de '{CACHE_KEY_NEWS}': {e}. Regenerando datos.")
+        else:
+            logger.info("Caché de noticias contenía degradación temporal sin IA. Reintentando consulta.")
 
     fresh_news = get_analyzed_market_news(limit=limit)
-    repo.set_market_cache(
-        key=CACHE_KEY_NEWS,
-        data=fresh_news.model_dump(mode="json"),
-        ttl_hours=DEFAULT_TTL_HOURS,
-    )
+    if fresh_news.ai_analysis_available:
+        repo.set_market_cache(
+            key=CACHE_KEY_NEWS,
+            data=fresh_news.model_dump(mode="json"),
+            ttl_hours=DEFAULT_TTL_HOURS,
+        )
     return fresh_news
 
 
@@ -101,11 +107,12 @@ def refresh_market_radar(
 
     # 3. Obtener noticias y análisis de IA frescos
     fresh_news = get_analyzed_market_news(limit=15)
-    repo.set_market_cache(
-        key=CACHE_KEY_NEWS,
-        data=fresh_news.model_dump(mode="json"),
-        ttl_hours=DEFAULT_TTL_HOURS,
-    )
+    if fresh_news.ai_analysis_available:
+        repo.set_market_cache(
+            key=CACHE_KEY_NEWS,
+            data=fresh_news.model_dump(mode="json"),
+            ttl_hours=DEFAULT_TTL_HOURS,
+        )
 
     return MarketRefreshResponse(
         message="Radar de mercado y noticias actualizado con éxito",

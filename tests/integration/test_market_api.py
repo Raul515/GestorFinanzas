@@ -141,3 +141,28 @@ def test_refresh_market_radar(client: TestClient):
         assert res_cached.status_code == 200
         assert res_cached.json()["is_cached"] is True
         assert mock_news.call_count == 1
+
+
+def test_get_market_news_does_not_cache_failure(client: TestClient):
+    """
+    Verifica que si la llamada a noticias devuelve fallo de IA (ai_analysis_available=False),
+    NO se persiste en caché de 24 horas, permitiendo que la siguiente llamada reintente.
+    """
+    with patch(
+        "backend.api.routers.market.get_analyzed_market_news"
+    ) as mock_service:
+        failed_response = _dummy_news_response(is_cached=False)
+        failed_response.ai_analysis_available = False
+        mock_service.return_value = failed_response
+
+        # 1. Primera llamada con fallo de IA
+        res1 = client.get("/market/news")
+        assert res1.status_code == 200
+        assert res1.json()["ai_analysis_available"] is False
+        assert mock_service.call_count == 1
+
+        # 2. Segunda llamada: como NO se debió cachear el fallo, debe reintentar
+        res2 = client.get("/market/news")
+        assert res2.status_code == 200
+        assert mock_service.call_count == 2
+

@@ -120,8 +120,19 @@ def analyze_news_batch(
     )
 
     models_to_try = [target_model]
-    if target_model != "gemma-4-26b-a4b-it" and "gemma" in target_model.lower():
-        models_to_try.append("gemma-4-26b-a4b-it")
+    if "gemma" in target_model.lower():
+        if target_model != "gemma-4-26b-a4b-it" and "gemma-4-26b-a4b-it" not in models_to_try:
+            models_to_try.append("gemma-4-26b-a4b-it")
+        if target_model != "gemma-4-31b-it" and "gemma-4-31b-it" not in models_to_try:
+            models_to_try.append("gemma-4-31b-it")
+
+    # Fallback garantizado a Gemini Flash Lite (modelo base fiable usado en Deep Dive y Copiloto)
+    gemini_fallback = (
+        os.getenv("GEMINI_MODEL")
+        or "gemini-3.5-flash-lite"
+    ).strip().strip("'\"")
+    if gemini_fallback and gemini_fallback not in models_to_try:
+        models_to_try.append(gemini_fallback)
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_INSTRUCTION,
