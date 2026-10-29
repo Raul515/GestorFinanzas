@@ -78,6 +78,7 @@
 | **2026-10-28** | Spec 007 Definida: Sistema de Logs Rotativos Persistentes | Especificación técnica acordada para logs desacoplados en disco (`logs/backend.log` y `logs/frontend.log`), rotación por tamaño (5 MB con 3 copias de respaldo), nivel `INFO` por defecto configurable vía `.env`, filtro de sanitización de secretos (`PrivacyFilter`) y acceso exclusivo en servidor/disco sin visor UI. |
 | **2026-10-28** | Spec 007 Completada al 100% | Sistema de Observabilidad y Logs Rotativos Persistentes finalizado con éxito: persistencia desacoplada en disco (`logs/backend.log` y `logs/frontend.log`), motor `RotatingFileHandler` (5 MB, 3 backups), middleware de latencia HTTP en FastAPI, filtro de sanitización de seguridad (`PrivacyFilter`) con ofuscación de claves Gemini, tokens Bearer y contraseñas a `[REDACTED]`, integración en cliente frontend Streamlit (`api_client.py`), blindaje en `.gitignore` y 26/26 pruebas de la spec pasando al 100%. |
 | **2026-10-29** | Resiliencia de Caché y Cadena de Fallback en Radar Macroeconómico | Corrección del bloqueo por degradación persistente de 24 horas: `get_market_news` y `refresh_market_radar` ahora solo persisten en SQLite (`MarketCache`) si `ai_analysis_available=True` y omiten lecturas de caché con fallos previos. Se incorporó `gemini-3.5-flash-lite` como fallback de seguridad tras los modelos Gemma en `llm_news_analyst.py` para absorber picos temporales de 503/500 de Google GenAI. |
+| **2026-10-29** | Spec 008 Definida: Pautas Deterministas de Gestión y Compensación Presupuestaria | Especificación técnica aprobada para el cálculo y presentación determinista (0% LLM, latencia cero) de jerarquías de compensación presupuestaria, planes de acción personalizados con cifras reales y diagnósticos estructurales en los meses 1-12 y en el Resumen Anual. |
 
 ---
 
@@ -91,7 +92,8 @@
 6. **Spec 005 Completada**: Orquestación Multiagente con LangGraph bajo arquitectura modular en `src/backend/` (`agents/`, `components/`, `domain/`, `external_components/`, `api/`). 201 pruebas pasando al 100%.
 7. **Spec 006 Completada**: Historial y Gestión de Transacciones (Eliminación segura con confirmación directa y reversión automática del saldo del Fondo de Emergencia). 211 pruebas pasando al 100%.
 8. **Spec 007 Completada**: Sistema de Logs Rotativos Persistentes (`logs/backend.log` y `logs/frontend.log`, 5 MB, 3 backups, middleware de latencia en FastAPI y sanitización de privacidad con `PrivacyFilter`).
-9. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
+9. **Spec 008 Aprobada**: Pautas Deterministas de Gestión y Compensación Presupuestaria (Meses y Resumen Anual).
+10. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
    - **Arquitectura Multi-Perfil para Parejas / Finanzas Compartidas (Privacidad Real y Cuenta Conjunta Sincronizada)**:
      - **Problema de Privacidad Real**: Si ambos perfiles residen en la misma base de datos sin cifrar en un único PC, el administrador/dueño del equipo puede inspeccionar el fichero SQLite en bruto (`raw`), vulnerando el aislamiento aunque el frontend pida contraseña.
      - **Modelos de Privacidad Evaluados**:

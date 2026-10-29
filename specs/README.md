@@ -13,6 +13,7 @@
 | **005** | [Orquestación LangGraph](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/005-orquestacion-langgraph/spec.md) | **Completada** | Comité Asesor de Inversión Multiagente con StateGraph de LangGraph, arquitectura modular (agents, components, domain, external_components), veto constitucional vinculante (Principio 9) y doble tesis obligatoria (Principio 12). |
 | **006** | [Gestión de Transacciones](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/006-gestion-transacciones/spec.md) | **Completada** | Visor de historial mensual, eliminación segura con confirmación y reversión automática del saldo del Fondo de Emergencia. |
 | **007** | [Sistema de Logs Rotativos](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/007-sistema-logs-rotativos/spec.md) | **Completada** | Logs independientes (backend.log y frontend.log), rotación por tamaño (5 MB, 3 backups), middleware de latencia, nivel INFO por defecto y PrivacyFilter. |
+| **008** | [Pautas de Gestión Determinista](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/008-pautas-gestion-determinista/spec.md) | **Aprobada** | Pautas de actuación, jerarquías de compensación y diagnósticos deterministas con cifras reales bajo 50/30/20 para meses y resumen anual. |
 
 
 ---
