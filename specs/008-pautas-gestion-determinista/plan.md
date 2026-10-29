@@ -4,7 +4,7 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
 
 ---
 
-### Fase 1: Esquemas de Dominio Pydantic y Motor de Reglas Deterministas en Backend
+### Fase 1: Esquemas de Dominio Pydantic y Motor de Reglas Deterministas en Backend [COMPLETADA]
 
 - **Objetivo**: Desarrollar los modelos de datos tipados y el motor puro de cálculo determinista para evaluar las desviaciones presupuestarias y emitir planes de acción en cifras reales (euros y porcentajes).
 - **Archivos a crear/modificar**:
@@ -23,17 +23,18 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_guidelines_service.py
   ```
-- **Criterio de Aceptación**: 100% de pruebas unitarias pasando.
+- **Criterio de Aceptación**: 100% de pruebas unitarias pasando (14/14 tests pasando).
 
 ---
 
-### Fase 2: Integración en Frontend Streamlit (Pestañas Mensuales y Resumen Anual)
+### Fase 2: Integración en Frontend Streamlit (Pestañas Mensuales y Resumen Anual) [COMPLETADA]
 
 - **Objetivo**: Integrar los componentes visuales interactivos en Streamlit: desplegables (`st.expander`) debajo del gráfico 50/30/20 en cada mes (1 a 12) y debajo del Flujo Dinámico en el Resumen Anual, con tablas sinópticas y estrategias personalizadas con cifras reales.
 - **Archivos a crear/modificar**:
   - `src/frontend/services/guidelines_view.py` [NUEVO: Utilidades de formateo HTML/UI para la tabla sinóptica y bloques de estrategia]
+  - `src/frontend/style.css` [MODIFICADO: Clases CSS para tarjetas de información, aviso y alerta]
   - `src/frontend/app.py` [MODIFICADO: Inserción del `st.expander` contextual en las pestañas de los meses 1-12 y en el Resumen Anual]
-  - `tests/unit/test_sanity.py` [MODIFICADO: Verificación de importación e integridad de componentes UI]
+  - `tests/unit/test_guidelines_view.py` [NUEVO: Verificación de renderizado de tablas, tarjetas y reexportación]
   - `MEMORY.md` [MODIFICADO: Registrar cierre de Spec 008]
   - `specs/README.md` [MODIFICADO: Actualizar estado de Spec 008 a Completada]
 - **Casos de Prueba a Verificar**:
@@ -42,6 +43,6 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
   - Diagnóstico estructural anual integrado en la Pestaña 0.
 - **Puerta de Verificación**:
   ```powershell
-  .\venv\Scripts\pytest -v tests/unit/test_guidelines_service.py tests/unit/test_sanity.py
+  .\venv\Scripts\pytest -v tests/unit/test_guidelines_service.py tests/unit/test_guidelines_view.py
   ```
-- **Criterio de Aceptación**: 100% de las pruebas asociadas pasando sin errores ni advertencias de tipo.
+- **Criterio de Aceptación**: 100% de las pruebas asociadas pasando sin errores ni advertencias de tipo (19/19 tests pasando).

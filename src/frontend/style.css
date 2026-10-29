@@ -260,5 +260,33 @@ div[data-testid="stMetricValue"] {
     border: 1px solid #ffe082;
 }
 
+/* Spec 008: Pautas Deterministas de Gestión y Compensación */
+.guideline-card-info {
+    background: rgba(21, 101, 192, 0.06);
+    border: 1px solid rgba(21, 101, 192, 0.25);
+    border-left: 5px solid #1565c0;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.guideline-card-warning {
+    background: rgba(239, 108, 0, 0.06);
+    border: 1px solid rgba(239, 108, 0, 0.25);
+    border-left: 5px solid #ef6c00;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.guideline-card-alert {
+    background: rgba(198, 40, 40, 0.06);
+    border: 1px solid rgba(198, 40, 40, 0.25);
+    border-left: 5px solid #c62828;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
 
 

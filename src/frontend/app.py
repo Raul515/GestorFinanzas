@@ -3,12 +3,38 @@ import pandas as pd
 import altair as alt
 from datetime import date, datetime
 import os
+import sys
+
+# Asegurar que src esté en el sys.path para resolución de módulos del frontend y backend
+SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
 import api_client
-from services.financial_calculator import (
-    calculate_category_totals,
-    calculate_503020_percentages,
-    calculate_annual_metrics
-)
+try:
+    from frontend.services.financial_calculator import (
+        calculate_category_totals,
+        calculate_503020_percentages,
+        calculate_annual_metrics,
+    )
+    from frontend.services.guidelines_view import (
+        evaluate_monthly_guidelines,
+        evaluate_annual_guidelines,
+        render_monthly_guidelines_expander,
+        render_annual_guidelines_expander,
+    )
+except ImportError:
+    from services.financial_calculator import (  # type: ignore
+        calculate_category_totals,
+        calculate_503020_percentages,
+        calculate_annual_metrics,
+    )
+    from services.guidelines_view import (  # type: ignore
+        evaluate_monthly_guidelines,
+        evaluate_annual_guidelines,
+        render_monthly_guidelines_expander,
+        render_annual_guidelines_expander,
+    )
 
 st.set_page_config(page_title="Gestor Finanzas", layout="wide")
 
@@ -253,6 +279,12 @@ with tab_anual:
                 tooltip=['Mes', 'Bloque', alt.Tooltip('Monto:Q', format=',.2f')]
             ).properties(height=200)
             st.altair_chart(bar_chart, width="stretch")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Spec 008: Diagnóstico Estructural y Pautas Anuales
+        annual_guideline_report = evaluate_annual_guidelines(ann_metrics)
+        render_annual_guidelines_expander(annual_guideline_report, expanded=False)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -706,8 +738,22 @@ for idx, tab in enumerate(tabs_meses, start=1):
                 </div>
                 """, unsafe_allow_html=True)
 
-        # 5. TARJETA RESUMEN DEL FONDO DE EMERGENCIA (SAFETY GUARD)
+        # Spec 008: Pautas Deterministas de Gestión y Compensación Presupuestaria
         safety_status_m = api_client.get_safety_status(mes_key)
+        monthly_guideline_report = evaluate_monthly_guidelines(
+            month_key=mes_key,
+            month_name=nombre_mes,
+            real_income=real_ing,
+            budget_income=pres_ing,
+            real_needs=real_nec_m,
+            real_wants=real_des_m,
+            real_savings=real_aho_m,
+            safety_status=safety_status_m,
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        render_monthly_guidelines_expander(monthly_guideline_report, expanded=False)
+
+        # 5. TARJETA RESUMEN DEL FONDO DE EMERGENCIA (SAFETY GUARD)
         if safety_status_m:
             st.markdown("<br>", unsafe_allow_html=True)
             with st.container():
