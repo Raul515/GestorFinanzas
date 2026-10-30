@@ -87,7 +87,8 @@ class SQLiteRepository(IRepository):
             date=data.get("date"),
             subcategory_id=data.get("subcategory_id"),
             amount=data.get("amount"),
-            description=data.get("description", "")
+            description=data.get("description", ""),
+            applied_strategy_id=data.get("applied_strategy_id"),
         )
         self.db.add(db_item)
         self.db.commit()
@@ -116,6 +117,41 @@ class SQLiteRepository(IRepository):
             if not db_item:
                 logger.info("Intento de eliminar transacción inexistente con ID %s", transaction_id)
                 return False
+
+            # Si la transacción está vinculada a una estrategia de pautas, revertir la estrategia completa en cascada
+            strat_id = getattr(db_item, "applied_strategy_id", None)
+            if strat_id:
+                from backend.domain.models import guidelines as guideline_models
+                applied_entry = (
+                    self.db.query(guideline_models.AppliedGuidelineStrategy)
+                    .filter(guideline_models.AppliedGuidelineStrategy.id == strat_id)
+                    .first()
+                )
+                siblings = (
+                    self.db.query(trans_model.Transaction)
+                    .filter(trans_model.Transaction.applied_strategy_id == strat_id)
+                    .all()
+                )
+                for sib in siblings:
+                    sub = (
+                        self.db.query(cat_model.Subcategory)
+                        .filter(cat_model.Subcategory.id == sib.subcategory_id)
+                        .first()
+                    )
+                    if sub and "fondo de emergencia" in sub.name.lower():
+                        self.adjust_emergency_fund_balance(-sib.amount)
+                    self.db.delete(sib)
+
+                if applied_entry:
+                    self.db.delete(applied_entry)
+                self.db.commit()
+                logger.info(
+                    "Estrategia %s y %d transacciones vinculadas eliminadas en cascada por eliminación de transacción %s",
+                    strat_id,
+                    len(siblings),
+                    transaction_id,
+                )
+                return True
 
             subcat = (
                 self.db.query(cat_model.Subcategory)

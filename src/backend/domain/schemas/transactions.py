@@ -9,6 +9,7 @@ class TransactionBase(BaseModel):
     subcategory_id: int
     amount: float
     description: Optional[str] = None
+    applied_strategy_id: Optional[int] = None
 
 
 class TransactionCreate(TransactionBase):

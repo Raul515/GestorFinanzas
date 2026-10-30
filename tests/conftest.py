@@ -13,6 +13,7 @@ from backend.domain.models import emergency_fund as fund_models
 from backend.domain.models import market_cache as cache_models
 from backend.domain.models import watchlist as watchlist_models
 from backend.domain.models import copilot as copilot_models
+from backend.domain.models import guidelines as guideline_models
 from backend.database.componentes.sqlite_db import get_db
 from backend.api.main import app
 

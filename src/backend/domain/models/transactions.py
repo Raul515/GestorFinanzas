@@ -1,5 +1,5 @@
 import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from sqlalchemy import String, Float, ForeignKey, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -7,6 +7,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from .categories import Subcategory
+    from .guidelines import AppliedGuidelineStrategy
 
 
 class Transaction(Base):
@@ -18,8 +19,17 @@ class Transaction(Base):
     subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id"))
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str] = mapped_column(String)
+    applied_strategy_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("applied_guideline_strategies.id", ondelete="CASCADE"),
+        nullable=True,
+        default=None,
+        index=True,
+    )
 
     subcategory: Mapped["Subcategory"] = relationship("Subcategory", back_populates="transactions")
+    applied_strategy: Mapped[Optional["AppliedGuidelineStrategy"]] = relationship(
+        "AppliedGuidelineStrategy", back_populates="transactions"
+    )
 
     def __init__(self, *args, **kwargs):
         # Soporte de argumentos con nombres en español para retrocompatibilidad
