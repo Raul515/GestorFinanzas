@@ -29,14 +29,14 @@ Este plan técnico desglosa la implementación de la **Especificación 009** en 
 
 ---
 
-### Fase 2: Instrumentación de Proveedores Externos (Yahoo Finance, BCE, Gemini)
+### Fase 2: Instrumentación de Proveedores Externos (Yahoo Finance, BCE, Gemini) [COMPLETADA]
 
 - **Objetivo**: Integrar las utilidades de profiling (`track_external_latency` / `@profile_external_call`) en todas las llamadas salientes a Yahoo Finance, BCE y Google Gemini en el backend, verificando la ausencia de regresiones y la captura real de métricas.
 - **Archivos a crear/modificar**:
-  - `src/backend/services/market_data.py` [MODIFICADO: Instrumentación de `_fetch_yahoo_ticker` y `_fetch_ecb_series`]
+  - `src/backend/services/market_data.py` [MODIFICADO: Instrumentación de `_extract_ticker_data` y `_fetch_ecb_series`]
   - `src/backend/services/screener_service.py` [MODIFICADO: Instrumentación de descargas cuantitativas de Yahoo Finance]
   - `src/backend/services/news_service.py` [MODIFICADO: Instrumentación de Yahoo Finance News y RSS del BCE]
-  - `src/backend/services/deepdive_service.py` [MODIFICADO: Instrumentación de consultas fundamentales de Yahoo Finance]
+  - `src/backend/services/equity_deepdive.py` [MODIFICADO: Instrumentación de consultas fundamentales de Yahoo Finance]
   - `src/backend/services/llm_quality_value_analyst.py` [MODIFICADO: Instrumentación de inferencia Gemini]
   - `src/backend/services/llm_news_analyst.py` [MODIFICADO: Instrumentación de inferencia Gemini]
   - `src/backend/services/llm_copilot_advisor.py` [MODIFICADO: Instrumentación de inferencia Gemini]

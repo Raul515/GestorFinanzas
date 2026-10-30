@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.domain.schemas.market import (
     AnalyzedNewsItem,
     ImpactLevel,
@@ -15,6 +16,7 @@ from backend.domain.schemas.market import (
     NewsItem,
     NewsTopic,
 )
+from backend.services.latency_profiler import track_external_latency
 from backend.services.news_service import fetch_financial_news
 
 # Cargar automáticamente variables de entorno desde el archivo .env si existe
@@ -145,11 +147,14 @@ def analyze_news_batch(
 
     for m in models_to_try:
         try:
-            response = client.models.generate_content(
-                model=m,
-                contents=prompt_text,
-                config=config,
-            )
+            with track_external_latency(ExternalProviderEnum.GEMINI, "news_sentiment_analysis", target=m) as ctx:
+                response = client.models.generate_content(
+                    model=m,
+                    contents=prompt_text,
+                    config=config,
+                )
+                ctx.status_code = 200
+
             raw_text = response.text or "[]"
             parsed_results = json.loads(raw_text)
             if not isinstance(parsed_results, list):

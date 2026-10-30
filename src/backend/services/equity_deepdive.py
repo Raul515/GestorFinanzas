@@ -16,6 +16,8 @@ from backend.domain.schemas.deepdive import (
     PiotroskiCriterion,
     PiotroskiScore,
 )
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
+from backend.services.latency_profiler import track_external_latency
 
 logger = logging.getLogger(__name__)
 
@@ -57,40 +59,44 @@ def fetch_historical_financials(ticker: str) -> Tuple[Dict[str, Any], List[Finan
     Retorna una tupla: (info_dict, statements_list, is_financial_institution).
     """
     clean_ticker = ticker.strip().upper()
-    ticker_obj = yf.Ticker(clean_ticker)
 
-    try:
-        info = ticker_obj.info or {}
-    except Exception as exc:
-        logger.warning("Fallo al obtener info de yfinance para %s: %s", clean_ticker, exc)
-        info = {}
+    with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "deepdive_financials", target=clean_ticker) as ctx:
+        ticker_obj = yf.Ticker(clean_ticker)
 
-    sector = info.get("sector") or ""
-    industry = info.get("industry") or ""
-    is_bank = (
-        sector.lower() == "financial services"
-        or "bank" in industry.lower()
-        or "insurance" in industry.lower()
-    )
+        try:
+            info = ticker_obj.info or {}
+        except Exception as exc:
+            logger.warning("Fallo al obtener info de yfinance para %s: %s", clean_ticker, exc)
+            info = {}
 
-    financials_df = None
-    balance_df = None
-    cashflow_df = None
+        sector = info.get("sector") or ""
+        industry = info.get("industry") or ""
+        is_bank = (
+            sector.lower() == "financial services"
+            or "bank" in industry.lower()
+            or "insurance" in industry.lower()
+        )
 
-    try:
-        financials_df = ticker_obj.financials
-    except Exception as exc:
-        logger.warning("No se pudo extraer la cuenta de resultados para %s: %s", clean_ticker, exc)
+        financials_df = None
+        balance_df = None
+        cashflow_df = None
 
-    try:
-        balance_df = ticker_obj.balance_sheet
-    except Exception as exc:
-        logger.warning("No se pudo extraer el balance de situación para %s: %s", clean_ticker, exc)
+        try:
+            financials_df = ticker_obj.financials
+        except Exception as exc:
+            logger.warning("No se pudo extraer la cuenta de resultados para %s: %s", clean_ticker, exc)
 
-    try:
-        cashflow_df = ticker_obj.cashflow
-    except Exception as exc:
-        logger.warning("No se pudo extraer el estado de flujos de caja para %s: %s", clean_ticker, exc)
+        try:
+            balance_df = ticker_obj.balance_sheet
+        except Exception as exc:
+            logger.warning("No se pudo extraer el balance de situación para %s: %s", clean_ticker, exc)
+
+        try:
+            cashflow_df = ticker_obj.cashflow
+        except Exception as exc:
+            logger.warning("No se pudo extraer el estado de flujos de caja para %s: %s", clean_ticker, exc)
+
+        ctx.status_code = 200
 
     # Identificar las columnas de ejercicios anuales disponibles
     all_cols = []

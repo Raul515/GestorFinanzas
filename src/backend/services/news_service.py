@@ -6,7 +6,9 @@ from typing import Dict, List, Optional
 import feedparser
 import yfinance as yf
 
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.domain.schemas.market import NewsItem
+from backend.services.latency_profiler import track_external_latency
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +47,10 @@ def fetch_yahoo_finance_news(ticker_symbol: str = "^IBEX", limit: int = 5) -> Li
     """Extrae noticias de Yahoo Finance para un ticker determinado (por defecto IBEX 35)."""
     items: List[NewsItem] = []
     try:
-        ticker = yf.Ticker(ticker_symbol)
-        raw_news = ticker.news or []
+        with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "news_feed", target=ticker_symbol) as ctx:
+            ticker = yf.Ticker(ticker_symbol)
+            raw_news = ticker.news or []
+            ctx.status_code = 200
         for entry in raw_news[:limit]:
             title = ""
             link = ""
@@ -93,8 +97,15 @@ def fetch_yahoo_finance_news(ticker_symbol: str = "^IBEX", limit: int = 5) -> Li
 def fetch_rss_feed_news(feed_name: str, feed_url: str, limit: int = 5) -> List[NewsItem]:
     """Extrae y normaliza noticias desde un canal RSS público."""
     items: List[NewsItem] = []
+    is_ecb = "ecb.europa.eu" in feed_url or "banco central europeo" in feed_name.lower()
+    provider = ExternalProviderEnum.ECB if is_ecb else ExternalProviderEnum.OTHER
+    op_name = "ecb_rss" if is_ecb else "rss_feed"
+
     try:
-        parsed = feedparser.parse(feed_url)
+        with track_external_latency(provider, op_name, target=feed_name) as ctx:
+            parsed = feedparser.parse(feed_url)
+            ctx.status_code = 200
+
         for entry in parsed.entries[:limit]:
             title = _clean_text(getattr(entry, "title", ""))
             link = getattr(entry, "link", "")

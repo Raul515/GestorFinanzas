@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict, List, Optional, Sequence, Union
 import yfinance as yf
 
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.domain.schemas.screener import (
     ETFScreenerItem,
     ScreenerFilterParams,
@@ -15,6 +16,7 @@ from backend.domain.schemas.screener import (
     StockScreenerItem,
     UniverseInfo,
 )
+from backend.services.latency_profiler import track_external_latency
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,13 @@ def _clean_percentage(val: Any, treat_as_ratio: bool = True) -> Optional[float]:
 def fetch_stock_item(ticker: str, info_dict: Optional[Dict[str, Any]] = None) -> Optional[StockScreenerItem]:
     """Extrae y normaliza los ratios contables y cotización de una acción."""
     try:
-        info = info_dict if info_dict is not None else yf.Ticker(ticker).info
+        if info_dict is not None:
+            info = info_dict
+        else:
+            with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "screener_stock_info", target=ticker) as ctx:
+                info = yf.Ticker(ticker).info
+                ctx.status_code = 200
+
         if not info or not isinstance(info, dict):
             logger.warning("No se recibieron datos para el ticker %s", ticker)
             return None
@@ -186,7 +194,13 @@ def fetch_stock_item(ticker: str, info_dict: Optional[Dict[str, Any]] = None) ->
 def fetch_etf_item(ticker: str, info_dict: Optional[Dict[str, Any]] = None) -> Optional[ETFScreenerItem]:
     """Extrae y normaliza las métricas operativas de un ETF cotizado."""
     try:
-        info = info_dict if info_dict is not None else yf.Ticker(ticker).info
+        if info_dict is not None:
+            info = info_dict
+        else:
+            with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "screener_etf_info", target=ticker) as ctx:
+                info = yf.Ticker(ticker).info
+                ctx.status_code = 200
+
         if not info or not isinstance(info, dict):
             logger.warning("No se recibieron datos para el ETF %s", ticker)
             return None
@@ -274,7 +288,10 @@ def fetch_custom_tickers(tickers: List[str]) -> List[ScreenerItem]:
 
     for ticker in cleaned_tickers:
         try:
-            info = yf.Ticker(ticker).info
+            with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "screener_custom_info", target=ticker) as ctx:
+                info = yf.Ticker(ticker).info
+                ctx.status_code = 200
+
             quote_type = (info.get("quoteType") or "").upper() if isinstance(info, dict) else ""
             if quote_type in ("ETF", "MUTUALFUND"):
                 item = fetch_etf_item(ticker, info_dict=info)

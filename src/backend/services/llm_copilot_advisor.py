@@ -15,10 +15,12 @@ from google.genai import types
 from sqlalchemy.orm import Session
 
 from backend.database.interfaz.db_interface import IRepository
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.services.copilot_tools import (
     COPILOT_TOOL_DEFINITIONS,
     execute_copilot_tool,
 )
+from backend.services.latency_profiler import track_external_latency
 
 load_dotenv()
 
@@ -167,11 +169,13 @@ def run_copilot_turn(
         final_text = ""
         while iterations < max_tool_iterations:
             iterations += 1
-            response = client.models.generate_content(
-                model=effective_model,
-                contents=contents,
-                config=config,
-            )
+            with track_external_latency(ExternalProviderEnum.GEMINI, "copilot_chat", target=effective_model) as ctx:
+                response = client.models.generate_content(
+                    model=effective_model,
+                    contents=contents,
+                    config=config,
+                )
+                ctx.status_code = 200
 
             # Si el modelo solicita llamadas a funciones
             if response.function_calls:

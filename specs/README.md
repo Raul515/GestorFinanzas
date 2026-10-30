@@ -14,7 +14,7 @@
 | **006** | [Gestión de Transacciones](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/006-gestion-transacciones/spec.md) | **Completada** | Visor de historial mensual, eliminación segura con confirmación y reversión automática del saldo del Fondo de Emergencia. |
 | **007** | [Sistema de Logs Rotativos](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/007-sistema-logs-rotativos/spec.md) | **Completada** | Logs independientes (backend.log y frontend.log), rotación por tamaño (5 MB, 3 backups), middleware de latencia, nivel INFO por defecto y PrivacyFilter. |
 | **008** | [Pautas de Gestión Determinista](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/008-pautas-gestion-determinista/spec.md) | **Completada** | Pautas de actuación, compensación presupuestaria, ejecución atómica, colchón prudencial y barrido de fin de mes bajo la regla 50/30/20. |
-| **009** | [Profiling de Latencia en APIs Externas](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/009-metricas-latencia-apis/spec.md) | **Aprobada** | Monitorización en milisegundos para Yahoo Finance, BCE y Gemini con búfer en RAM, percentiles y alertas. |
+| **009** | [Profiling de Latencia en APIs Externas](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/009-metricas-latencia-apis/spec.md) | **Completada** | Monitorización en milisegundos para Yahoo Finance, BCE y Gemini con búfer en RAM, percentiles y alertas. |
 
 
 ---

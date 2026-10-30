@@ -14,6 +14,8 @@ from google import genai
 from google.genai import types
 
 from backend.domain.schemas.deepdive import DeepDiveResponse, QualityValueReport
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
+from backend.services.latency_profiler import track_external_latency
 
 load_dotenv()
 
@@ -187,11 +189,13 @@ def analyze_quality_value(
             temperature=0.2,
         )
 
-        response = client.models.generate_content(
-            model=target_model,
-            contents=prompt_text,
-            config=config,
-        )
+        with track_external_latency(ExternalProviderEnum.GEMINI, "quality_value_report", target=target_model) as ctx:
+            response = client.models.generate_content(
+                model=target_model,
+                contents=prompt_text,
+                config=config,
+            )
+            ctx.status_code = 200
 
         raw_text = response.text or "{}"
         parsed_data = json.loads(raw_text)

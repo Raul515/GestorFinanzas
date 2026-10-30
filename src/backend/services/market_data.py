@@ -13,7 +13,9 @@ from typing import List, Optional, Tuple
 import requests
 import yfinance as yf
 
+from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.domain.schemas.market import MacroIndicator, MacroOverviewResponse
+from backend.services.latency_profiler import track_external_latency
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +29,11 @@ def _extract_ticker_data(
 ) -> MacroIndicator:
     """Extrae datos de cotización de Yahoo Finance: precio actual, variación porcentual y sparkline a 30 días."""
     try:
-        ticker = yf.Ticker(symbol)
-        history = ticker.history(period="1mo")
+        with track_external_latency(ExternalProviderEnum.YAHOO_FINANCE, "ticker_history", target=symbol) as ctx:
+            ticker = yf.Ticker(symbol)
+            history = ticker.history(period="1mo")
+            ctx.status_code = 200
+
         if history is not None and not history.empty and "Close" in history:
             valid_closes = history["Close"].dropna()
             if len(valid_closes) >= 2:
@@ -78,8 +83,12 @@ def _extract_ticker_data(
 
 def _fetch_ecb_series(url: str, default_val: float) -> Tuple[float, float, List[float]]:
     """Función auxiliar para obtener series de rendimiento recientes desde la API REST SDMX del Banco Central Europeo."""
+    target_name = "bund_10y" if "SV_C_YM.SR_10Y" in url else ("spain_10y" if "IRS" in url else "ecb_series")
     try:
-        res = requests.get(url, timeout=4)
+        with track_external_latency(ExternalProviderEnum.ECB, "yield_series", target=target_name) as ctx:
+            res = requests.get(url, timeout=4)
+            ctx.status_code = res.status_code
+
         if res.status_code == 200:
             data = res.json()
             datasets = data.get("dataSets", [])
