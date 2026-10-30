@@ -160,9 +160,17 @@ with tab_anual:
         desv_des = ann_metrics["desv_des"]
         desv_aho = ann_metrics["desv_aho"]
 
-        # 1. TARJETAS KPI SUPERIORES ANUALES (4 Columnas)
-        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-        
+        # 1. TARJETAS KPI SUPERIORES ANUALES (5 Tarjetas en distribución 3 + 2)
+        safety_status_anual = api_client.get_safety_status()
+        ef_balance = safety_status_anual.get("current_balance", 0.0) if safety_status_anual else 0.0
+        ef_cov = safety_status_anual.get("coverage_months", 0.0) if safety_status_anual else 0.0
+        ef_complete = safety_status_anual.get("is_completed", False) if safety_status_anual else False
+        ef_tag = "FONDO COMPLETO" if ef_complete else "EN CONSTRUCCIÓN"
+        ef_color = "#2e7d32" if ef_complete else "#ef6c00"
+        ef_bg = "rgba(46, 125, 50, 0.15)" if ef_complete else "rgba(239, 108, 0, 0.1)"
+
+        # Fila 1: 3 Columnas
+        kpi1, kpi2, kpi3 = st.columns(3)
         with kpi1:
             st.markdown(f"""<div style="background-color: rgba(21, 101, 192, 0.1); border: 2px solid #1565c0; border-radius: 8px; padding: 15px; text-align: center;">
                 <span style="font-size: 11px; font-weight: 700; color: #1565c0; text-transform: uppercase;">INGRESOS NETOS ANUALES</span>
@@ -180,11 +188,21 @@ with tab_anual:
                 <span style="font-size: 11px; font-weight: 700; color: #2e7d32; text-transform: uppercase;">TASA DE AHORRO MEDIA REAL</span>
                 <h2 style="margin: 5px 0 0 0; color: #2e7d32; font-size: 22px;">{tasa_ahorro_media:.2f}%</h2>
             </div>""", unsafe_allow_html=True)
-            
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+
+        # Fila 2: 2 Columnas
+        kpi4, kpi5 = st.columns(2)
         with kpi4:
             st.markdown(f"""<div style="background-color: rgba(0, 131, 143, 0.1); border: 2px solid #00838f; border-radius: 8px; text-align: center; padding: 15px;">
                 <span style="font-size: 11px; font-weight: 700; color: #00838f; text-transform: uppercase;">AHORRO ACUMULADO TOTAL</span>
                 <h2 style="margin: 5px 0 0 0; color: inherit; font-size: 22px;">{ahorro_acumulado_total:,.2f} €</h2>
+            </div>""", unsafe_allow_html=True)
+
+        with kpi5:
+            st.markdown(f"""<div style="background-color: {ef_bg}; border: 2px solid {ef_color}; border-radius: 8px; text-align: center; padding: 15px;">
+                <span style="font-size: 11px; font-weight: 700; color: {ef_color}; text-transform: uppercase;">FONDO DE EMERGENCIA ({ef_tag})</span>
+                <h2 style="margin: 5px 0 0 0; color: inherit; font-size: 22px;">{ef_balance:,.2f} € <span style="font-size: 14px; opacity: 0.85; font-weight: 500;">({ef_cov:.1f} meses cubiertos)</span></h2>
             </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -453,10 +471,22 @@ for idx, tab in enumerate(tabs_meses, start=1):
 
         # 3. FORMULARIO CON CATEGORÍA Y SUBCATEGORÍA FILTRADA PARA AÑADIR TRANSACCIÓN
         st.markdown("##### ➕ Añadir Nueva Transacción")
+
+        # Reset selectivo de campos tras inserción (Cantidad y Concepto a blanco; Fecha, Categoría y Subcategoría se mantienen)
+        if st.session_state.get(f"reset_tx_{mes_key}"):
+            st.session_state[f"txt_{mes_key}"] = ""
+            st.session_state[f"num_{mes_key}"] = 0.0
+            st.session_state[f"reset_tx_{mes_key}"] = False
+
         f_col1, f_col2, f_col3, f_col4, f_col5, f_col6 = st.columns([1.8, 2, 2, 2.5, 1.5, 1.2])
         
         with f_col1:
-            fecha_val = st.date_input("Fecha", value=date(year_selected, idx, min(date.today().day, 28)), key=f"dt_{mes_key}")
+            fecha_val = st.date_input(
+                "Fecha",
+                value=date(year_selected, idx, min(date.today().day, 28)),
+                key=f"dt_{mes_key}",
+                format="DD/MM/YYYY",
+            )
             
         with f_col2:
             cat_options = {c['id']: c['nombre'] for c in categorias}
@@ -480,7 +510,8 @@ for idx, tab in enumerate(tabs_meses, start=1):
         if btn_add:
             if subcat_sel_id and cant_val > 0:
                 api_client.create_transaccion(fecha_val, subcat_sel_id, cant_val, conc_val)
-                st.success("¡Transacción guardada correctamente!")
+                st.session_state[f"reset_tx_{mes_key}"] = True
+                st.toast("¡Transacción guardada correctamente!", icon="✅")
                 st.rerun()
             else:
                 st.error("Por favor, selecciona una subcategoría y una cantidad mayor a 0.")
@@ -525,7 +556,19 @@ for idx, tab in enumerate(tabs_meses, start=1):
                     cat_obj = cat_map.get(cat_id) if cat_id else None
                     cat_nombre = cat_obj["nombre"] if cat_obj else "—"
 
-                    tx_fecha = str(tx.get("fecha") or tx.get("date") or "—")
+                    raw_fecha = str(tx.get("fecha") or tx.get("date") or "—")
+                    try:
+                        if raw_fecha and raw_fecha != "—":
+                            dt_parts = raw_fecha.split("T")[0].split("-")
+                            if len(dt_parts) == 3:
+                                tx_fecha = f"{dt_parts[2]}/{dt_parts[1]}/{dt_parts[0]}"
+                            else:
+                                tx_fecha = raw_fecha
+                        else:
+                            tx_fecha = "—"
+                    except Exception:
+                        tx_fecha = raw_fecha
+
                     tx_monto = float(tx.get("cantidad") if tx.get("cantidad") is not None else tx.get("amount", 0.0))
                     tx_desc = tx.get("concepto") or tx.get("description") or "—"
 
@@ -544,9 +587,13 @@ for idx, tab in enumerate(tabs_meses, start=1):
                         with st.popover("🗑️", help="Eliminar transacción"):
                             st.markdown(f"¿Eliminar apunte de **{tx_monto:,.2f} €**?")
                             st.caption(f"{sub_nombre} ({tx_fecha})")
+                            is_pauta_tx = bool(tx.get("applied_strategy_id") or str(tx_desc).startswith("[Pauta "))
+                            if is_pauta_tx:
+                                st.warning("⚠️ **Estrategia Vinculada**: Al eliminar esta transacción, se anulará la estrategia completa y se revertirán también sus transacciones hermanas.")
                             if st.button("Confirmar", key=f"btn_del_tx_{mes_key}_{tx_id}", type="primary", width="stretch"):
                                 if api_client.delete_transaction(tx_id):
-                                    st.toast("Transacción eliminada correctamente", icon="🗑️")
+                                    msg = "Estrategia y transacciones revertidas correctamente" if is_pauta_tx else "Transacción eliminada correctamente"
+                                    st.toast(msg, icon="🗑️")
                                     st.rerun()
                                 else:
                                     st.error("Error al intentar eliminar la transacción.")
@@ -769,7 +816,7 @@ for idx, tab in enumerate(tabs_meses, start=1):
                     st.metric("Meta Objetivo", f"{safety_status_m['target_amount']:,.2f} €", f"{safety_status_m['coverage_months']:.1f} / {safety_status_m['target_months']} meses")
                 with col_sg3:
                     if safety_status_m['is_completed']:
-                        st.success(f"**Fondo Completo ({safety_status_m['coverage_months']:.1f} meses cubiertos)**: Capacidad de inversión autorizada. Asignación sugerida este mes a 'Fondo de emergencia': **0,00 €**.")
+                        st.success(f"**Fondo Completo ({safety_status_m['coverage_months']:.1f} meses cubiertos)**: Capacidad de inversión autorizada.")
                     else:
                         st.warning(f"**En Construcción ({safety_status_m['coverage_months']:.1f} / {safety_status_m['target_months']} meses)**: Faltan {safety_status_m['gap']:,.2f} €. Se prioriza la aportación a 'Fondo de emergencia' antes de invertir.")
 
@@ -1798,11 +1845,10 @@ with tab_copilot:
         "Asistente conversacional de inteligencia financiera con Function Calling bajo demanda y doble tesis obligatoria."
     )
 
-    # 1. SALVAGUARDA DE SEGURIDAD PATRIMONIAL (Principio 9 de la Constitución)
     safety_info = api_client.get_safety_status()
     if safety_info:
-        cov_months = safety_info.get("coverage_months", 0.0)
-        inv_allowed = safety_info.get("investing_allowed", False)
+        cov_months = float(safety_info.get("coverage_months", 0.0))
+        inv_allowed = bool(safety_info.get("can_invest") if "can_invest" in safety_info else safety_info.get("investing_allowed", False))
         if not inv_allowed or cov_months < 3.0:
             st.warning(
                 f"🛡️ **Salvaguarda de Seguridad Activa (Principio 9)**: Tu Fondo de Emergencia cubre "
@@ -1957,11 +2003,11 @@ with tab_committee:
     # 1. SALVAGUARDA DE SEGURIDAD PATRIMONIAL (Principio 9 de la Constitución)
     safety_committee = api_client.get_safety_status()
     if safety_committee:
-        cov_m = safety_committee.get("coverage_months", 0.0)
-        inv_ok = safety_committee.get("investing_allowed", False)
-        target_3m = safety_committee.get("target_3m", 0.0)
-        curr_bal = safety_committee.get("current_balance", 0.0)
-        unassigned_bal = safety_committee.get("unassigned_balance", 0.0)
+        cov_m = float(safety_committee.get("coverage_months", 0.0))
+        inv_ok = bool(safety_committee.get("can_invest") if "can_invest" in safety_committee else safety_committee.get("investing_allowed", False))
+        target_3m = float(safety_committee.get("target_amount") or safety_committee.get("target_3m", 0.0))
+        curr_bal = float(safety_committee.get("current_balance", 0.0))
+        unassigned_bal = float(safety_committee.get("unassigned_balance", 0.0))
 
         if not inv_ok or cov_m < 3.0:
             st.markdown(
@@ -1980,13 +2026,14 @@ with tab_committee:
                 unsafe_allow_html=True,
             )
         else:
+            unassigned_desc = f"Dispones de <strong>{unassigned_bal:,.2f} €</strong> en saldo 'Sin Asignar' para inversión estratégica." if unassigned_bal > 0 else "Tienes capacidad autorizada para evaluar asignaciones de inversión estratégica."
             st.markdown(
                 f"""
                 <div class="committee-approved-banner">
                     <h4 style="margin: 0; color: #1b5e20;">🛡️ Salvaguarda Patrimonial Superada (Cobertura: {cov_m:.1f} meses)</h4>
                     <p style="margin-top: 0.5rem; margin-bottom: 0.2rem;">
                         Tu Fondo de Emergencia ({curr_bal:,.2f} €) supera el umbral constitucional de 3 meses.
-                        Dispones de <strong>{unassigned_bal:,.2f} €</strong> en saldo 'Sin Asignar' para inversión estratégica.
+                        {unassigned_desc}
                     </p>
                     <p style="margin: 0; font-size: 0.88rem; color: #2e7d32;">
                         <em>El Comité deliberará la conveniencia y tramos de entrada bajo la estricta formulación de la doble tesis (mínimo 2 riesgos bajistas obligatorios).</em>
