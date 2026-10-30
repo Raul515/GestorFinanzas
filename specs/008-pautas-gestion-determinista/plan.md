@@ -94,7 +94,7 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
 
 ---
 
-### Fase 5: Depuración Visual, Pruebas Integrales y Consolidación [PENDIENTE]
+### Fase 5: Depuración Visual, Pruebas Integrales y Consolidación [COMPLETADA]
 
 - **Objetivo**: Corregir definitivamente los fallos visuales de la interfaz de Streamlit (erradicación de `</tbody> </table>` por indentación markdown y supresión de `st.caption` en tarjetas con estrategias preservándolo en `HIGH_UNASSIGNED`), realizar una batería integral de pruebas unitarias y de integración, y consolidar la documentación en `MEMORY.md` y `specs/README.md`.
 - **Archivos a crear/modificar**:
