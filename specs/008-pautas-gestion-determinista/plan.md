@@ -113,3 +113,91 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
   .\venv\Scripts\python -m compileall src tests
   ```
 - **Criterio de Aceptación**: 100% de las pruebas pasando y cero errores de sintaxis.
+
+---
+
+### Fase 6: Mejoras y Corrección de Bugs (Post-Fase 5) [COMPLETADA]
+
+- **Objetivo**: Corregir problemas detectados en la prueba de uso real: consolidar el Fondo de Emergencia como métrica global persistente compartida entre todas las pantallas y meses, reestructurar las tarjetas superiores del Resumen Anual (5 tarjetas en distribución 3 + 2) y pulir textos informativos del fondo en los meses.
+- **Resumen Breve de Problemas y Soluciones**:
+  1. **Reparto Dinámico 80/20** (*Completado*):
+     - *Problema*: Al seleccionar 3 divisiones se mantenían los valores previos sumando 25% en vez de 20%.
+     - *Solución*: Claves de widgets aisladas por `num_splits` y valores por defecto automáticos (2: 10/10; 3: 10/5/5; 4: 5/5/5/5).
+  2. **Excedente a Deseos como Transacción Real** (*Completado*):
+     - *Problema*: Se incrementaba `MonthlyBudget`, inflando el presupuesto y no registrándose en el historial de transacciones.
+     - *Solución*: Se crea una `Transaction` de gasto real con concepto claro sin modificar el presupuesto planificado, apareciendo en el historial.
+  3. **Persistencia y Detección de Estrategia Aplicada** (*Completado*):
+     - *Problema*: El evaluador volvía a presentar el excedente como pendiente tras haber aplicado una estrategia.
+     - *Solución*: Nuevo modelo `AppliedGuidelineStrategy` para persistir la ejecución y transicionar el estado a informativo ("Optimizado" o "Colchón Activo") suprimiendo los botones repetidos.
+  4. **Linter @current_problems** (*Completado*):
+     - *Problema*: Advertencia de `datetime.utcnow` deprecado en el modelo y error de sintaxis en `summary_headline`.
+     - *Solución*: Actualizado a `datetime.datetime.now(datetime.timezone.utc)` y eliminación de coma espuria.
+  5. **Fondo de Emergencia como Estado Global Compartido (Screener, Copiloto, Deep Dive y Meses Vacíos)** (*Completado*):
+     - *Problema*: En meses sin presupuesto de Necesidades (ej. diciembre o plantilla BASE no rellenada) y en pestañas globales (Screener, Deep Dive, Copiloto), `_resolve_monthly_needs` devolvía 0.0 €, provocando que `evaluate_safety_status` colapsara la cobertura a 0.0 meses y marcara el fondo como "En Construcción", deshabilitando la inversión a pesar de tener 730 € acumulados.
+     - *Solución*:
+       - `_resolve_monthly_needs` implementa una cadena de fallback robusta: si el mes solicitado o BASE tienen 0.0 €, busca el gasto en Necesidades del mes más reciente con datos o transacciones reales.
+       - `sync_fund_state` y `evaluate_safety_status` infieren la meta de referencia y no degradan `is_completed` a `False` si las necesidades son 0.0 € y el fondo ya tenía saldo suficiente.
+  6. **Reestructuración de Tarjetas en Resumen Anual (5 Tarjetas en Distribución 3 + 2)** (*Completado*):
+     - *Problema*: El Resumen Anual solo tenía 4 tarjetas en 1 fila y no mostraba el estado del Fondo de Emergencia ni los meses de cobertura.
+     - *Solución*:
+       - Fila 1 (3 tarjetas): Ingresos Netos Anuales, Gasto Corriente Consolidado, Tasa de Ahorro Media Real.
+       - Fila 2 (2 tarjetas): Ahorro Acumulado Total, Estado del Fondo de Emergencia (Saldo actual en € y meses cubiertos).
+  7. **Limpieza del Texto Informativo del Fondo Completo en los Meses** (*Completado*):
+     - *Problema*: En meses donde el fondo está completo se mostraba la frase redundante: *"Asignación sugerida este mes a 'Fondo de emergencia': 0,00 €."*.
+     - *Solución*: Omitida esa frase cuando `is_completed` es `True`, manteniendo el titular positivo: `Fondo Completo (X meses cubiertos): Capacidad de inversión autorizada.`.
+  8. **Sincronización de Salvaguarda en Comité Asesor y Copiloto Patrimonial** (*Completado*):
+     - *Problema*: En `app.py` ambas pestañas consultaban claves inexistentes (`investing_allowed`, `target_3m`) en vez de las propiedades de `SafetyStatusResponse` (`can_invest`, `target_amount`), evaluando permanentemente el fondo como incompleto y mostrando el veto constitucional. Además, las herramientas de backend (`copilot_tools.py` y `committee_tools.py`) no utilizaban el fallback histórico de necesidades.
+     - *Solución*: Corregir las claves en `app.py` (`can_invest`, `is_completed`, `target_amount`) y asegurar que las herramientas de IA utilicen la resolución de necesidades con fallback histórico.
+  9. **Coherencia y Concurrencia de Transacciones vs Estrategias Aplicadas (Opción A con Cascada)** (*Completado*):
+     - *Problema*: Al eliminar transacciones creadas por una estrategia de excedente desde el historial, el registro `applied_guideline_strategies` permanecía intacto, marcando falsamente el mes como optimizado y dejando dinero huérfano o asimetrías patrimoniales (ej. 80/20 parcial).
+     - *Solución*:
+       - Añadir `applied_strategy_id` con clave foránea en `Transaction` vinculada a `AppliedGuidelineStrategy`.
+       - Implementar endpoint `POST /guidelines/revert-strategy` y botón `↩️ Deshacer Estrategia` en la tarjeta de Pautas Operativas para revertir atómicamente el paquete completo (elimina transacciones, revierte saldo del fondo y restablece el excedente y tarjetas interactivas).
+  10. **Refinamiento Visual y UX de Pautas Operativas** (*Completado*):
+      - *Problema*:
+        - El botón de revertir estrategia estaba flotando abajo a la derecha de forma asimétrica y no tenía protección ante pulsaciones accidentales.
+        - Se mostraba un emoji duplicado de bombilla (`💡 💡 Colchón Prudencial...`) en el banner azul.
+        - El texto de *Recomendación Operativa* en la tarjeta naranja de Dinero Sin Asignar comenzaba a 0px a la izquierda, desalineado con el icono `⚠️` superior (desfase de 24px).
+      - *Solución*:
+        - Centrado del botón `↩️ Deshacer Estrategia` bajo el banner y encapsulado en un `st.popover` con advertencia explícita y botón primario de confirmación (`Sí, deshacer estrategia`).
+        - Eliminación del emoji redundante en el título del backend y control defensivo en frontend para no duplicar iconos.
+  11. **Barrido de Fin de Mes Inteligente con Continuidad de Estrategia (Colchón Prudencial)** (*Completado*):
+      - *Problema*: Al llegar fin de mes habiendo elegido una estrategia con Colchón Prudencial (ej. Enfoque Híbrido 80/20), el remanente no gastado en cuenta corriente se transfería al 100% a una sola subcategoría de ahorro, ignorando la asignación del 20% a deseos/amortización que el usuario había planificado para ese mes.
+      - *Solución*:
+        - Ampliar el esquema `SweepRequest` para admitir `mode: Literal["DEFAULT_SAVINGS", "INHERIT_STRATEGY"]` (o lista de asignaciones resultantes).
+        - En backend (`/guidelines/sweep`), si `mode == "INHERIT_STRATEGY"`:
+          - Reutiliza la configuración de la estrategia activa (`AppliedGuidelineStrategy`) para distribuir el remanente proporcionalmente entre Ahorro (ej. 80%) y Deseos (ej. 20%).
+          - Vincula las transacciones generadas con `applied_strategy_id`, actualiza el Fondo de Emergencia y liquida el colchón (`cushion_amount = 0.0`, `is_partial = False`).
+          - Si el modo es `DEFAULT_SAVINGS` (o no hubo estrategia previa), canaliza el 100% a la subcategoría de ahorro seleccionada.
+        - En frontend (`guidelines_view.py`), en la tarjeta de Cierre de Mes (día >= 26):
+          - Si hay colchón activo en el mes, presenta la elección clara:
+            - **Opción A (Recomendada)**: Completar la estrategia del mes (muestra el reparto exacto en € a Ahorro y Deseos).
+            - **Opción B**: Barrer 100% a Ahorro tradicional.
+          - Si no hubo estrategia previa en el mes, muestra directamente el selector tradicional de 100% a Ahorro.
+  12. **Supresión de Recomendaciones Redundantes a Fin de Mes cuando el Barrido está Activo** (*Completado*):
+      - *Problema*: Al llegar a fin de mes (día >= 26 o meses pasados) con remanente en cuenta corriente, se mostraban simultáneamente las estrategias no aplicadas de *Excedente Positivo en Necesidades Básicas* (FIRE, Sinking Fund, 80/20) y la advertencia de *Dinero Sin Asignar Elevado*, compitiendo con la tarjeta de *Barrido de Fin de Mes* cuando la única acción que corresponde ejecutar a cierre contable es dicho barrido.
+      - *Solución*:
+        - En `guidelines_view.py`, determinar si el barrido está activo (`is_sweep_active = is_month_end_window and unassigned_cash > 5.0 and bool(savings_subcats)`).
+        - Si está activo, filtrar la lista de pautas visibles suprimiendo `HIGH_UNASSIGNED`, `OPTIMAL` y `NEEDS_SURPLUS` no aplicado (preservando únicamente estados ya ejecutados como *Colchón Prudencial Activo* con su opción de deshacer, o alertas de déficit real).
+  13. **Manejo de Meses Vacíos sin Información Financiera** (*Completado*):
+      - *Problema*: En meses donde no se han registrado ingresos ni gastos (ej. meses pasados antes de usar la app o meses futuros sin rellenar), el evaluador consideraba que no había desviaciones y lo marcaba falsamente como "Cumplimiento Presupuestario Óptimo" con cifras en 0.00 €, mostrando tablas sinópticas vacías y felicitando por una disciplina inexistente.
+      - *Solución*:
+        - En backend (`guidelines_service.py`), detectar si `real_income <= 0.0` y `total_spent <= 0.0` sin estrategia aplicada. En tal caso, fijar `is_empty_month = True`, `overall_status = "Mes sin Información Financiera"`, y dejar `guidelines` y `synoptic_table` vacías.
+        - En esquema `MonthlyGuidelineReport`, añadir `is_empty_month: bool = False`.
+        - En frontend (`guidelines_view.py`), si `is_empty_month` es `True`, mostrar un desplegable informativo limpio con aviso: *"ℹ️ Mes sin información financiera. No hay registros de ingresos ni gastos para este período"*, omitiendo tablas sinópticas, métricas 50/30/20 engañosas y tarjetas de estrategia. Asimismo, se implementó control homólogo para años sin actividad en `evaluate_annual_guidelines` y `render_annual_guidelines_expander`.
+  14. **Reset Selectivo de Campos y Formato de Fecha en Nueva Transacción** (*Completado*):
+      - *Problema*: Al registrar una transacción, los campos de cantidad y concepto conservaban los valores previos obligando a borrarlos manualmente para la siguiente transacción. Además, la fecha se mostraba en formato anglosajón `AAAA/MM/DD` en vez del estándar español `DD/MM/AAAA`.
+      - *Solución*:
+        - En `app.py`, resetear automáticamente `st.session_state` de concepto (`""`) y cantidad (`0.0`) tras inserción exitosa, conservando los valores seleccionados de fecha, categoría y subcategoría para agilizar cargas consecutivas.
+        - Configurar `format="DD/MM/YYYY"` en `st.date_input` para presentar la fecha en formato día/mes/año (`DD/MM/AAAA`) y formatear de forma análoga la fecha mostrada en la tabla del historial de transacciones.
+  15. **Paridad Total de Coherencia, Persistencia, Deshacer y Cascada en Ingreso Extraordinario / Bonus (`EXTRAORDINARY_INCOME`)** (*Completado*):
+      - *Problema*: `EXTRAORDINARY_INCOME` guardaba su estrategia con `scenario_type = 'NEEDS_SURPLUS'` hardcodeado en el backend, provocando colisión con la estrategia de necesidades, impidiendo que el evaluador reconociera el bonus como ya asignado y omitiendo el botón `↩️ Deshacer Estrategia` en la vista.
+      - *Solución*:
+        - En `guidelines.py` (`apply_guideline_strategy_endpoint`), desacoplar y parametrizar `target_scenario = 'EXTRAORDINARY_INCOME'` cuando `request.strategy_type == 'EXTRAORDINARY_INCOME'` y guardar el registro `AppliedGuidelineStrategy` con aislamiento total.
+        - Generar transacciones vinculadas con `applied_strategy_id` y descripciones distintivas (`[Pauta EXTRAORDINARY_INCOME] Bonus Extraordinario`).
+        - En `guidelines_view.py`, habilitar la visualización del icono `✅` y el botón central `↩️ Deshacer Estrategia` con popover de confirmación para estados con 'Asignado'.
+        - Asegurar soporte de coexistencia multi-estrategia (`applied_strategies_map`) para meses con excedente en necesidades y bonus extraordinario concurrente.
+        - Cobertura 100% probada con tests unitarios e integrados de aplicación, reporte informativo sin formularios redundantes, reversión atómica vía API y reversión en cascada al borrar una transacción vinculada desde el historial.
+
+
+
