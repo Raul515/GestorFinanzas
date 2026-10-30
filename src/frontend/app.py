@@ -749,7 +749,13 @@ for idx, tab in enumerate(tabs_meses, start=1):
         )
         if monthly_guideline_report:
             st.markdown("<br>", unsafe_allow_html=True)
-            render_monthly_guidelines_expander(monthly_guideline_report, expanded=False)
+            render_monthly_guidelines_expander(
+                monthly_guideline_report,
+                expanded=False,
+                subcategories=todas_subcats,
+                categories=categorias,
+                api_client=api_client,
+            )
 
         # 5. TARJETA RESUMEN DEL FONDO DE EMERGENCIA (SAFETY GUARD)
         if safety_status_m:

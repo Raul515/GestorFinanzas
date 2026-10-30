@@ -84,3 +84,90 @@ def test_api_annual_guidelines(client: TestClient):
     assert "overall_health" in data
     assert data["average_savings_rate"] == pytest.approx(22.22, 0.01)
     assert len(data["guidelines"]) >= 1
+
+
+def test_api_apply_strategy_fire_incomplete_fund(client: TestClient, db_session, seed_data):
+    """Verifica la ejecución atómica de la estrategia FIRE con sincronización del Fondo de Emergencia."""
+    from backend.domain.models import emergency_fund as ef_models
+
+    ef = ef_models.EmergencyFund(
+        target_amount=3000.0,
+        current_balance=1000.0,
+        target_months=3,
+        is_completed=False,
+    )
+    db_session.add(ef)
+    db_session.commit()
+
+    payload = {
+        "month_key": "2026-10",
+        "strategy_type": "FIRE",
+        "is_partial": False,
+        "savings_allocations": [
+            {"subcategory_id": seed_data["sub_emergencia_id"], "amount": 500.0}
+        ],
+        "wants_allocations": [],
+    }
+
+    response = client.post("/guidelines/apply-strategy", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["transactions_created"] == 1
+    assert data["budgets_updated"] == 0
+    assert data["emergency_fund_updated"] is True
+    assert data["new_emergency_fund_balance"] == 1500.0
+
+
+def test_api_apply_strategy_80_20(client: TestClient, db_session, seed_data):
+    """Verifica la aplicación de la regla 80/20 con aporte a ahorro e incremento de presupuesto en deseos."""
+    payload = {
+        "month_key": "2026-10",
+        "strategy_type": "EIGHTY_TWENTY",
+        "is_partial": True,
+        "savings_allocations": [
+            {"subcategory_id": seed_data["sub_emergencia_id"], "amount": 400.0}
+        ],
+        "wants_allocations": [
+            {"subcategory_id": seed_data["sub_ocio_id"], "amount": 100.0}
+        ],
+    }
+
+    response = client.post("/guidelines/apply-strategy", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["transactions_created"] == 1
+    assert data["budgets_updated"] == 1
+
+
+def test_api_sweep_month_surplus(client: TestClient, db_session, seed_data):
+    """Verifica que el barrido de fin de mes cree la transacción y actualice el saldo del fondo."""
+    from backend.domain.models import emergency_fund as ef_models
+
+    ef = ef_models.EmergencyFund(
+        target_amount=2000.0,
+        current_balance=1800.0,
+        target_months=2,
+        is_completed=False,
+    )
+    db_session.add(ef)
+    db_session.commit()
+
+    payload = {
+        "month_key": "2026-10",
+        "amount": 250.0,
+        "target_subcategory_id": seed_data["sub_emergencia_id"],
+    }
+
+    response = client.post("/guidelines/sweep", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["amount_swept"] == 250.0
+    assert data["emergency_fund_updated"] is True
+    assert data["new_emergency_fund_balance"] == 2050.0
+

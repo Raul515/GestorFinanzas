@@ -111,3 +111,56 @@ class AnnualGuidelineReport(BaseModel):
     average_savings_rate: float
     guidelines: List[AnnualGuidelineItem] = Field(default_factory=list)
     summary_text: str
+
+
+# ==========================================================
+# Esquemas para Ejecución Atómica de Estrategias (Fase 3)
+# ==========================================================
+
+class AllocationItem(BaseModel):
+    subcategory_id: int = Field(..., description="ID de la subcategoría contable destino")
+    amount: float = Field(..., ge=0.0, description="Importe exacto en euros a asignar")
+    percentage: Optional[float] = Field(None, ge=0.0, le=100.0, description="Porcentaje asignado si aplica")
+
+
+class StrategyApplyRequest(BaseModel):
+    month_key: str = Field(..., description="Identificador del mes en formato YYYY-MM")
+    strategy_type: str = Field(
+        ..., description="Tipo de estrategia ('FIRE', 'SINKING_FUND', 'HYBRID_80_20', 'EXTRAORDINARY_INCOME')"
+    )
+    is_partial: bool = Field(
+        False, description="True si se aplica con el 50% de colchón interno en Necesidades Básicas"
+    )
+    savings_allocations: List[AllocationItem] = Field(
+        default_factory=list, description="Particiones destinadas a Ahorro/Inversión/Fondo"
+    )
+    wants_allocations: List[AllocationItem] = Field(
+        default_factory=list, description="Particiones destinadas a incrementar presupuestos de Deseos"
+    )
+
+
+class StrategyApplyResponse(BaseModel):
+    success: bool
+    message: str
+    month_key: str
+    transactions_created: int = 0
+    budgets_updated: int = 0
+    emergency_fund_updated: bool = False
+    new_emergency_fund_balance: Optional[float] = None
+
+
+class SweepRequest(BaseModel):
+    month_key: str = Field(..., description="Identificador del mes en formato YYYY-MM")
+    amount: float = Field(..., gt=0.0, description="Importe a barrer hacia el ahorro en euros")
+    target_subcategory_id: int = Field(
+        ..., description="ID de la subcategoría de Ahorro destino (Fondo o Inversión)"
+    )
+
+
+class SweepResponse(BaseModel):
+    success: bool
+    message: str
+    amount_swept: float
+    emergency_fund_updated: bool = False
+    new_emergency_fund_balance: Optional[float] = None
+

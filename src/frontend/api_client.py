@@ -662,5 +662,54 @@ def get_annual_guidelines(metrics):
     return None
 
 
+def apply_guideline_strategy(payload: dict):
+    """
+    Ejecuta una estrategia de asignación de capital de forma atómica en el backend.
+    Crea transacciones de ahorro e incrementa presupuestos de deseos según corresponda.
+    """
+    url = f"{API_URL}/guidelines/apply-strategy"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al aplicar estrategia (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al aplicar estrategia en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en apply_guideline_strategy(): %s", e)
+    return None
+
+
+def sweep_month_surplus(month_key: str, amount: float, target_subcategory_id: int):
+    """
+    Ejecuta el barrido de fin de mes en el backend para liquidar el excedente restante hacia el ahorro.
+    """
+    url = f"{API_URL}/guidelines/sweep"
+    payload = {
+        "month_key": month_key,
+        "amount": float(amount or 0.0),
+        "target_subcategory_id": int(target_subcategory_id),
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al ejecutar barrido de fin de mes (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al ejecutar barrido en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en sweep_month_surplus(): %s", e)
+    return None
+
+
+
 
 

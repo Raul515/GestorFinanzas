@@ -69,11 +69,16 @@ def test_render_monthly_guidelines_surplus(mock_caption, mock_cols, mock_markdow
     mock_exp_ctx = MagicMock()
     mock_expander.return_value.__enter__.return_value = mock_exp_ctx
 
-    col1, col2, col3 = MagicMock(), MagicMock(), MagicMock()
-    col1.__enter__.return_value = MagicMock()
-    col2.__enter__.return_value = MagicMock()
-    col3.__enter__.return_value = MagicMock()
-    mock_cols.return_value = [col1, col2, col3]
+    def _mock_cols_handler(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols_handler
 
     safety_status = {
         "current_balance": 200.0,
@@ -210,3 +215,122 @@ def test_render_none_handles_gracefully():
     """Verifica que si el reporte es None no lance excepción."""
     render_monthly_guidelines_expander(None)
     render_annual_guidelines_expander(None)
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.caption")
+@patch("streamlit.radio")
+@patch("streamlit.button")
+@patch("streamlit.selectbox")
+def test_clean_html_table_and_suppressed_caption_on_surplus(
+    mock_selectbox,
+    mock_button,
+    mock_radio,
+    mock_caption,
+    mock_cols,
+    mock_markdown,
+    mock_expander,
+):
+    """
+    Verifica los Puntos 1 y 2:
+    1º: La tabla sinóptica está libre de sangrías CommonMark indebidas (cierre limpio de tabla).
+    2º: La recomendación operativa NO se muestra en tarjetas de excedente (NEEDS_SURPLUS).
+    """
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    def _mock_cols_surplus(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols_surplus
+    mock_radio.return_value = "Traspaso Total (100%)"
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=2000.0,
+        budget_income=2000.0,
+        real_needs=700.0,  # 35% vs 50% -> 300 € excedente
+        real_wants=600.0,
+        real_savings=700.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    cats = [
+        {"id": 1, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+        {"id": 2, "nombre": "Deseos", "tipo": "gasto"},
+    ]
+    subcats = [
+        {"id": 10, "nombre": "Fondo de emergencia", "categoria_id": 1},
+        {"id": 11, "nombre": "Inversión Indexada", "categoria_id": 1},
+        {"id": 20, "nombre": "Ocio y Salidas", "categoria_id": 2},
+    ]
+
+    render_monthly_guidelines_expander(
+        report,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    # Punto 1: Tabla HTML cerrada correctamente
+    assert "<tbody>" in combined_html
+    assert "</tbody></table></div>" in combined_html
+    # No deben existir bloques <pre><code> generados por sangrías de 4 espacios
+    assert "<pre><code>" not in combined_html
+
+    # Punto 2: No debe haber caption de "Recomendación Operativa" en NEEDS_SURPLUS
+    caption_calls = [call[0][0] for call in mock_caption.call_args_list if call[0]]
+    combined_captions = " ".join(caption_calls)
+    assert "Recomendación Operativa:" not in combined_captions
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.caption")
+def test_operational_caption_retained_on_high_unassigned(
+    mock_caption, mock_cols, mock_markdown, mock_expander
+):
+    """Verifica que la recomendación operativa SÍ se mantenga para Dinero Sin Asignar (HIGH_UNASSIGNED)."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+    def _mock_cols(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=3000.0,
+        budget_income=3000.0,
+        real_needs=1000.0,
+        real_wants=600.0,
+        real_savings=600.0,  # 800 € sin asignar (26.7% > 5%)
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    render_monthly_guidelines_expander(report, expanded=True)
+
+    caption_calls = [call[0][0] for call in mock_caption.call_args_list if call[0]]
+    combined_captions = " ".join(caption_calls)
+    assert "Recomendación Operativa:" in combined_captions
+
