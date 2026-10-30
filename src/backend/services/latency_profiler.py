@@ -126,7 +126,7 @@ class LatencyTracker:
 
     def get_thresholds(self, provider: Union[ExternalProviderEnum, str]) -> Dict[str, float]:
         """Obtiene los umbrales configurados para un proveedor determinado."""
-        prov_key = provider.value if isinstance(provider, ExternalProviderEnum) else str(provider).lower()
+        prov_key = provider.value if isinstance(provider, ExternalProviderEnum) else provider.lower()
         return self._thresholds.get(prov_key, self._thresholds[ExternalProviderEnum.OTHER.value])
 
     def classify_status(
@@ -226,7 +226,7 @@ class LatencyTracker:
         """Genera el informe global con estadísticas, percentiles y llamadas recientes."""
         target_prov = None
         if provider:
-            target_prov = provider.value if isinstance(provider, ExternalProviderEnum) else str(provider).lower()
+            target_prov = provider.value if isinstance(provider, ExternalProviderEnum) else provider.lower()
 
         with self._lock:
             raw_items = list(self._buffer)
