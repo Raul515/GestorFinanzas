@@ -93,9 +93,16 @@ def fetch_safety_status(
         # Saldo Sin Asignar
         sin_asignar = max(0.0, effective_ing - (real_nec + real_des + real_aho))
 
-        # 4. Estado formal del fondo de emergencia
+        # 4. Estado formal del fondo de emergencia con fallback robusto
         fund = repo.get_or_create_emergency_fund()
         monthly_needs_ref = pres_nec if pres_nec > 0.0 else real_nec
+        if monthly_needs_ref <= 0.0:
+            if hasattr(repo, "db") and getattr(repo, "db", None) is not None:
+                from backend.api.routers.safety_guard import _resolve_monthly_needs
+                monthly_needs_ref = _resolve_monthly_needs(repo.db, target_month)
+            elif fund.target_amount and fund.target_amount > 0:
+                monthly_needs_ref = round(fund.target_amount / max(3, fund.target_months), 2)
+
         fund = sync_fund_state(fund, monthly_needs_ref)
         safety = evaluate_safety_status(fund, monthly_needs_ref)
 

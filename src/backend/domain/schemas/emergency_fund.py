@@ -51,3 +51,5 @@ class SafetyStatusResponse(BaseModel):
     can_invest: bool
     gap: float
     message: str
+    investing_allowed: Optional[bool] = None
+    target_3m: Optional[float] = None

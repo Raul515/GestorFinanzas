@@ -8,6 +8,7 @@ from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.interfaz.db_interface import IRepository
 from backend.domain.models import categories as cat_models
 from backend.domain.models import budgets as pres_models
+from backend.domain.models import transactions as tx_models
 from backend.domain.schemas.emergency_fund import (
     EmergencyFundResponse,
     EmergencyFundConfigUpdate,
@@ -24,7 +25,7 @@ def get_repo(db: Session = Depends(get_db)) -> IRepository:
 
 
 def _resolve_monthly_needs(db: Session, mes: Optional[str] = None) -> float:
-    """Función auxiliar para calcular el gasto total presupuestado en Necesidades Básicas para un mes o plantilla BASE."""
+    """Función auxiliar para calcular el gasto total presupuestado en Necesidades Básicas para un mes, plantilla BASE o fallback histórico."""
     # 1. Buscar la categoría de 'Necesidades Básicas'
     cat_nec = (
         db.query(cat_models.Category)
@@ -54,9 +55,13 @@ def _resolve_monthly_needs(db: Session, mes: Optional[str] = None) -> float:
         )
         .all()
     )
+    val = sum(p.amount for p in presupuestos)
+    if val > 0:
+        return val
 
-    if not presupuestos and target_mes != "BASE":
-        presupuestos = (
+    # Fallback 1: Plantilla 'BASE' (si target_mes no era BASE)
+    if target_mes != "BASE":
+        pres_base = (
             db.query(pres_models.MonthlyBudget)
             .filter(
                 pres_models.MonthlyBudget.month == "BASE",
@@ -64,8 +69,60 @@ def _resolve_monthly_needs(db: Session, mes: Optional[str] = None) -> float:
             )
             .all()
         )
+        base_val = sum(p.amount for p in pres_base)
+        if base_val > 0:
+            return base_val
 
-    return sum(p.amount for p in presupuestos)
+    # Fallback 2: Buscar el mes más reciente con presupuesto de Necesidades configurado (> 0)
+    recent_months = (
+        db.query(pres_models.MonthlyBudget.month)
+        .filter(
+            pres_models.MonthlyBudget.subcategory_id.in_(subcat_ids),
+            pres_models.MonthlyBudget.amount > 0,
+            pres_models.MonthlyBudget.month != "BASE",
+        )
+        .distinct()
+        .order_by(pres_models.MonthlyBudget.month.desc())
+        .all()
+    )
+    for (m_str,) in recent_months:
+        m_pres = (
+            db.query(pres_models.MonthlyBudget)
+            .filter(
+                pres_models.MonthlyBudget.month == m_str,
+                pres_models.MonthlyBudget.subcategory_id.in_(subcat_ids),
+            )
+            .all()
+        )
+        m_val = sum(p.amount for p in m_pres)
+        if m_val > 0:
+            return m_val
+
+    # Fallback 3: Buscar si hay transacciones de Necesidades registradas en el mes más reciente
+    recent_txs = (
+        db.query(tx_models.Transaction)
+        .filter(
+            tx_models.Transaction.subcategory_id.in_(subcat_ids),
+            tx_models.Transaction.amount > 0,
+        )
+        .order_by(tx_models.Transaction.date.desc())
+        .first()
+    )
+    if recent_txs:
+        tx_month = recent_txs.date.strftime("%Y-%m") if hasattr(recent_txs.date, "strftime") else str(recent_txs.date)[:7]
+        month_txs = (
+            db.query(tx_models.Transaction)
+            .filter(
+                tx_models.Transaction.subcategory_id.in_(subcat_ids),
+                tx_models.Transaction.date.like(f"{tx_month}%"),
+            )
+            .all()
+        )
+        tx_sum = sum(t.amount for t in month_txs)
+        if tx_sum > 0:
+            return tx_sum
+
+    return 0.0
 
 
 @router.get("/safety-status", response_model=SafetyStatusResponse)

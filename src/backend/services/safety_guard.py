@@ -20,6 +20,13 @@ def evaluate_safety_status(
     monthly_needs = max(0.0, round(monthly_needs, 2))
     target_months = max(3, fund.target_months)
     current_balance = max(0.0, round(fund.current_balance, 2))
+    prev_target = fund.target_amount if fund.target_amount is not None else 0.0
+
+    # Si no hay necesidades en el mes pero el fondo ya tiene una meta previa (> 0),
+    # inferir las necesidades de referencia para mantener la consistencia global del estado
+    if monthly_needs <= 0.0 and prev_target > 0:
+        monthly_needs = round(prev_target / target_months, 2)
+
     target_amount = round(target_months * monthly_needs, 2)
 
     if monthly_needs <= 0.0:
@@ -62,6 +69,8 @@ def evaluate_safety_status(
         can_invest=can_invest,
         gap=gap,
         message=message,
+        investing_allowed=can_invest,
+        target_3m=target_amount,
     )
 
 
@@ -73,8 +82,12 @@ def sync_fund_state(
     Actualiza los campos target_amount e is_completed de la entidad EmergencyFund
     en función de las necesidades mensuales vigentes y el saldo actual.
     """
+    prev_target = fund.target_amount if fund.target_amount is not None else 0.0
     status = evaluate_safety_status(fund, monthly_needs)
-    fund.target_amount = status.target_amount
-    fund.is_completed = status.is_completed
+    if status.target_amount > 0:
+        fund.target_amount = status.target_amount
+        fund.is_completed = status.is_completed
+    elif prev_target > 0 and fund.current_balance >= prev_target:
+        fund.is_completed = True
     return fund
 

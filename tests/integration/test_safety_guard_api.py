@@ -81,3 +81,32 @@ def test_api_reject_under_3_months(client: TestClient):
     )
     assert response.status_code in (400, 422)
 
+
+def test_api_safety_status_fallback_to_recent_month(
+    client: TestClient, db_session: Session, seed_data: dict[str, int]
+):
+    """Verifica que si un mes no tiene presupuesto (ej. 2026-12) y BASE no está configurado, recurre al mes reciente con datos."""
+    # Añadir presupuesto de Necesidades únicamente en 2026-11
+    p = pres_models.MonthlyBudget(
+        month="2026-11",
+        subcategory_id=seed_data["sub_alquiler_id"],
+        amount=500.0,
+    )
+    db_session.add(p)
+    db_session.commit()
+
+    # Consultar mes vacío 2026-12
+    res = client.get("/advisor/safety-status?mes=2026-12")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["monthly_needs_reference"] == 500.0
+    assert data["target_amount"] == 1500.0
+
+    # Consultar sin parámetro (herramientas globales como Screener o Deep Dive)
+    res_global = client.get("/advisor/safety-status")
+    assert res_global.status_code == 200
+    data_global = res_global.json()
+    assert data_global["monthly_needs_reference"] == 500.0
+    assert data_global["target_amount"] == 1500.0
+
+
