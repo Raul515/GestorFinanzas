@@ -46,3 +46,31 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
   .\venv\Scripts\pytest -v tests/unit/test_guidelines_service.py tests/unit/test_guidelines_view.py
   ```
 - **Criterio de Aceptación**: 100% de las pruebas asociadas pasando sin errores ni advertencias de tipo (19/19 tests pasando).
+
+---
+
+### Fase 3: Ejecución Atómica de Estrategias, Colchón Prudencial y Barrido de Cierre [EN PROGRESO]
+
+- **Objetivo**: Habilitar la ejecución directa y atómica de las estrategias desde Streamlit, incorporando selector de modo (100% Total vs 50% con Colchón Interno en Necesidades), partición configurable del 20% en Deseos (1 a 4 partes de min. 5%), blindaje constitucional del Fondo de Emergencia, acción de "Barrido de Fin de Mes" (a partir del día 26) y correcciones visuales de la tabla sinóptica y tarjetas.
+- **Archivos a crear/modificar**:
+  - `src/backend/domain/schemas/guidelines.py` [MODIFICADO: Esquemas de request/response para ejecución de estrategia y barrido: `StrategyApplyRequest`, `StrategyApplyResponse`, `AllocationItem`]
+  - `src/backend/services/guidelines_service.py` [MODIFICADO: Reconocimiento dinámico de colchón interno y transición de estado a "Óptimo / Colchón Activo"]
+  - `src/backend/api/routers/guidelines.py` [MODIFICADO: Endpoints atómicos `POST /guidelines/apply-strategy` y `POST /guidelines/sweep`]
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos cliente `apply_guideline_strategy` y `sweep_month_surplus`]
+  - `src/frontend/services/guidelines_view.py` [MODIFICADO: Eliminación del bug de sangría de tabla sinóptica, retirada de recomendación en tarjetas, selectores de subcategoría, partición de deseos, botón "Aplicar Estrategia" y banner de barrido]
+  - `src/frontend/app.py` [MODIFICADO: Sincronización tras ejecución atómica]
+  - `tests/unit/test_guidelines_service.py` [MODIFICADO: Pruebas unitarias de cálculo con colchón y asignaciones]
+  - `tests/unit/test_guidelines_view.py` [MODIFICADO: Pruebas unitarias de renderizado de controles y particiones]
+  - `tests/integration/test_guidelines_api.py` [MODIFICADO: Pruebas de integración para ejecución atómica y barrido]
+- **Casos de Prueba a Verificar**:
+  - Erradicación de etiquetas `</tbody>` y `</table>` en la tabla sinóptica.
+  - Supresión de recomendación operativa en tarjetas con estrategias y conservación en Dinero Sin Asignar.
+  - Ejecución atómica en backend: creación de transacción en Ahorro, actualización de saldo en Fondo de Emergencia (si aplica), incremento de presupuesto en Deseos y confirmación de rollback ante fallos.
+  - Validación de particiones del 20% en Deseos (bloqueo si suma != 20%, mínimo 5% por parte).
+  - Activación contextual del "Barrido de Fin de Mes" a partir del día 26 del mes natural.
+  - Transición del estado del mes a "Óptimo / Colchón Activo" una vez aplicada la estrategia.
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_guidelines_service.py tests/unit/test_guidelines_view.py tests/integration/test_guidelines_api.py
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando sin advertencias ni regresiones.
