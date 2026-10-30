@@ -116,6 +116,14 @@ El **objetivo** de esta especificación es incorporar un **sistema determinista 
   - EL SISTEMA DEBE activar el componente de acción destacada: **"🧹 Barrido de Fin de Mes (Cierre Contable)"**.
   - Permite liquidar el remanente en un solo clic transfiriéndolo al Fondo de Emergencia (si falta) o a la subcategoría de inversión principal.
 
+### RF-9: Compensación Intermensual por Exceso en Deseos (`WANTS_DEFICIT`)
+- **Criterio EARS (Event-driven)**: CUANDO el usuario detecte un sobregasto en Deseos (>30%), EL SISTEMA DEBE ofrecer la acción interactiva: **"⚡ Programar Ajuste Compensatorio al Próximo Mes"**.
+- Al ejecutarse, EL SISTEMA DEBE decrementar el presupuesto de Deseos del mes inmediato posterior (`YYYY-(M+1)`) en la cantidad exacta del sobregasto (`excess_wants`), forzando la autodisciplina financiera y restaurando el ahorro patrimonial.
+
+### RF-10: Amortiguación y Contención de Necesidades e Ingresos (`NEEDS_DEFICIT` e `INCOME_SHORTFALL`)
+- **Criterio EARS (Event-driven)**: CUANDO ocurra un déficit en Necesidades Básicas (`NEEDS_DEFICIT`), EL SISTEMA DEBE ofrecer la acción: **"⚡ Amortiguar con Deseos del Mes"**, que reduce el presupuesto de Deseos de ese mes para absorber el sobrecoste sin recurrir al Fondo de Emergencia.
+- **Criterio EARS (Event-driven)**: CUANDO ocurra una caída de ingresos (`INCOME_SHORTFALL`), EL SISTEMA DEBE ofrecer la acción: **"❄️ Congelar Deseos del Mes"**, que reduce a cero las partidas no esenciales de ocio de ese mes para blindar el pago de necesidades básicas.
+
 ---
 
 ## 5. Requisitos No Funcionales (RNF)
