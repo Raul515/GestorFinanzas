@@ -685,15 +685,22 @@ def apply_guideline_strategy(payload: dict):
     return None
 
 
-def sweep_month_surplus(month_key: str, amount: float, target_subcategory_id: int):
+def sweep_month_surplus(
+    month_key: str,
+    amount: float,
+    target_subcategory_id: Optional[int] = None,
+    mode: str = "DEFAULT_SAVINGS",
+):
     """
-    Ejecuta el barrido de fin de mes en el backend para liquidar el excedente restante hacia el ahorro.
+    Ejecuta el barrido de fin de mes en el backend para liquidar el excedente restante hacia el ahorro
+    o completando proporcionalmente la estrategia activa del mes.
     """
     url = f"{API_URL}/guidelines/sweep"
     payload = {
         "month_key": month_key,
         "amount": float(amount or 0.0),
         "target_subcategory_id": target_subcategory_id,
+        "mode": mode,
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -745,6 +752,33 @@ def compensate_guideline_deficit(
         logger.error("Error de red al ejecutar compensación de déficit en %s: %s", url, e)
     except Exception as e:
         logger.error("Error inesperado en compensate_guideline_deficit(): %s", e)
+    return None
+
+
+def revert_guideline_strategy(month_key: str, scenario_type: str = "NEEDS_SURPLUS"):
+    """
+    Revierte atómicamente una estrategia de asignación aplicada en el mes indicado.
+    Elimina las transacciones generadas, revierte el saldo aportado al fondo de emergencia
+    y restablece el estado para que el excedente vuelva a estar disponible.
+    """
+    url = f"{API_URL}/guidelines/revert-strategy"
+    payload = {
+        "month_key": month_key,
+        "scenario_type": scenario_type,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al revertir estrategia (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al revertir estrategia en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en revert_guideline_strategy(): %s", e)
     return None
 
 
