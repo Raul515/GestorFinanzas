@@ -105,9 +105,10 @@ def get_monthly_guidelines_endpoint(
                 db.commit()
             else:
                 split_cfg = None
-                if getattr(applied_record, "split_config", None):
+                raw_cfg = getattr(applied_record, "split_config", None)
+                if raw_cfg:
                     try:
-                        split_cfg = json.loads(applied_record.split_config)
+                        split_cfg = json.loads(raw_cfg)
                     except Exception as err:
                         logger.warning("Error deserializando split_config: %s", err)
                 if not split_cfg and applied_record.transactions:

@@ -97,9 +97,10 @@ def fetch_safety_status(
         fund = repo.get_or_create_emergency_fund()
         monthly_needs_ref = pres_nec if pres_nec > 0.0 else real_nec
         if monthly_needs_ref <= 0.0:
-            if hasattr(repo, "db") and getattr(repo, "db", None) is not None:
+            repo_db = getattr(repo, "db", None)
+            if repo_db is not None:
                 from backend.api.routers.safety_guard import _resolve_monthly_needs
-                monthly_needs_ref = _resolve_monthly_needs(repo.db, target_month)
+                monthly_needs_ref = _resolve_monthly_needs(repo_db, target_month)
             elif fund.target_amount and fund.target_amount > 0:
                 monthly_needs_ref = round(fund.target_amount / max(3, fund.target_months), 2)
 

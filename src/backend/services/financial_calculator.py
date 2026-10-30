@@ -39,13 +39,13 @@ def calculate_category_totals(
                     if (p.get("subcategoria_id") if p.get("subcategoria_id") is not None else p.get("subcategory_id")) == s_id
                 ]
                 if p_match:
-                    pval = p_match[0].get("cantidad") if p_match[0].get("cantidad") is not None else p_match[0].get("amount", 0.0)
+                    pval = float(p_match[0].get("cantidad") or p_match[0].get("amount") or 0.0)
             t_pres += pval
 
             tval = 0.0
             if transacciones_m:
-                r_match = [
-                    t.get("cantidad") if t.get("cantidad") is not None else t.get("amount", 0.0)
+                r_match: List[float] = [
+                    float(t.get("cantidad") or t.get("amount") or 0.0)
                     for t in transacciones_m 
                     if (t.get("subcategoria_id") if t.get("subcategoria_id") is not None else t.get("subcategory_id")) == s_id
                 ]
@@ -150,6 +150,7 @@ def get_monthly_needs_budget(
     for p in presupuestos:
         sub_id = p.get("subcategoria_id") if p.get("subcategoria_id") is not None else p.get("subcategory_id")
         if sub_id in nec_subcat_ids:
-            total_needs += float(p.get("cantidad") if p.get("cantidad") is not None else p.get("amount", 0.0))
+            raw_val = p.get("cantidad") or p.get("amount") or 0.0
+            total_needs += float(raw_val)
     return total_needs
 

@@ -6,7 +6,7 @@
 [![Google Gemini](https://img.shields.io/badge/AI-Google%20Gemini%20Pro-4285F4.svg?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20Local-003B57.svg?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Tests](https://img.shields.io/badge/Tests-201%2F201%20Passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-276%2F276%20Passed-brightgreen.svg)]()
 [![Type Checking](https://img.shields.io/badge/Pyright-0%20Errors-brightgreen.svg)]()
 
 Un sistema integral, local y privado de **Gestión de Finanzas Personales y Asesoramiento Patrimonial Multiagente**, diseñado para el control presupuestario bajo la **metodología 50/30/20**, el blindaje patrimonial estricto mediante **salvaguarda de seguridad** (Principio 9 de la Constitución) y la deliberación de oportunidades de inversión orquestada con **LangGraph** y **Google Gemini Pro**.
@@ -70,6 +70,32 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 4. 🐻 **`RiskThesisAgent` (Red Team)**: Exige y formula al menos **dos riesgos bajistas severos** (Principio 12).
 5. ⚖️ **`PortfolioAdvisorAgent` (Supervisor)**: Emite el veredicto final vinculante, plan de despliegue de liquidez por tramos (Tramo Inicial, Acumulación y Colchón de Reserva) y zona de entrada por TIR.
 
+### 8. 📋 Historial y Gestión Segura de Transacciones (Spec 006)
+- **Eliminación Segura Interactiva**: Confirmación visual en dos pasos con `st.popover` para prevenir borrados accidentales de apuntes contables.
+- **Sincronización Automática del Fondo de Emergencia**: Si se elimina una transacción que aportaba al Fondo de Emergencia, su saldo acumulado se resta automáticamente para evitar descuadres.
+- **Reversión en Cascada de Estrategias**: Si una transacción proviene de una estrategia de pautas, el sistema identifica su vinculación (`applied_strategy_id`), revierte todas las transacciones asociadas del lote y reabre la disponibilidad del capital.
+- **Usabilidad y Formato Estándar**: Formato de fecha en estándar español `DD/MM/AAAA` y reseteo selectivo inteligente de campos (concepto a blanco y cantidad a 0, preservando fecha y subcategoría para inserciones ágiles).
+
+### 9. 📜 Sistema de Logs Rotativos Persistentes y Observabilidad (Spec 007)
+- **Rotación Automática en Disco**: Archivos independientes `logs/backend.log` y `logs/frontend.log` limitados a 5 MB con hasta 3 copias de seguridad rotativas, protegiendo el almacenamiento local.
+- **Middleware de Latencia en FastAPI**: Registro estructurado de tiempos de procesamiento de cada petición HTTP en milisegundos y exposición en el encabezado `X-Process-Time`.
+- **Filtro Criptográfico de Privacidad (`PrivacyFilter`)**: Sanitización activa e irreversible de claves API de Google Gemini (`AIza...`), tokens Bearer y credenciales antes de ser emitidos a los ficheros de log o la consola.
+
+### 10. 💡 Pautas Deterministas de Gestión y Compensación Presupuestaria (Spec 008)
+- **Motor Cuantitativo Determinista Puro**: Diagnóstico financiero matemático en tiempo real (0% consumo de LLM, latencia cero) evaluando desviaciones presupuestarias sobre la regla 50/30/20 y desglosando cifras reales en euros.
+- **6 Escenarios Mensuales y Diagnóstico Estructural Anual**:
+  - *Superávit en Necesidades Básicas*: Activación de estrategias de aceleración de capital (FIRE, Sinking Fund o Enfoque Híbrido 80/20).
+  - *Déficit en Necesidades Básicas*: Jerarquía de compensación presupuestaria en tres líneas de defensa y amortiguación directa desde Deseos sin tocar el Fondo de Emergencia.
+  - *Exceso en Deseos*: Veto estricto al Fondo de Emergencia y programación interactiva de ajustes compensatorios para el mes siguiente.
+  - *Caída de Ingresos Netos*: Protocolo de contención patrimonial y congelación de partidas de estilo de vida a 0.00 €.
+  - *Ingreso Extraordinario (Bonus / Paga Extra)*: Inyección prioritaria a completar los 3 meses de fondo o asignación equilibrada 80% inversión / 20% disfrute.
+  - *Dinero Sin Asignar Elevado*: Canalización de liquidez ociosa acumulada en cuenta corriente.
+  - *Diagnóstico Anual*: Evaluación consolidada de rigidez de costes fijos, lifestyle creep y tasa de ahorro global.
+- **Colchón Prudencial y Asignación Atómica**: Selección flexible de despliegue al 100% o 50% con colchón preventivo dentro de Necesidades. Registro en `AppliedGuidelineStrategy` e inserción en el historial como transacciones reales.
+- **Barrido Inteligente de Cierre de Mes (Día >= 26)**: Liquidación del remanente heredando las proporciones de la estrategia activa (`INHERIT_STRATEGY`) o canalización tradicional hacia el ahorro (`DEFAULT_SAVINGS`).
+- **Botón `↩️ Deshacer Estrategia` con Popover de Confirmación**: Permite anular atómicamente la estrategia ejecutada, eliminando transacciones vinculadas y restaurando saldos.
+- **Detección Elegante de Meses y Años Vacíos**: Presentación limpia con estado *"Mes/Año sin Información Financiera"* en períodos sin transacciones ni presupuestos, evitando falsas felicitaciones o tablas engañosas.
+
 ---
 
 ## 🛠️ Arquitectura y Tecnologías
@@ -78,7 +104,7 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (Streamlit)                            │
 │  • Pestañas: 50/30/20, Radar Macro, Screener, Deep Dive, Copiloto,      │
-│              Comité Asesor Multiagente                                 │
+│              Comité Asesor, Pautas Deterministas, Historial            │
 │  • Visualizaciones: Altair (Sparklines, Barras, Donut 50/30/20)        │
 │  • Estilos: CSS Modular (Light / Dark Mode Nativo)                     │
 └───────────────────────────────────┬────────────────────────────────────┘
@@ -87,12 +113,13 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 │                         BACKEND (FastAPI)                              │
 │  • API Routers: /categories, /budgets, /transactions, /safety-guard,   │
 │                 /market, /screener, /deepdive, /watchlist, /copilot,   │
-│                 /committee                                             │
+│                 /committee, /guidelines                                │
+│  • Middleware: Latencia y Observabilidad (X-Process-Time)              │
 │  • Motor Cognitivo LangGraph: StateGraph, Reducers, Cond. Edges        │
 │  • Agentes: BaseAgent (Safety, Macro, Fundamental, Risk, Advisor)      │
 │  • Modelos LLM: Google Gemini Pro (google-genai SDK)                   │
 │  • Servicios Puros: financial_calculator, safety_guard, market_data,    │
-│                     equity_deepdive, screener_service                  │
+│                     equity_deepdive, screener_service, guidelines      │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ SQLAlchemy 2.0 ORM
 ┌───────────────────────────────────▼────────────────────────────────────┐
@@ -100,13 +127,14 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 │  • src/backend/data/finanzas.db (100% privado en tu equipo)            │
 │  • Tablas: categories, subcategories, budgets, transactions,           │
 │            emergency_funds, market_cache, watchlist, copilot_sessions, │
-│            copilot_messages                                            │
+│            copilot_messages, applied_guideline_strategies              │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Backend**: Python 3.11, FastAPI, Pydantic v2, SQLAlchemy 2.0, LangGraph, LangChain Core, Google GenAI SDK (`google-genai`), yfinance, feedparser.
 - **Frontend**: Streamlit, Altair, Pandas, Requests.
-- **Testing y Calidad**: Pytest (201 pruebas), Pyright (0 errores), Compileall.
+- **Logging & Observabilidad**: Logging rotativo persistente (5 MB, 3 backups) y filtro de sanitización criptográfica (`PrivacyFilter`).
+- **Testing y Calidad**: Pytest (276 pruebas pasando al 100%), Pyright (0 errores), Compileall.
 - **Contenedores**: Docker & Docker Compose local.
 
 ---
@@ -125,6 +153,9 @@ GestorFinanzas/
 │   └── docker-compose.extend.yml
 ├── docs/                      # Documentación constitucional y metodológica
 │   └── constitution.md        # Ley Suprema: Los 13 Principios Innegociables
+├── logs/                      # Logs rotativos del sistema (sanitizados con PrivacyFilter)
+│   ├── backend.log
+│   └── frontend.log
 ├── requirements/              # Requisitos de dependencias desacoplados
 │   ├── backend.txt
 │   └── frontend.txt
@@ -136,39 +167,27 @@ GestorFinanzas/
 │   ├── 002-screener-oportunidades/
 │   ├── 003-analisis-fundamental/
 │   ├── 004-copiloto-patrimonial/
-│   └── 005-orquestacion-langgraph/
+│   ├── 005-orquestacion-langgraph/
+│   ├── 006-gestion-transacciones/
+│   ├── 007-sistema-logs-rotativos/
+│   └── 008-pautas-gestion-determinista/
 ├── src/
 │   ├── backend/               # Servidor FastAPI y arquitectura cognitiva
 │   │   ├── agents/            # Motor Cognitivo: Especializaciones de BaseAgent
-│   │   │   ├── base_agent.py
-│   │   │   ├── safety_guard_agent.py
-│   │   │   ├── macro_agent.py
-│   │   │   ├── fundamental_agent.py
-│   │   │   ├── risk_thesis_agent.py
-│   │   │   └── portfolio_advisor_agent.py
-│   │   ├── api/               # Servidor REST y routers
-│   │   │   ├── main.py        # Aplicación FastAPI y registro de routers
-│   │   │   └── routers/       # Endpoints REST (100% en inglés)
-│   │   ├── components/        # Componentes desacoplados de orquestación
-│   │   │   ├── nodes/         # Nodos de procesamiento de LangGraph
-│   │   │   ├── orchestrator/  # StateGraph maestro (MainInvestmentOrchestrator)
-│   │   │   ├── prompts/       # Prompts parametrizados por rol
-│   │   │   └── tools/         # Wrappers deterministas de servicios
-│   │   ├── database/          # Persistencia SQLite (patrón Repositorio)
-│   │   ├── domain/            # Capa de dominio
-│   │   │   ├── models/        # Modelos ORM SQLAlchemy 2.0
-│   │   │   ├── schemas/       # Esquemas y DTOs Pydantic v2
-│   │   │   └── states/        # Estados compartidos de LangGraph
-│   │   ├── external_components/ # Adaptadores externos (ingesta de notas locales)
-│   │   └── services/          # Lógica financiera pura desacoplada
+│   │   ├── api/               # Servidor REST y routers (/guidelines, /committee...)
+│   │   ├── components/        # Nodos LangGraph, orquestador y herramientas
+│   │   ├── database/          # Persistencia SQLite (patrón Repositorio y migraciones)
+│   │   ├── domain/            # Modelos ORM, esquemas Pydantic y estados de agentes
+│   │   └── services/          # Lógica financiera pura (guidelines, safety_guard, screener...)
 │   └── frontend/              # Aplicación web Streamlit
 │       ├── api_client.py      # Cliente HTTP estructurado con observabilidad
-│       ├── app.py             # Interfaz de usuario interactiva (18 pestañas)
+│       ├── app.py             # Interfaz de usuario interactiva
+│       ├── services/          # Componentes de presentación visual (guidelines_view)
 │       └── style.css          # Sistema de diseño y estilos CSS
-└── tests/                     # Suite de pruebas automatizadas
+└── tests/                     # Suite de pruebas automatizadas (276 pruebas)
     ├── conftest.py            # Fixtures de base de datos SQLite en memoria
     ├── integration/           # Pruebas de integración de endpoints REST
-    └── unit/                  # Pruebas unitarias de servicios, schemas y agentes
+    └── unit/                  # Pruebas unitarias de servicios, schemas y vistas
 ```
 
 ---
@@ -257,7 +276,7 @@ GestorFinanzas/
 
 El repositorio cuenta con una cobertura integral de pruebas deterministas e integración continua local:
 
-- **Ejecutar la suite completa de pruebas (201 pruebas)**:
+- **Ejecutar la suite completa de pruebas (276 pruebas)**:
   ```powershell
   .\venv\Scripts\pytest -v
   ```
