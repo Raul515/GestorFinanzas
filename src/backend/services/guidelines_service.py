@@ -30,6 +30,8 @@ def evaluate_monthly_guidelines(
     real_wants: float,
     real_savings: float,
     safety_status: Optional[Dict[str, Any]] = None,
+    applied_strategy: Optional[Dict[str, Any]] = None,
+    applied_strategies: Optional[Dict[str, Any]] = None,
 ) -> MonthlyGuidelineReport:
     """
     Evalúa el estado financiero de un mes individual y genera las pautas deterministas correspondientes,
@@ -48,6 +50,35 @@ def evaluate_monthly_guidelines(
     is_ef_completed = bool(safety_status.get("is_completed", False)) if safety_status else False
     ef_gap = float(safety_status.get("gap", 0.0)) if safety_status else 0.0
 
+    # Normalización de estrategias aplicadas para soporte multiescenario
+    if applied_strategy and not applied_strategies:
+        st_scen = applied_strategy.get("scenario_type", "NEEDS_SURPLUS")
+        applied_strategies = {st_scen: applied_strategy}
+    elif applied_strategies and not applied_strategy:
+        applied_strategy = applied_strategies.get("NEEDS_SURPLUS") or next(iter(applied_strategies.values()), None)
+
+    # 0. CASO ESPECIAL: MES VACÍO SIN INFORMACIÓN FINANCIERA (Sin ingresos ni gastos reales registrados)
+    if real_income <= 0.0 and total_spent <= 0.0 and not applied_strategy and not applied_strategies:
+        return MonthlyGuidelineReport(
+            month_key=month_key,
+            month_name=month_name,
+            overall_status="Mes sin Información Financiera",
+            status_severity=GuidelineSeverity.INFO,
+            guidelines=[],
+            synoptic_table=[],
+            real_income=0.0,
+            real_needs=0.0,
+            real_wants=0.0,
+            real_savings=0.0,
+            unassigned_amount=0.0,
+            savings_rate=0.0,
+            emergency_fund_coverage_months=round(cov_months, 1),
+            emergency_fund_target_months=round(tgt_months, 1),
+            is_emergency_fund_completed=is_ef_completed,
+            applied_strategy=None,
+            is_empty_month=True,
+        )
+
     guidelines: List[MonthlyGuidelineItem] = []
     synoptic_table: List[SynopticTableRow] = []
 
@@ -56,76 +87,144 @@ def evaluate_monthly_guidelines(
         surplus = target_needs - real_needs
         delta_pct = (surplus / real_income * 100.0)
 
-        ef_breakdown_step1 = (
-            f"Fase 1 (Fondo en Construcción): Se suman los {surplus:,.2f} € a tu ahorro base y van directos a tu "
-            f"Fondo de Emergencia (faltan {ef_gap:,.2f} € para la meta de {tgt_months:.0f} meses)."
-            if not is_ef_completed
-            else (
-                f"Fondo Blindado ({cov_months:.1f} meses cubiertos): Los {surplus:,.2f} € van al 100% directos a "
-                f"inversión a largo plazo (fondos indexados globales de acumulación)."
+        # Si ya se aplicó una estrategia para este excedente en el mes
+        applied_needs = (applied_strategies.get("NEEDS_SURPLUS") if applied_strategies else None) or (
+            applied_strategy if applied_strategy and applied_strategy.get("scenario_type") == "NEEDS_SURPLUS" else None
+        )
+        if applied_needs:
+            strat_name_map = {
+                "FIRE": "El Acelerador FIRE (100% Ahorro)",
+                "SINKING_FUND": "Sinking Fund (50% Medio Plazo / 50% Largo Plazo)",
+                "HYBRID_80_20": "El Enfoque Híbrido (Regla 80/20)",
+                "EIGHTY_TWENTY": "El Enfoque Híbrido (Regla 80/20)",
+            }
+            applied_type = str(applied_needs.get("strategy_type", ""))
+            strat_label = strat_name_map.get(applied_type, f"Estrategia {applied_type}")
+            is_partial = bool(applied_needs.get("is_partial", False))
+            alloc_amt = float(applied_needs.get("allocated_amount", surplus))
+            cushion_amt = float(applied_needs.get("cushion_amount", 0.0))
+
+            if is_partial and cushion_amt > 0:
+                syn_row_applied = SynopticTableRow(
+                    scenario_name="Excedente en Necesidades (Colchón Activo)",
+                    funding_source=f"50% reasignado ({alloc_amt:,.2f} €) | 50% en reserva ({cushion_amt:,.2f} €)",
+                    touch_emergency_fund="NO (Protegido)",
+                    budget_action="Barrer remanente a fin de mes si no se consume",
+                )
+                guidelines.append(
+                    MonthlyGuidelineItem(
+                        scenario_type=MonthlyScenarioType.NEEDS_SURPLUS,
+                        severity=GuidelineSeverity.INFO,
+                        title=f"Colchón Prudencial Activo ({cushion_amt:,.2f} € en Necesidades Básicas)",
+                        summary_headline=(
+                            f"Has ejecutado {strat_label} transfiriendo {alloc_amt:,.2f} €. "
+                            f"Se mantiene una reserva prudencial de {cushion_amt:,.2f} € en cuenta corriente para absorber posibles imprevistos fijos hasta el cierre del mes."
+                        ),
+                        delta_amount=round(cushion_amt, 2),
+                        delta_percentage=round(delta_pct * 0.5, 2),
+                        strategies=[],
+                        synoptic_row=syn_row_applied,
+                        emergency_fund_rule="Fondo de Emergencia protegido y dotado según la pauta ejecutada.",
+                        key_recommendation="Colchón prudencial activo. Si al terminar el mes no has utilizado estos fondos, pulsa 'Barrer Colchón / Remanente'.",
+                    )
+                )
+                synoptic_table.append(syn_row_applied)
+            else:
+                syn_row_applied = SynopticTableRow(
+                    scenario_name="Excedente en Necesidades (Optimizado)",
+                    funding_source=f"100% reasignado mediante {strat_label}",
+                    touch_emergency_fund="NO (Protegido)",
+                    budget_action="Asignación completada satisfactoriamente",
+                )
+                guidelines.append(
+                    MonthlyGuidelineItem(
+                        scenario_type=MonthlyScenarioType.NEEDS_SURPLUS,
+                        severity=GuidelineSeverity.INFO,
+                        title=f"Excedente de Necesidades Optimizado ({alloc_amt:,.2f} € reasignados)",
+                        summary_headline=(
+                            f"El excedente positivo de {alloc_amt:,.2f} € generado por la contención en Necesidades Básicas ya ha sido derivado exitosamente "
+                            f"mediante {strat_label}. El capital ya está trabajando según tus pautas patrimoniales."
+                        ),
+                        delta_amount=round(alloc_amt, 2),
+                        delta_percentage=round(delta_pct, 2),
+                        strategies=[],
+                        synoptic_row=syn_row_applied,
+                        emergency_fund_rule="Fondo de Emergencia protegido y dotado según la estrategia aplicada.",
+                        key_recommendation="Excedente ya reasignado este mes. No se requieren acciones adicionales sobre este sobrante.",
+                    )
+                )
+                synoptic_table.append(syn_row_applied)
+        else:
+            ef_breakdown_step1 = (
+                f"Fase 1 (Fondo en Construcción): Se suman los {surplus:,.2f} € a tu ahorro base y van directos a tu "
+                f"Fondo de Emergencia (faltan {ef_gap:,.2f} € para la meta de {tgt_months:.0f} meses)."
+                if not is_ef_completed
+                else (
+                    f"Fondo Blindado ({cov_months:.1f} meses cubiertos): Los {surplus:,.2f} € van al 100% directos a "
+                    f"inversión a largo plazo (fondos indexados globales de acumulación)."
+                )
             )
-        )
-        ef_breakdown_step2 = (
-            "Fase 2 (Una vez blindado): El 100% de los excedentes futuros se canalizará a inversión a largo plazo."
-            if not is_ef_completed
-            else "Resultado: Multiplicas la velocidad del interés compuesto y acortas el tiempo hacia la Libertad Financiera (FIRE)."
-        )
-
-        strat_fire = GuidelineActionStrategy(
-            name="Estrategia 1: El Acelerador FIRE (Inyección Pura a Ahorro e Inversión)",
-            badge="Opción Principal",
-            allocation_amount=round(surplus, 2),
-            description="Derivar el 100% del excedente a fortalecer tu bloque de futuro sin inflar los Deseos.",
-            breakdown_items=[ef_breakdown_step1, ef_breakdown_step2],
-        )
-
-        strat_sinking = GuidelineActionStrategy(
-            name="Estrategia 2: Creación de Objetivos / Provisión a Medio Plazo (Ahorro con Propósito)",
-            badge="Sinking Fund",
-            allocation_amount=round(surplus, 2),
-            description="Dividir el excedente para metas futuras específicas a 3-5 años sin tocar la renta variable.",
-            breakdown_items=[
-                f"Fondo de Proyectos / Amortización ({surplus * 0.5:,.2f} €): Para activos previstos a medio plazo (coche, vivienda, reformas) en cuenta remunerada o depósito.",
-                f"Inversión Pura Indexada ({surplus * 0.5:,.2f} €): Aportación periódica a cartera indexada para el largo plazo.",
-            ],
-        )
-
-        strat_hybrid = GuidelineActionStrategy(
-            name="Estrategia 3: El Enfoque Híbrido / Regla del Bonus (80/20)",
-            badge="Equilibrio Consciente",
-            allocation_amount=round(surplus, 2),
-            description="Premiar la disciplina personal permitiendo un pequeño disfrute sin descapitalizar el futuro.",
-            breakdown_items=[
-                f"80% ({surplus * 0.8:,.2f} €) a Ahorro e Inversión: Potencias tu patrimonio neto con disciplina.",
-                f"20% ({surplus * 0.2:,.2f} €) a Deseos: Aumentas ligeramente ocio o viajes de forma consciente sin caer en el derroche.",
-            ],
-        )
-
-        syn_row1 = SynopticTableRow(
-            scenario_name="Excedente en Necesidades (Fijo)",
-            funding_source="100% a Ahorro/Inversión (Fondo de Emergencia o Bolsa)",
-            touch_emergency_fund="NO (Al revés: se usa el excedente para rellenarlo si falta)",
-            budget_action="Asignar según Acelerador FIRE o Regla 80/20",
-        )
-
-        guidelines.append(
-            MonthlyGuidelineItem(
-                scenario_type=MonthlyScenarioType.NEEDS_SURPLUS,
-                severity=GuidelineSeverity.INFO,
-                title=f"Excedente Positivo en Necesidades Básicas (+{surplus:,.2f} € / +{delta_pct:.1f}%)",
-                summary_headline=(
-                    f"Tus necesidades reales ({real_needs:,.2f} €) son inferiores al 50% presupuestado ({target_needs:,.2f} €), "
-                    f"generando un excedente de {surplus:,.2f} €. Regla de oro: este sobrante jamás debe derivarse por defecto a aumentar los Deseos."
-                ),
-                delta_amount=round(surplus, 2),
-                delta_percentage=round(delta_pct, 2),
-                strategies=[strat_fire, strat_sinking, strat_hybrid],
-                synoptic_row=syn_row1,
-                emergency_fund_rule="NO se retira. Si el fondo no cubre la meta, el excedente debe emplearse prioritariamente en completarlo.",
-                key_recommendation="Aplica el Acelerador FIRE: canaliza el 100% del sobrante a blindar el Fondo de Emergencia o a inversión indexada.",
+            ef_breakdown_step2 = (
+                "Fase 2 (Una vez blindado): El 100% de los excedentes futuros se canalizará a inversión a largo plazo."
+                if not is_ef_completed
+                else "Resultado: Multiplicas la velocidad del interés compuesto y acortas el tiempo hacia la Libertad Financiera (FIRE)."
             )
-        )
-        synoptic_table.append(syn_row1)
+
+            strat_fire = GuidelineActionStrategy(
+                name="Estrategia 1: El Acelerador FIRE (Inyección Pura a Ahorro e Inversión)",
+                badge="Opción Principal",
+                allocation_amount=round(surplus, 2),
+                description="Derivar el 100% del excedente a fortalecer tu bloque de futuro sin inflar los Deseos.",
+                breakdown_items=[ef_breakdown_step1, ef_breakdown_step2],
+            )
+
+            strat_sinking = GuidelineActionStrategy(
+                name="Estrategia 2: Creación de Objetivos / Provisión a Medio Plazo (Ahorro con Propósito)",
+                badge="Sinking Fund",
+                allocation_amount=round(surplus, 2),
+                description="Dividir el excedente para metas futuras específicas a 3-5 años sin tocar la renta variable.",
+                breakdown_items=[
+                    f"Fondo de Proyectos / Amortización ({surplus * 0.5:,.2f} €): Para activos previstos a medio plazo (coche, vivienda, reformas) en cuenta remunerada o depósito.",
+                    f"Inversión Pura Indexada ({surplus * 0.5:,.2f} €): Aportación periódica a cartera indexada para el largo plazo.",
+                ],
+            )
+
+            strat_hybrid = GuidelineActionStrategy(
+                name="Estrategia 3: El Enfoque Híbrido / Regla del Bonus (80/20)",
+                badge="Equilibrio Consciente",
+                allocation_amount=round(surplus, 2),
+                description="Premiar la disciplina personal permitiendo un pequeño disfrute sin descapitalizar el futuro.",
+                breakdown_items=[
+                    f"80% ({surplus * 0.8:,.2f} €) a Ahorro e Inversión: Potencias tu patrimonio neto con disciplina.",
+                    f"20% ({surplus * 0.2:,.2f} €) a Deseos: Aumentas ligeramente ocio o viajes de forma consciente sin caer en el derroche.",
+                ],
+            )
+
+            syn_row1 = SynopticTableRow(
+                scenario_name="Excedente en Necesidades (Fijo)",
+                funding_source="100% a Ahorro/Inversión (Fondo de Emergencia o Bolsa)",
+                touch_emergency_fund="NO (Al revés: se usa el excedente para rellenarlo si falta)",
+                budget_action="Asignar según Acelerador FIRE o Regla 80/20",
+            )
+
+            guidelines.append(
+                MonthlyGuidelineItem(
+                    scenario_type=MonthlyScenarioType.NEEDS_SURPLUS,
+                    severity=GuidelineSeverity.INFO,
+                    title=f"Excedente Positivo en Necesidades Básicas (+{surplus:,.2f} € / +{delta_pct:.1f}%)",
+                    summary_headline=(
+                        f"Tus necesidades reales ({real_needs:,.2f} €) son inferiores al 50% presupuestado ({target_needs:,.2f} €), "
+                        f"generando un excedente de {surplus:,.2f} €. Regla de oro: este sobrante jamás debe derivarse por defecto a aumentar los Deseos."
+                    ),
+                    delta_amount=round(surplus, 2),
+                    delta_percentage=round(delta_pct, 2),
+                    strategies=[strat_fire, strat_sinking, strat_hybrid],
+                    synoptic_row=syn_row1,
+                    emergency_fund_rule="NO se retira. Si el fondo no cubre la meta, el excedente debe emplearse prioritariamente en completarlo.",
+                    key_recommendation="Aplica el Acelerador FIRE: canaliza el 100% del sobrante a blindar el Fondo de Emergencia o a inversión indexada.",
+                )
+            )
+            synoptic_table.append(syn_row1)
 
     # 2. CASO 2: DÉFICIT EN NECESIDADES BÁSICAS (real_needs > target_needs)
     if real_income > 0 and real_needs > target_needs:
@@ -289,53 +388,84 @@ def evaluate_monthly_guidelines(
         extra = real_income - budget_income
         extra_pct = (extra / budget_income * 100.0)
 
-        strat_bonus_ef = GuidelineActionStrategy(
-            name="Inyección a Seguridad Patrimonial (Fondo de Emergencia)",
-            badge="Prioridad 1",
-            allocation_amount=round(extra, 2),
-            description="Si tu Fondo de Emergencia no alcanza la meta de cobertura, el 100% del ingreso extraordinario debe ir al fondo.",
-            breakdown_items=[
-                f"Aportación recomendada al Fondo de Emergencia: {min(extra, ef_gap):,.2f} €.",
-                f"Remanente a inversión a largo plazo: {max(0.0, extra - ef_gap):,.2f} €.",
-            ],
+        applied_bonus = (applied_strategies.get("EXTRAORDINARY_INCOME") if applied_strategies else None) or (
+            applied_strategy if applied_strategy and applied_strategy.get("scenario_type") == "EXTRAORDINARY_INCOME" else None
         )
 
-        strat_bonus_rule = GuidelineActionStrategy(
-            name="Regla de Bonus (80% Inversión / 20% Disfrute)",
-            badge="Si Fondo Completo",
-            allocation_amount=round(extra, 2),
-            description="Distribución equilibrada una vez cubierto el colchón de seguridad.",
-            breakdown_items=[
-                f"80% ({extra * 0.8:,.2f} €) a Inversión o Amortización de Deuda: Aumentas el patrimonio a largo plazo.",
-                f"20% ({extra * 0.2:,.2f} €) a Deseos / Experiencias: Disfrute libre de culpa sin descapitalización.",
-            ],
-        )
-
-        syn_row5 = SynopticTableRow(
-            scenario_name="Ingreso Extraordinario (Bonus / Paga Extra)",
-            funding_source="100% a Fondo de Emergencia (si falta) o Inversión (80%) + Deseos (20%)",
-            touch_emergency_fund="NO se retira. Se aporta dinero al fondo si está en construcción",
-            budget_action="Asignar según regla 80/20 de bonus",
-        )
-
-        guidelines.append(
-            MonthlyGuidelineItem(
-                scenario_type=MonthlyScenarioType.EXTRAORDINARY_INCOME,
-                severity=GuidelineSeverity.INFO,
-                title=f"Ingreso Extraordinario (+{extra:,.2f} € / +{extra_pct:.1f}% vs Presupuesto)",
-                summary_headline=(
-                    f"Has obtenido un ingreso de {real_income:,.2f} €, superior en {extra:,.2f} € a tu base presupuestada ({budget_income:,.2f} €). "
-                    f"Aprovecha esta entrada extraordinaria con estrategia patrimonial."
-                ),
-                delta_amount=round(extra, 2),
-                delta_percentage=round(extra_pct, 2),
-                strategies=[strat_bonus_ef, strat_bonus_rule],
-                synoptic_row=syn_row5,
-                emergency_fund_rule="Se inyecta capital al fondo si la meta de cobertura no está completada.",
-                key_recommendation="Si tu Fondo de Emergencia no está lleno, aporta el 100% del extra. Si ya está completo, aplica la regla 80/20 a inversión y disfrute.",
+        if applied_bonus:
+            alloc_amt = float(applied_bonus.get("allocated_amount", extra))
+            syn_row_bonus_applied = SynopticTableRow(
+                scenario_name="Ingreso Extraordinario (Optimizado)",
+                funding_source="100% reasignado según regla de bonus",
+                touch_emergency_fund="NO (Protegido)",
+                budget_action="Asignación completada satisfactoriamente",
             )
-        )
-        synoptic_table.append(syn_row5)
+            guidelines.append(
+                MonthlyGuidelineItem(
+                    scenario_type=MonthlyScenarioType.EXTRAORDINARY_INCOME,
+                    severity=GuidelineSeverity.INFO,
+                    title=f"Ingreso Extraordinario Asignado (+{alloc_amt:,.2f} € derivados)",
+                    summary_headline=(
+                        f"El ingreso extraordinario de {alloc_amt:,.2f} € generado este mes ya ha sido asignado con éxito "
+                        f"según tus directrices patrimoniales."
+                    ),
+                    delta_amount=round(extra, 2),
+                    delta_percentage=round(extra_pct, 2),
+                    strategies=[],
+                    synoptic_row=syn_row_bonus_applied,
+                    emergency_fund_rule="Fondo de Emergencia protegido y dotado según la pauta ejecutada.",
+                    key_recommendation="Ingreso extraordinario ya derivado este mes. No se requieren acciones adicionales.",
+                )
+            )
+            synoptic_table.append(syn_row_bonus_applied)
+        else:
+            strat_bonus_ef = GuidelineActionStrategy(
+                name="Inyección a Seguridad Patrimonial (Fondo de Emergencia)",
+                badge="Prioridad 1",
+                allocation_amount=round(extra, 2),
+                description="Si tu Fondo de Emergencia no alcanza la meta de cobertura, el 100% del ingreso extraordinario debe ir al fondo.",
+                breakdown_items=[
+                    f"Aportación recomendada al Fondo de Emergencia: {min(extra, ef_gap):,.2f} €.",
+                    f"Remanente a inversión a largo plazo: {max(0.0, extra - ef_gap):,.2f} €.",
+                ],
+            )
+
+            strat_bonus_rule = GuidelineActionStrategy(
+                name="Regla de Bonus (80% Inversión / 20% Disfrute)",
+                badge="Si Fondo Completo",
+                allocation_amount=round(extra, 2),
+                description="Distribución equilibrada una vez cubierto el colchón de seguridad.",
+                breakdown_items=[
+                    f"80% ({extra * 0.8:,.2f} €) a Inversión o Amortización de Deuda: Aumentas el patrimonio a largo plazo.",
+                    f"20% ({extra * 0.2:,.2f} €) a Deseos / Experiencias: Disfrute libre de culpa sin descapitalización.",
+                ],
+            )
+
+            syn_row5 = SynopticTableRow(
+                scenario_name="Ingreso Extraordinario (Bonus / Paga Extra)",
+                funding_source="100% a Fondo de Emergencia (si falta) o Inversión (80%) + Deseos (20%)",
+                touch_emergency_fund="NO se retira. Se aporta dinero al fondo si está en construcción",
+                budget_action="Asignar según regla 80/20 de bonus",
+            )
+
+            guidelines.append(
+                MonthlyGuidelineItem(
+                    scenario_type=MonthlyScenarioType.EXTRAORDINARY_INCOME,
+                    severity=GuidelineSeverity.INFO,
+                    title=f"Ingreso Extraordinario (+{extra:,.2f} € / +{extra_pct:.1f}% vs Presupuesto)",
+                    summary_headline=(
+                        f"Has obtenido un ingreso de {real_income:,.2f} €, superior en {extra:,.2f} € a tu base presupuestada ({budget_income:,.2f} €). "
+                        f"Aprovecha esta entrada extraordinaria con estrategia patrimonial."
+                    ),
+                    delta_amount=round(extra, 2),
+                    delta_percentage=round(extra_pct, 2),
+                    strategies=[strat_bonus_ef, strat_bonus_rule],
+                    synoptic_row=syn_row5,
+                    emergency_fund_rule="Se inyecta capital al fondo si la meta de cobertura no está completada.",
+                    key_recommendation="Si tu Fondo de Emergencia no está lleno, aporta el 100% del extra. Si ya está completo, aplica la regla 80/20 a inversión y disfrute.",
+                )
+            )
+            synoptic_table.append(syn_row5)
 
     # 6. CASO 6: DINERO SIN ASIGNAR ELEVADO (> 5% de los ingresos)
     if real_income > 0 and unassigned_amount > (real_income * 0.05):
@@ -419,6 +549,8 @@ def evaluate_monthly_guidelines(
         emergency_fund_coverage_months=round(cov_months, 1),
         emergency_fund_target_months=round(tgt_months, 1),
         is_emergency_fund_completed=is_ef_completed,
+        applied_strategy=applied_strategy,
+        applied_strategies=applied_strategies,
     )
 
 
@@ -440,6 +572,16 @@ def evaluate_annual_guidelines(
     pct_aho = float(annual_metrics.get("pct_aho_real", 0.0))
     tasa_ahorro_media = (aho_anual / ingresos * 100.0) if ingresos > 0 else 0.0
     ahorro_acumulado_total = float(annual_metrics.get("ahorro_acumulado_total", 0.0))
+
+    # 0. CASO ESPECIAL: AÑO VACÍO SIN INFORMACIÓN FINANCIERA
+    if ingresos <= 0.0 and (nec_anual + des_anual + aho_anual) <= 0.0:
+        return AnnualGuidelineReport(
+            overall_health="Año sin Información Financiera",
+            status_severity=GuidelineSeverity.INFO,
+            average_savings_rate=0.0,
+            guidelines=[],
+            summary_text="No se registran ingresos ni gastos en este ejercicio anual.",
+        )
 
     guidelines: List[AnnualGuidelineItem] = []
 

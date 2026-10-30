@@ -399,3 +399,137 @@ def test_annual_guidelines_balanced():
     assert report.status_severity == GuidelineSeverity.INFO
     assert "Excelente Salud Financiera Anual" in report.overall_health
     assert report.guidelines[0].scenario_type == AnnualScenarioType.ANNUAL_BALANCED
+
+
+def test_needs_surplus_applied_strategy_full():
+    """Valida que una estrategia aplicada al 100% muestre estado optimizado y suprima las tarjetas interactivas."""
+    applied_strat = {
+        "scenario_type": "NEEDS_SURPLUS",
+        "strategy_type": "HYBRID_80_20",
+        "is_partial": False,
+        "allocated_amount": 575.0,
+        "cushion_amount": 0.0,
+    }
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-11",
+        month_name="Noviembre",
+        real_income=1350.0,
+        budget_income=1350.0,
+        real_needs=100.0,
+        real_wants=231.50,
+        real_savings=730.0,
+        applied_strategy=applied_strat,
+    )
+
+    surplus_items = [g for g in report.guidelines if g.scenario_type == MonthlyScenarioType.NEEDS_SURPLUS]
+    assert len(surplus_items) == 1
+    g = surplus_items[0]
+    assert "Excedente de Necesidades Optimizado" in g.title
+    assert "575.00 € reasignados" in g.title
+    assert len(g.strategies) == 0  # No genera formularios ni botones
+    assert g.severity == GuidelineSeverity.INFO
+
+
+def test_needs_surplus_applied_strategy_partial():
+    """Valida que una estrategia con colchón prudencial muestre el colchón activo y suprima las tarjetas."""
+    applied_strat = {
+        "scenario_type": "NEEDS_SURPLUS",
+        "strategy_type": "FIRE",
+        "is_partial": True,
+        "allocated_amount": 287.50,
+        "cushion_amount": 287.50,
+    }
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-11",
+        month_name="Noviembre",
+        real_income=1350.0,
+        budget_income=1350.0,
+        real_needs=100.0,
+        real_wants=231.50,
+        real_savings=730.0,
+        applied_strategy=applied_strat,
+    )
+
+    surplus_items = [g for g in report.guidelines if g.scenario_type == MonthlyScenarioType.NEEDS_SURPLUS]
+    assert len(surplus_items) == 1
+    g = surplus_items[0]
+    assert "Colchón Prudencial Activo" in g.title
+    assert "287.50 € en Necesidades Básicas" in g.title
+    assert len(g.strategies) == 0
+    assert g.severity == GuidelineSeverity.INFO
+
+
+def test_empty_month_detection():
+    """Valida que un mes sin ingresos ni gastos reales se diagnostique como 'Mes sin Información Financiera'."""
+    report = evaluate_monthly_guidelines(
+        month_key="2026-03",
+        month_name="Marzo",
+        real_income=0.0,
+        budget_income=0.0,
+        real_needs=0.0,
+        real_wants=0.0,
+        real_savings=0.0,
+    )
+
+    assert report.is_empty_month is True
+    assert report.overall_status == "Mes sin Información Financiera"
+    assert report.status_severity == GuidelineSeverity.INFO
+    assert len(report.guidelines) == 0
+    assert len(report.synoptic_table) == 0
+    assert report.real_income == 0.0
+    assert report.unassigned_amount == 0.0
+
+
+def test_empty_year_detection():
+    """Valida que un año sin movimientos reales se diagnostique como 'Año sin Información Financiera'."""
+    metrics = {
+        "ingresos_anual_real": 0.0,
+        "nec_anual_real": 0.0,
+        "des_anual_real": 0.0,
+        "aho_anual_real": 0.0,
+        "pct_nec_real": 0.0,
+        "pct_des_real": 0.0,
+        "pct_aho_real": 0.0,
+        "ahorro_acumulado_total": 0.0,
+    }
+
+    report = evaluate_annual_guidelines(metrics)
+    assert report.overall_health == "Año sin Información Financiera"
+    assert report.status_severity == GuidelineSeverity.INFO
+    assert len(report.guidelines) == 0
+    assert "No se registran ingresos" in report.summary_text
+
+
+def test_extraordinary_income_applied_strategy():
+    """Valida que un ingreso extraordinario con estrategia aplicada cambie su estado a 'Ingreso Extraordinario Asignado'."""
+    applied_bonus = {
+        "scenario_type": "EXTRAORDINARY_INCOME",
+        "strategy_type": "EXTRAORDINARY_INCOME",
+        "allocated_amount": 500.0,
+        "is_partial": False,
+    }
+    report = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=1850.0,
+        budget_income=1350.0,  # extra de 500.0
+        real_needs=675.0,
+        real_wants=405.0,
+        real_savings=770.0,
+        applied_strategies={"EXTRAORDINARY_INCOME": applied_bonus},
+    )
+
+    bonus_items = [g for g in report.guidelines if g.scenario_type == MonthlyScenarioType.EXTRAORDINARY_INCOME]
+    assert len(bonus_items) == 1
+    g = bonus_items[0]
+    assert "Ingreso Extraordinario Asignado" in g.title
+    assert "+500.00 €" in g.title
+    assert g.severity == GuidelineSeverity.INFO
+    assert len(g.strategies) == 0
+    assert g.synoptic_row is not None
+    assert g.synoptic_row.scenario_name == "Ingreso Extraordinario (Optimizado)"
+
+
+

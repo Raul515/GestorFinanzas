@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -90,6 +90,9 @@ class MonthlyGuidelineReport(BaseModel):
     emergency_fund_coverage_months: float
     emergency_fund_target_months: float
     is_emergency_fund_completed: bool
+    applied_strategy: Optional[Dict[str, Any]] = None
+    applied_strategies: Optional[Dict[str, Any]] = None
+    is_empty_month: bool = False
 
 
 class AnnualGuidelineItem(BaseModel):
@@ -135,7 +138,7 @@ class StrategyApplyRequest(BaseModel):
         default_factory=list, description="Particiones destinadas a Ahorro/Inversión/Fondo"
     )
     wants_allocations: List[AllocationItem] = Field(
-        default_factory=list, description="Particiones destinadas a incrementar presupuestos de Deseos"
+        default_factory=list, description="Particiones destinadas a asignación real en subcategorías de Deseos"
     )
 
 
@@ -152,8 +155,18 @@ class StrategyApplyResponse(BaseModel):
 class SweepRequest(BaseModel):
     month_key: str = Field(..., description="Identificador del mes en formato YYYY-MM")
     amount: float = Field(..., gt=0.0, description="Importe a barrer hacia el ahorro en euros")
-    target_subcategory_id: int = Field(
-        ..., description="ID de la subcategoría de Ahorro destino (Fondo o Inversión)"
+    target_subcategory_id: Optional[int] = Field(
+        None, description="ID de la subcategoría de Ahorro destino (Fondo o Inversión), obligatorio en DEFAULT_SAVINGS"
+    )
+    mode: str = Field(
+        "DEFAULT_SAVINGS",
+        description="Modo de barrido: 'DEFAULT_SAVINGS' (100% a ahorro) o 'INHERIT_STRATEGY' (proporcional según estrategia del mes)",
+    )
+    savings_allocations: Optional[List[AllocationItem]] = Field(
+        None, description="Asignaciones específicas a Ahorro si se envían desde frontend"
+    )
+    wants_allocations: Optional[List[AllocationItem]] = Field(
+        None, description="Asignaciones específicas a Deseos si se envían desde frontend"
     )
 
 
@@ -161,6 +174,8 @@ class SweepResponse(BaseModel):
     success: bool
     message: str
     amount_swept: float
+    mode_applied: str = "DEFAULT_SAVINGS"
+    transactions_created: int = 1
     emergency_fund_updated: bool = False
     new_emergency_fund_balance: Optional[float] = None
 
@@ -187,5 +202,18 @@ class CompensateDeficitResponse(BaseModel):
     target_month: str
     budgets_updated: int = 0
     new_budget_amount: Optional[float] = None
+
+
+class StrategyRevertRequest(BaseModel):
+    month_key: str = Field(..., description="Identificador del mes en formato YYYY-MM")
+    scenario_type: str = Field(default="NEEDS_SURPLUS", description="Escenario de pauta a revertir")
+
+
+class StrategyRevertResponse(BaseModel):
+    success: bool
+    message: str
+    month_key: str
+    transactions_reverted: int = 0
+    emergency_fund_reverted: float = 0.0
 
 
