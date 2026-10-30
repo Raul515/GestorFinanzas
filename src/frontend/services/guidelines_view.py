@@ -90,6 +90,33 @@ def render_monthly_guidelines_expander(
 
     report = _to_node(report_data)
     m_key = str(report.month_key or "curr")
+
+    # Detección de mes vacío sin datos financieros (sin actividad contable)
+    is_empty = (
+        bool(getattr(report, "is_empty_month", False))
+        or report.overall_status == "Mes sin Información Financiera"
+        or (
+            float(report.real_income or 0.0) == 0.0
+            and float(report.real_needs or 0.0) == 0.0
+            and float(report.real_wants or 0.0) == 0.0
+            and float(report.real_savings or 0.0) == 0.0
+            and not (report.guidelines and any("Optimizado" in (g.title or "") or "Colchón" in (g.title or "") for g in report.guidelines))
+            and not getattr(report, "applied_strategy", None)
+        )
+    )
+
+    if is_empty:
+        expander_title = "ℹ️ Pautas de Actuación Presupuestaria (Mes sin Información Financiera)"
+        with st.expander(expander_title, expanded=expanded):
+            st.markdown(
+                """<div style="background: rgba(128, 128, 128, 0.08); border-left: 5px solid #757575; padding: 12px 16px; border-radius: 6px; margin: 4px 0 10px 0;">
+<span style="font-weight: 700; font-size: 14px; text-transform: uppercase; color: #757575;">ℹ️ Mes sin Información Financiera</span><br>
+<span style="font-size: 13px; opacity: 0.9;">No se han registrado ingresos ni gastos en este mes. Las pautas deterministas y los cálculos 50/30/20 se activarán automáticamente en cuanto introduzcas datos presupuestarios o transacciones.</span>
+</div>""",
+                unsafe_allow_html=True,
+            )
+        return
+
     border_color, bg_color, icon = _get_severity_colors(report.status_severity)
 
     overall_status = report.overall_status or "Evaluación Presupuestaria"
@@ -158,28 +185,82 @@ def render_monthly_guidelines_expander(
             st.markdown(clean_table_html, unsafe_allow_html=True)
 
         # 3. Detalle de Pautas y Estrategias Activas
+        today = datetime.date.today()
+        current_ym = today.strftime("%Y-%m")
+        is_month_end_window = (today.day >= 26 and m_key == current_ym) or (m_key < current_ym)
+        unassigned_cash = float(report.unassigned_amount or 0.0)
+        is_sweep_active = is_month_end_window and unassigned_cash > 5.0 and bool(savings_subcats)
+
         guidelines = report.guidelines or []
-        st.markdown("##### 🔍 Pautas Operativas y Asignación con Cifras Reales")
-
-        is_ef_completed = bool(report.is_emergency_fund_completed)
-        ef_target = float(report.emergency_fund_target_months or 3.0)
-        ef_coverage = float(report.emergency_fund_coverage_months or 0.0)
-
-        for g_idx, g in enumerate(guidelines):
-            g_border, g_bg, g_icon = _get_severity_colors(g.severity)
+        visible_guidelines = []
+        for g in guidelines:
             raw_scen = getattr(g.scenario_type, "value", g.scenario_type)
             scen_type = str(raw_scen or "")
             if "." in scen_type:
                 scen_type = scen_type.split(".")[-1]
 
+            if is_sweep_active:
+                # A fin de mes, suprimir recomendaciones de excedente no aplicado y avisos de dinero sin asignar / óptimo
+                if scen_type in ("HIGH_UNASSIGNED", "OPTIMAL"):
+                    continue
+                if scen_type == "NEEDS_SURPLUS" and not ("Optimizado" in (g.title or "") or "Colchón Prudencial" in (g.title or "")):
+                    continue
+                if scen_type == "EXTRAORDINARY_INCOME" and not ("Asignado" in (g.title or "")):
+                    continue
+
+            visible_guidelines.append(g)
+
+        if visible_guidelines:
+            st.markdown("##### 🔍 Pautas Operativas y Asignación con Cifras Reales")
+
+        is_ef_completed = bool(report.is_emergency_fund_completed)
+        ef_target = float(report.emergency_fund_target_months or 3.0)
+        ef_coverage = float(report.emergency_fund_coverage_months or 0.0)
+
+        for g_idx, g in enumerate(visible_guidelines):
+            g_border, g_bg, g_icon = _get_severity_colors(g.severity)
+            if "Optimizado" in (g.title or "") or "Asignado" in (g.title or ""):
+                g_icon = "✅"
+            raw_scen = getattr(g.scenario_type, "value", g.scenario_type)
+            scen_type = str(raw_scen or "")
+            if "." in scen_type:
+                scen_type = scen_type.split(".")[-1]
+
+            clean_title = (g.title or "").strip()
+            # Si el título ya contiene un emoji al inicio, no duplicarlo
+            if clean_title.startswith(("💡", "✅", "⚠️", "🚨", "🛡️", "🔍")):
+                display_title = clean_title
+            else:
+                display_title = f"{g_icon} {clean_title}"
+
             st.markdown(
                 f"""<div style="background: {g_bg}; border: 1px solid {g_border}; border-left: 6px solid {g_border}; border-radius: 8px; padding: 14px 18px; margin-bottom: 14px;">
-<h4 style="margin: 0 0 6px 0; color: inherit; font-size: 16px; font-weight: 700;">{g_icon} {g.title}</h4>
+<h4 style="margin: 0 0 6px 0; color: inherit; font-size: 16px; font-weight: 700;">{display_title}</h4>
 <p style="margin: 0 0 10px 0; font-size: 13.5px; line-height: 1.45; color: inherit;">{g.summary_headline}</p>
 <div style="background: rgba(0, 0, 0, 0.05); padding: 8px 12px; border-radius: 6px; font-size: 12.5px;"><strong>🛡️ Regla sobre el Fondo de Emergencia:</strong> {g.emergency_fund_rule}</div>
 </div>""",
                 unsafe_allow_html=True,
             )
+
+            # Botón "↩️ Deshacer Estrategia" si el estado ya está optimizado, en colchón o asignado (centrado con popover de confirmación)
+            if "Optimizado" in g.title or "Colchón Prudencial" in g.title or "Asignado" in g.title:
+                st.markdown("<div style='margin-top: -6px; margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+                _, rev_center, _ = st.columns([1.2, 1.6, 1.2])
+                with rev_center:
+                    with st.popover("↩️ Deshacer Estrategia", help="Revierte la estrategia aplicada eliminando transacciones vinculadas y restaurando saldos", use_container_width=True):
+                        st.markdown("##### ⚠️ ¿Deshacer Estrategia?")
+                        st.warning(
+                            "¿Estás seguro de que deseas deshacer la estrategia aplicada? "
+                            "Se revertirán las transacciones generadas y el saldo del Fondo de Emergencia volverá a su estado anterior."
+                        )
+                        if st.button("Sí, deshacer estrategia", key=f"btn_revert_strat_confirm_{m_key}_{g_idx}", type="primary", use_container_width=True):
+                            if api_client:
+                                res = api_client.revert_guideline_strategy(month_key=m_key, scenario_type=scen_type)
+                                if res and res.get("success"):
+                                    st.toast("Estrategia deshecha exitosamente. El capital vuelve a estar disponible.", icon="↩️")
+                                    st.rerun()
+                                else:
+                                    st.error("No se pudo revertir la estrategia en el backend.")
 
             # A. Jerarquía de Compensación (si aplica: déficit)
             comp_steps = g.compensation_hierarchy or []
@@ -380,7 +461,7 @@ def render_monthly_guidelines_expander(
 
                             if not split_wants:
                                 sub_20_id = st.selectbox(
-                                    f"Subcategoría de Deseos (+{amt_20:,.2f} € presupuesto):",
+                                    f"Subcategoría de Deseos (+{amt_20:,.2f} € asignación real):",
                                     options=list(sub_opts_wants.keys()),
                                     format_func=lambda x: sub_opts_wants.get(x, f"Subcat {x}"),
                                     key=f"wants_single_{m_key}_{g_idx}",
@@ -402,17 +483,23 @@ def render_monthly_guidelines_expander(
                                             options=list(sub_opts_wants.keys()),
                                             index=min(sp_i, max(0, len(sub_opts_wants)-1)),
                                             format_func=lambda x: sub_opts_wants.get(x, f"Subcat {x}"),
-                                            key=f"split_sub_{sp_i}_{m_key}_{g_idx}",
+                                            key=f"split_sub_{num_splits}_{sp_i}_{m_key}_{g_idx}",
                                         )
                                     with sp_col2:
-                                        default_pct = 10.0 if num_splits == 2 else 5.0
+                                        if num_splits == 2:
+                                            default_pct = 10.0
+                                        elif num_splits == 3:
+                                            default_pct = 10.0 if sp_i == 0 else 5.0
+                                        else:
+                                            default_pct = 5.0
+
                                         sp_pct = st.number_input(
                                             f"% Partición {sp_i+1}:",
                                             min_value=5.0,
                                             max_value=20.0,
                                             step=5.0,
                                             value=default_pct,
-                                            key=f"split_pct_{sp_i}_{m_key}_{g_idx}",
+                                            key=f"split_pct_{num_splits}_{sp_i}_{m_key}_{g_idx}",
                                         )
                                     sum_pct += sp_pct
                                     part_amt = eff_amount * (sp_pct / 100.0)
@@ -560,44 +647,154 @@ def render_monthly_guidelines_expander(
 
             # Recomendación operativa: SÓLO mostrar en Dinero Sin Asignar (HIGH_UNASSIGNED)
             if scen_type == "HIGH_UNASSIGNED" and g.key_recommendation:
-                st.caption(f"💡 **Recomendación Operativa:** {g.key_recommendation}")
+                st.markdown(
+                    f'<div style="padding-left: 24px; margin-top: -4px; margin-bottom: 12px; font-size: 13.5px; opacity: 0.9;">'
+                    f'💡 <strong>Recomendación Operativa:</strong> {g.key_recommendation}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
         # 4. Acción de Barrido de Fin de Mes (Cierre Contable a partir del día 26)
-        today = datetime.date.today()
-        current_ym = today.strftime("%Y-%m")
-        is_month_end_window = (today.day >= 26 and m_key == current_ym) or (m_key < current_ym)
+        if is_sweep_active:
+            if visible_guidelines:
+                st.markdown("---")
 
-        unassigned_cash = float(report.unassigned_amount or 0.0)
-        if is_month_end_window and unassigned_cash > 5.0 and savings_subcats:
-            st.markdown("---")
-            st.markdown(
-                f"""<div style="background: rgba(21, 101, 192, 0.08); border: 1px solid #1565c0; border-left: 6px solid #1565c0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+            # Detectar si hay un colchón prudencial activo de una estrategia previa
+            applied = getattr(report, "applied_strategy", None)
+            has_active_cushion = False
+            cushion_amt = 0.0
+            strat_label = ""
+            split_cfg = None
+
+            if applied:
+                is_partial = bool(applied.get("is_partial", False))
+                cushion_amt = float(applied.get("cushion_amount", 0.0))
+                if is_partial and cushion_amt > 0:
+                    has_active_cushion = True
+                    raw_type = applied.get("strategy_type", "")
+                    strat_name_map = {
+                        "FIRE": "El Acelerador FIRE (100% Ahorro)",
+                        "SINKING_FUND": "Sinking Fund",
+                        "HYBRID_80_20": "El Enfoque Híbrido (Regla 80/20)",
+                        "EIGHTY_TWENTY": "El Enfoque Híbrido (Regla 80/20)",
+                    }
+                    strat_label = strat_name_map.get(raw_type, f"Estrategia {raw_type}")
+                    split_cfg = applied.get("split_config")
+
+            if has_active_cushion:
+                st.markdown(
+                    f"""<div style="background: rgba(21, 101, 192, 0.08); border: 1px solid #1565c0; border-left: 6px solid #1565c0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
+<h5 style="margin: 0 0 4px 0; color: inherit; font-size: 15px; font-weight: 700;">🧹 Barrido de Fin de Mes (Liquidación de Colchón y Remanente)</h5>
+<p style="margin: 0; font-size: 13px; opacity: 0.95;">Has alcanzado el cierre del mes con un remanente en cuenta corriente de <strong>{unassigned_cash:,.2f} €</strong> (mantienes un colchón prudencial de <strong>{cushion_amt:,.2f} €</strong> no consumido en Necesidades Básicas tras ejecutar <em>{strat_label}</em>).</p>
+</div>""",
+                    unsafe_allow_html=True,
+                )
+
+                sweep_mode = st.radio(
+                    "Modalidad de Liquidación del Remanente:",
+                    options=["INHERIT_STRATEGY", "DEFAULT_SAVINGS"],
+                    format_func=lambda x: (
+                        f"✨ Completar estrategia del mes ({strat_label})"
+                        if x == "INHERIT_STRATEGY"
+                        else "🏦 Barrer 100% a Ahorro tradicional"
+                    ),
+                    key=f"sweep_mode_{m_key}",
+                    horizontal=True,
+                )
+
+                if sweep_mode == "INHERIT_STRATEGY":
+                    # Vista previa proporcional
+                    if split_cfg:
+                        orig_s = split_cfg.get("savings", [])
+                        orig_w = split_cfg.get("wants", [])
+                        tot_orig = sum(float(x.get("amount", 0.0)) for x in orig_s + orig_w)
+                        if tot_orig > 0:
+                            sub_names = {s["id"]: s["nombre"] for s in (savings_subcats + (wants_subcats or []))}
+                            items_preview = []
+                            for x in orig_s:
+                                sh = float(x.get("amount", 0.0)) / tot_orig
+                                nm = x.get("name") or sub_names.get(x.get("subcategory_id"), f"Subcat {x.get('subcategory_id')}")
+                                items_preview.append(f"🔒 Ahorro ({nm}): **{unassigned_cash * sh:,.2f} €** ({sh*100:.0f}%)")
+                            for x in orig_w:
+                                sh = float(x.get("amount", 0.0)) / tot_orig
+                                nm = x.get("name") or sub_names.get(x.get("subcategory_id"), f"Subcat {x.get('subcategory_id')}")
+                                items_preview.append(f"🎯 Deseos ({nm}): **{unassigned_cash * sh:,.2f} €** ({sh*100:.0f}%)")
+                            st.caption("Distribución proporcional según la pauta del mes: " + " · ".join(items_preview))
+
+                    if st.button(
+                        f"⚡ Liquidar y Completar Estrategia ({unassigned_cash:,.2f} €)",
+                        key=f"btn_sweep_inherit_{m_key}",
+                        type="primary",
+                    ):
+                        if api_client:
+                            res = api_client.sweep_month_surplus(
+                                month_key=m_key,
+                                amount=unassigned_cash,
+                                mode="INHERIT_STRATEGY",
+                            )
+                            if res and res.get("success"):
+                                st.toast(f"¡Estrategia completada! Barrido proporcional de {unassigned_cash:,.2f} € ejecutado.", icon="✨")
+                                st.rerun()
+                            else:
+                                st.error("No se pudo ejecutar el barrido proporcional en el backend.")
+                else:
+                    # Modo DEFAULT_SAVINGS con colchón
+                    sweep_col1, sweep_col2 = st.columns([2, 1])
+                    with sweep_col1:
+                        sub_opts_sav = {s["id"]: s["nombre"] for s in savings_subcats}
+                        default_target = emergency_subcat_id if (not is_ef_completed and emergency_subcat_id) else list(sub_opts_sav.keys())[0]
+                        target_sweep_id = st.selectbox(
+                            "Subcategoría Destino del Barrido:",
+                            options=list(sub_opts_sav.keys()),
+                            index=list(sub_opts_sav.keys()).index(default_target) if default_target in sub_opts_sav else 0,
+                            format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
+                            key=f"sweep_target_{m_key}",
+                        )
+                    with sweep_col2:
+                        st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
+                        if st.button(f"⚡ Barrer 100% a Ahorro ({unassigned_cash:,.2f} €)", key=f"btn_sweep_def_{m_key}", type="primary"):
+                            if api_client:
+                                res = api_client.sweep_month_surplus(
+                                    month_key=m_key,
+                                    amount=unassigned_cash,
+                                    target_subcategory_id=target_sweep_id,
+                                    mode="DEFAULT_SAVINGS",
+                                )
+                                if res and res.get("success"):
+                                    st.toast(f"¡Barrido a ahorro ejecutado ({unassigned_cash:,.2f} €)!", icon="🧹")
+                                    st.rerun()
+                                else:
+                                    st.error("No se pudo ejecutar el barrido en el backend.")
+            else:
+                # Comportamiento tradicional sin colchón activo
+                st.markdown(
+                    f"""<div style="background: rgba(21, 101, 192, 0.08); border: 1px solid #1565c0; border-left: 6px solid #1565c0; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px;">
 <h5 style="margin: 0 0 4px 0; color: inherit; font-size: 15px; font-weight: 700;">🧹 Barrido de Fin de Mes (Cierre Contable)</h5>
 <p style="margin: 0; font-size: 13px; opacity: 0.95;">Has alcanzado el cierre del mes con un remanente no gastado de <strong>{unassigned_cash:,.2f} €</strong>. Transfiérelo al ahorro para cerrar el mes con tasa de ahorro maximizada.</p>
 </div>""",
-                unsafe_allow_html=True,
-            )
-            sweep_col1, sweep_col2 = st.columns([2, 1])
-            with sweep_col1:
-                sub_opts_sav = {s["id"]: s["nombre"] for s in savings_subcats}
-                default_target = emergency_subcat_id if (not is_ef_completed and emergency_subcat_id) else list(sub_opts_sav.keys())[0]
-                target_sweep_id = st.selectbox(
-                    "Subcategoría Destino del Barrido:",
-                    options=list(sub_opts_sav.keys()),
-                    index=list(sub_opts_sav.keys()).index(default_target) if default_target in sub_opts_sav else 0,
-                    format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
-                    key=f"sweep_target_{m_key}",
+                    unsafe_allow_html=True,
                 )
-            with sweep_col2:
-                st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                if st.button(f"⚡ Ejecutar Barrido ({unassigned_cash:,.2f} €)", key=f"btn_sweep_{m_key}", type="primary"):
-                    if api_client:
-                        res = api_client.sweep_month_surplus(m_key, unassigned_cash, target_sweep_id)
-                        if res and res.get("success"):
-                            st.toast(f"¡Barrido de fin de mes ejecutado ({unassigned_cash:,.2f} €)!", icon="🧹")
-                            st.rerun()
-                        else:
-                            st.error("No se pudo ejecutar el barrido en el backend.")
+                sweep_col1, sweep_col2 = st.columns([2, 1])
+                with sweep_col1:
+                    sub_opts_sav = {s["id"]: s["nombre"] for s in savings_subcats}
+                    default_target = emergency_subcat_id if (not is_ef_completed and emergency_subcat_id) else list(sub_opts_sav.keys())[0]
+                    target_sweep_id = st.selectbox(
+                        "Subcategoría Destino del Barrido:",
+                        options=list(sub_opts_sav.keys()),
+                        index=list(sub_opts_sav.keys()).index(default_target) if default_target in sub_opts_sav else 0,
+                        format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
+                        key=f"sweep_target_{m_key}",
+                    )
+                with sweep_col2:
+                    st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
+                    if st.button(f"⚡ Ejecutar Barrido ({unassigned_cash:,.2f} €)", key=f"btn_sweep_{m_key}", type="primary"):
+                        if api_client:
+                            res = api_client.sweep_month_surplus(m_key, unassigned_cash, target_sweep_id, mode="DEFAULT_SAVINGS")
+                            if res and res.get("success"):
+                                st.toast(f"¡Barrido de fin de mes ejecutado ({unassigned_cash:,.2f} €)!", icon="🧹")
+                                st.rerun()
+                            else:
+                                st.error("No se pudo ejecutar el barrido en el backend.")
 
 
 def render_annual_guidelines_expander(
@@ -612,6 +809,27 @@ def render_annual_guidelines_expander(
         return
 
     report = _to_node(report_data)
+    is_empty_year = (
+        report.overall_health == "Año sin Información Financiera"
+        or (
+            not report.guidelines
+            and float(report.average_savings_rate or 0.0) == 0.0
+            and "sin Información" in str(report.overall_health or "")
+        )
+    )
+
+    if is_empty_year:
+        expander_title = "ℹ️ Diagnóstico Estructural y Pautas Anuales (Año sin Información Financiera)"
+        with st.expander(expander_title, expanded=expanded):
+            st.markdown(
+                """<div style="background: rgba(128, 128, 128, 0.08); border-left: 5px solid #757575; padding: 12px 16px; border-radius: 6px; margin: 4px 0 10px 0;">
+<span style="font-weight: 700; font-size: 14px; text-transform: uppercase; color: #757575;">ℹ️ Año sin Información Financiera</span><br>
+<span style="font-size: 13.5px; opacity: 0.95;">No se han registrado transacciones ni presupuesto en este ejercicio. El diagnóstico estructural y la detección de riesgos se activarán automáticamente cuando haya actividad financiera.</span>
+</div>""",
+                unsafe_allow_html=True,
+            )
+        return
+
     border_color, bg_color, icon = _get_severity_colors(report.status_severity)
 
     overall_health = report.overall_health or "Consolidado Anual"

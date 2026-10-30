@@ -330,9 +330,11 @@ def test_operational_caption_retained_on_high_unassigned(
 
     render_monthly_guidelines_expander(report, expanded=True)
 
-    caption_calls = [call[0][0] for call in mock_caption.call_args_list if call[0]]
-    combined_captions = " ".join(caption_calls)
-    assert "Recomendación Operativa:" in combined_captions
+    rendered_calls = [call[0][0] for call in mock_caption.call_args_list if call[0]] + [
+        call[0][0] for call in mock_markdown.call_args_list if call[0]
+    ]
+    combined_rendered = " ".join(rendered_calls)
+    assert "Recomendación Operativa:" in combined_rendered
 
 
 @patch("streamlit.expander")
@@ -484,5 +486,220 @@ def test_render_income_shortfall_freeze_controls(
     combined_html = " ".join(markdown_calls)
 
     assert "Congelar Deseos del Mes" in combined_html
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.radio")
+@patch("streamlit.button")
+def test_render_intelligent_sweep_with_active_cushion(
+    mock_button,
+    mock_radio,
+    mock_cols,
+    mock_markdown,
+    mock_expander,
+):
+    """Verifica que el barrido presente la opción inteligente de heredar estrategia si hay colchón activo."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+    mock_radio.return_value = "INHERIT_STRATEGY"
+
+    def _mock_cols(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols
+
+    cats = [
+        {"id": 1, "nombre": "Necesidades Básicas", "tipo": "gasto"},
+        {"id": 2, "nombre": "Deseos", "tipo": "gasto"},
+        {"id": 3, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+    ]
+    subcats = [
+        {"id": 10, "nombre": "Alquiler", "categoria_id": 1},
+        {"id": 20, "nombre": "Viajes", "categoria_id": 2},
+        {"id": 30, "nombre": "Fondo de emergencia", "categoria_id": 3},
+    ]
+
+    applied_strat = {
+        "month": "2026-01",  # Mes pasado para activar ventana de barrido
+        "scenario_type": "NEEDS_SURPLUS",
+        "strategy_type": "HYBRID_80_20",
+        "is_partial": True,
+        "allocated_amount": 200.0,
+        "cushion_amount": 200.0,
+        "split_config": {
+            "savings": [{"subcategory_id": 30, "amount": 160.0}],
+            "wants": [{"subcategory_id": 20, "amount": 40.0}],
+        },
+    }
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-01",
+        month_name="Enero",
+        real_income=2000.0,
+        budget_income=2000.0,
+        real_needs=600.0,
+        real_wants=400.0,
+        real_savings=400.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+        applied_strategy=applied_strat,
+    )
+
+    render_monthly_guidelines_expander(
+        report,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    assert "Barrido de Fin de Mes (Liquidación de Colchón y Remanente)" in combined_html
+    assert mock_radio.called
+    radio_kwargs = mock_radio.call_args[1]
+    assert "INHERIT_STRATEGY" in mock_radio.call_args[1].get("options", mock_radio.call_args[0][1] if len(mock_radio.call_args[0]) > 1 else [])
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+def test_render_empty_month_notice(mock_markdown, mock_expander):
+    """Verifica que un mes vacío muestre aviso neutro y no tablas ni cálculos erróneos."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    empty_report = evaluate_monthly_guidelines(
+        month_key="2026-04",
+        month_name="Abril",
+        real_income=0.0,
+        budget_income=0.0,
+        real_needs=0.0,
+        real_wants=0.0,
+        real_savings=0.0,
+    )
+
+    render_monthly_guidelines_expander(empty_report, expanded=True)
+
+    mock_expander.assert_called_once()
+    assert "Mes sin Información Financiera" in mock_expander.call_args[0][0]
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    assert "No se han registrado ingresos ni gastos en este mes" in combined_html
+    assert "Tabla Sinóptica" not in combined_html
+    assert "Diagnóstico del Mes: Cumplimiento" not in combined_html
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+def test_render_empty_year_notice(mock_markdown, mock_expander):
+    """Verifica que un año vacío muestre aviso neutro y no tablas ni cálculos erróneos."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    empty_annual = evaluate_annual_guidelines({
+        "ingresos_anual_real": 0.0,
+        "nec_anual_real": 0.0,
+        "des_anual_real": 0.0,
+        "aho_anual_real": 0.0,
+        "pct_nec_real": 0.0,
+        "pct_des_real": 0.0,
+        "pct_aho_real": 0.0,
+        "ahorro_acumulado_total": 0.0,
+    })
+
+    render_annual_guidelines_expander(empty_annual, expanded=True)
+
+    mock_expander.assert_called_once()
+    assert "Año sin Información Financiera" in mock_expander.call_args[0][0]
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    assert "No se han registrado transacciones ni presupuesto en este ejercicio" in combined_html
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.selectbox")
+@patch("streamlit.button")
+def test_render_suppressed_recommendations_when_sweep_active(
+    mock_button,
+    mock_selectbox,
+    mock_cols,
+    mock_markdown,
+    mock_expander,
+):
+    """
+    Verifica que al activarse el barrido de fin de mes:
+    1º: Se suprimen las tarjetas de excedente no aplicado (FIRE, Sinking Fund, 80/20).
+    2º: Se suprimen las tarjetas de Dinero Sin Asignar Elevado (HIGH_UNASSIGNED) y Cumplimiento Óptimo (OPTIMAL).
+    3º: Se renderiza exclusivamente el barrido de fin de mes.
+    """
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    def _mock_cols_sweep(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols_sweep
+
+    cats = [
+        {"id": 1, "nombre": "Necesidades Básicas", "tipo": "gasto"},
+        {"id": 2, "nombre": "Deseos", "tipo": "gasto"},
+        {"id": 3, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+    ]
+    subcats = [
+        {"id": 10, "nombre": "Alquiler", "categoria_id": 1},
+        {"id": 20, "nombre": "Ocio", "categoria_id": 2},
+        {"id": 30, "nombre": "Fondo de emergencia", "categoria_id": 3},
+    ]
+
+    # Mes pasado (2026-01) con excedente en necesidades no aplicado y dinero sin asignar
+    report = evaluate_monthly_guidelines(
+        month_key="2026-01",
+        month_name="Enero",
+        real_income=2000.0,
+        budget_income=2000.0,
+        real_needs=700.0,   # Meta: 1000.0 -> Excedente 300.0
+        real_wants=400.0,
+        real_savings=400.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    render_monthly_guidelines_expander(
+        report,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    # El barrido DEBE aparecer porque es fin de mes y hay remanente > 5€
+    assert "🧹 Barrido de Fin de Mes (Cierre Contable)" in combined_html
+    # Las tarjetas operativas deben quedar SUPRIMIDAS
+    assert "El Acelerador FIRE" not in combined_html
+    assert "El Enfoque Híbrido" not in combined_html
+    assert "Dinero Sin Asignar Elevado" not in combined_html
+    assert "Pautas Operativas y Asignación con Cifras Reales" not in combined_html
+
+
 
 
