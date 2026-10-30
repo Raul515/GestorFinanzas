@@ -198,6 +198,41 @@ def render_monthly_guidelines_expander(
                         unsafe_allow_html=True,
                     )
 
+            # Amortiguación interactiva de Necesidades desde Deseos (Fase 4: NEEDS_DEFICIT)
+            if scen_type == "NEEDS_DEFICIT" and wants_subcats:
+                excess_amt = float(g.delta_amount or 0.0)
+                st.markdown(
+                    f"""<div style="background: rgba(239, 108, 0, 0.08); border: 1px solid #ef6c00; border-left: 6px solid #ef6c00; border-radius: 8px; padding: 12px 16px; margin: 10px 0 12px 0;">
+<h5 style="margin: 0 0 4px 0; color: inherit; font-size: 14.5px; font-weight: 700;">⚡ Amortiguar con Deseos del Mes (Protección del Fondo de Emergencia)</h5>
+<p style="margin: 0; font-size: 13px; opacity: 0.95;">Absorbe el déficit de <strong>{excess_amt:,.2f} €</strong> reduciendo el presupuesto de Deseos de este mes (<strong>{m_key}</strong>) para evitar tocar tu Fondo de Emergencia.</p>
+</div>""",
+                    unsafe_allow_html=True,
+                )
+                abs_col1, abs_col2 = st.columns([2, 1])
+                with abs_col1:
+                    sub_opts_wants = {s["id"]: s["nombre"] for s in wants_subcats}
+                    target_abs_id = st.selectbox(
+                        "Subcategoría de Deseos a Reducir:",
+                        options=list(sub_opts_wants.keys()),
+                        format_func=lambda x: sub_opts_wants.get(x, f"Subcat {x}"),
+                        key=f"needs_absorb_sub_{m_key}_{g_idx}",
+                    )
+                with abs_col2:
+                    st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
+                    if st.button(f"⚡ Amortiguar ({excess_amt:,.2f} €)", key=f"btn_absorb_{m_key}_{g_idx}", type="primary"):
+                        if api_client:
+                            res = api_client.compensate_guideline_deficit(
+                                month_key=m_key,
+                                action_type="NEEDS_ABSORPTION_CURRENT_WANTS",
+                                amount=excess_amt,
+                                target_subcategory_id=target_abs_id,
+                            )
+                            if res and res.get("success"):
+                                st.toast(f"¡Amortiguación aplicada! Presupuesto reducido en {excess_amt:,.2f} €.", icon="⚡")
+                                st.rerun()
+                            else:
+                                st.error("No se pudo aplicar la amortiguación en el backend.")
+
             # B. Estrategias de Asignación de Capital (NEEDS_SURPLUS y EXTRAORDINARY_INCOME)
             strategies = g.strategies or []
             if strategies:
@@ -458,6 +493,70 @@ def render_monthly_guidelines_expander(
                                         if res and res.get("success"):
                                             st.toast("¡Bonus distribuido con éxito!", icon="🎉")
                                             st.rerun()
+
+            # Ajuste compensatorio para exceso en Deseos (Fase 4: WANTS_DEFICIT)
+            if scen_type == "WANTS_DEFICIT" and wants_subcats:
+                excess_amt = float(g.delta_amount or 0.0)
+                try:
+                    parts = m_key.split("-")
+                    y, m = int(parts[0]), int(parts[1])
+                    next_m_key = f"{y + 1}-01" if m == 12 else f"{y}-{m + 1:02d}"
+                except Exception:
+                    next_m_key = m_key
+
+                st.markdown(
+                    f"""<div style="background: rgba(198, 40, 40, 0.08); border: 1px solid #c62828; border-left: 6px solid #c62828; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+<h5 style="margin: 0 0 4px 0; color: inherit; font-size: 14.5px; font-weight: 700;">⚡ Opción A: Programar Ajuste Compensatorio al Próximo Mes ({next_m_key})</h5>
+<p style="margin: 0; font-size: 13px; opacity: 0.95;">Restaura la disciplina patrimonial reduciendo en <strong>{excess_amt:,.2f} €</strong> el presupuesto de Deseos del mes siguiente (<strong>{next_m_key}</strong>) para devolver al ahorro lo restado este mes.</p>
+</div>""",
+                    unsafe_allow_html=True,
+                )
+                w_col1, w_col2 = st.columns([2, 1])
+                with w_col1:
+                    sub_opts_wants = {s["id"]: s["nombre"] for s in wants_subcats}
+                    target_next_id = st.selectbox(
+                        f"Subcategoría de Deseos a Reducir en {next_m_key}:",
+                        options=list(sub_opts_wants.keys()),
+                        format_func=lambda x: sub_opts_wants.get(x, f"Subcat {x}"),
+                        key=f"wants_comp_sub_{m_key}_{g_idx}",
+                    )
+                with w_col2:
+                    st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
+                    if st.button(f"⚡ Programar Recorte ({excess_amt:,.2f} €)", key=f"btn_wants_comp_{m_key}_{g_idx}", type="primary"):
+                        if api_client:
+                            res = api_client.compensate_guideline_deficit(
+                                month_key=m_key,
+                                action_type="WANTS_COMPENSATION_NEXT_MONTH",
+                                amount=excess_amt,
+                                target_subcategory_id=target_next_id,
+                            )
+                            if res and res.get("success"):
+                                st.toast(f"¡Ajuste compensatorio programado para {next_m_key} (-{excess_amt:,.2f} €)!", icon="⚡")
+                                st.rerun()
+                            else:
+                                st.error("No se pudo programar el ajuste compensatorio en el backend.")
+
+            # Congelación de ocio ante caída de ingresos (Fase 4: INCOME_SHORTFALL)
+            if scen_type == "INCOME_SHORTFALL" and wants_subcats:
+                st.markdown(
+                    f"""<div style="background: rgba(2, 119, 189, 0.08); border: 1px solid #0277bd; border-left: 6px solid #0277bd; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+<h5 style="margin: 0 0 4px 0; color: inherit; font-size: 14.5px; font-weight: 700;">❄️ Protocolo de Contingencia: Congelar Deseos del Mes ({m_key})</h5>
+<p style="margin: 0; font-size: 13px; opacity: 0.95;">Ante la caída imprevista de ingresos en <strong>{m_key}</strong>, reduce temporalmente a 0.00 € las partidas de Deseos para garantizar el pago de Necesidades Básicas.</p>
+</div>""",
+                    unsafe_allow_html=True,
+                )
+                if st.button(f"❄️ Congelar Deseos de Este Mes ({m_key})", key=f"btn_freeze_{m_key}_{g_idx}", type="primary"):
+                    if api_client:
+                        res = api_client.compensate_guideline_deficit(
+                            month_key=m_key,
+                            action_type="FREEZE_WANTS",
+                            target_subcategory_ids=[s["id"] for s in wants_subcats],
+                        )
+                        if res and res.get("success"):
+                            st.toast("¡Partidas de Deseos congeladas a 0 € con éxito!", icon="❄️")
+                            st.rerun()
+                        else:
+                            st.error("No se pudo congelar las partidas de Deseos en el backend.")
 
             # Recomendación operativa: SÓLO mostrar en Dinero Sin Asignar (HIGH_UNASSIGNED)
             if scen_type == "HIGH_UNASSIGNED" and g.key_recommendation:

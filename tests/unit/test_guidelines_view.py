@@ -334,3 +334,155 @@ def test_operational_caption_retained_on_high_unassigned(
     combined_captions = " ".join(caption_calls)
     assert "Recomendación Operativa:" in combined_captions
 
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.caption")
+@patch("streamlit.selectbox")
+@patch("streamlit.button")
+def test_render_wants_deficit_and_needs_deficit_interactive_controls(
+    mock_button,
+    mock_selectbox,
+    mock_caption,
+    mock_cols,
+    mock_markdown,
+    mock_expander,
+):
+    """Verifica que para WANTS_DEFICIT y NEEDS_DEFICIT se rendericen los controles de ajuste y amortiguación."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    def _mock_cols(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols
+
+    cats = [
+        {"id": 1, "nombre": "Necesidades Básicas", "tipo": "gasto"},
+        {"id": 2, "nombre": "Deseos", "tipo": "gasto"},
+        {"id": 3, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+    ]
+    subcats = [
+        {"id": 10, "nombre": "Alquiler", "categoria_id": 1},
+        {"id": 20, "nombre": "Ocio", "categoria_id": 2},
+        {"id": 30, "nombre": "Fondo de emergencia", "categoria_id": 3},
+    ]
+
+    # Report con WANTS_DEFICIT (35% en deseos)
+    report_wants = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=2000.0,
+        budget_income=2000.0,
+        real_needs=1000.0,
+        real_wants=700.0,  # 35% vs 30% -> 100 € exceso
+        real_savings=300.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    render_monthly_guidelines_expander(
+        report_wants,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    assert "Programar Ajuste Compensatorio al Próximo Mes" in combined_html
+    assert "2026-11" in combined_html
+    assert "100.00 €" in combined_html
+
+    # Report con NEEDS_DEFICIT (55% en necesidades)
+    mock_markdown.reset_mock()
+    report_needs = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=2000.0,
+        budget_income=2000.0,
+        real_needs=1100.0,  # 55% vs 50% -> 100 € exceso
+        real_wants=500.0,
+        real_savings=400.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    render_monthly_guidelines_expander(
+        report_needs,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls_needs = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html_needs = " ".join(markdown_calls_needs)
+
+    assert "Amortiguar con Deseos del Mes" in combined_html_needs
+    assert "Protección del Fondo de Emergencia" in combined_html_needs
+
+
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.caption")
+@patch("streamlit.button")
+def test_render_income_shortfall_freeze_controls(
+    mock_button,
+    mock_caption,
+    mock_cols,
+    mock_markdown,
+    mock_expander,
+):
+    """Verifica que para INCOME_SHORTFALL se renderice el protocolo de congelación de deseos."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    def _mock_cols(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols
+
+    cats = [
+        {"id": 2, "nombre": "Deseos", "tipo": "gasto"},
+    ]
+    subcats = [
+        {"id": 20, "nombre": "Ocio", "categoria_id": 2},
+    ]
+
+    report = evaluate_monthly_guidelines(
+        month_key="2026-10",
+        month_name="Octubre",
+        real_income=1500.0,
+        budget_income=2000.0,  # -25% caída ingresos
+        real_needs=900.0,
+        real_wants=300.0,
+        real_savings=300.0,
+        safety_status={"is_completed": True, "coverage_months": 3.0, "target_months": 3.0},
+    )
+
+    render_monthly_guidelines_expander(
+        report,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    markdown_calls = [call[0][0] for call in mock_markdown.call_args_list if call[0]]
+    combined_html = " ".join(markdown_calls)
+
+    assert "Congelar Deseos del Mes" in combined_html
+
+

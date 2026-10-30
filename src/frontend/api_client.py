@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from typing import Any, Dict, List, Optional
 import requests
 
 # Asegurar que src esté en el sys.path si se invoca directamente desde el frontend
@@ -692,7 +693,7 @@ def sweep_month_surplus(month_key: str, amount: float, target_subcategory_id: in
     payload = {
         "month_key": month_key,
         "amount": float(amount or 0.0),
-        "target_subcategory_id": int(target_subcategory_id),
+        "target_subcategory_id": target_subcategory_id,
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -708,6 +709,44 @@ def sweep_month_surplus(month_key: str, amount: float, target_subcategory_id: in
     except Exception as e:
         logger.error("Error inesperado en sweep_month_surplus(): %s", e)
     return None
+
+
+def compensate_guideline_deficit(
+    month_key: str,
+    action_type: str,
+    amount: float = 0.0,
+    target_subcategory_id: Optional[int] = None,
+    target_subcategory_ids: Optional[List[int]] = None,
+):
+    """
+    Ejecuta una acción de compensación o contención presupuestaria de forma atómica en el backend:
+    - Ajuste compensatorio de sobregasto en Deseos al mes siguiente (WANTS_COMPENSATION_NEXT_MONTH).
+    - Amortiguación de déficit de Necesidades desde Deseos del mes (NEEDS_ABSORPTION_CURRENT_WANTS).
+    - Congelación de partidas de Deseos a 0.0 € ante caída de ingresos (FREEZE_WANTS).
+    """
+    url = f"{API_URL}/guidelines/compensate-deficit"
+    payload = {
+        "month_key": month_key,
+        "action_type": action_type,
+        "amount": float(amount or 0.0),
+        "target_subcategory_id": target_subcategory_id,
+        "target_subcategory_ids": target_subcategory_ids,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning(
+            "Respuesta no exitosa al ejecutar compensación de déficit (%s): %s",
+            response.status_code,
+            response.text,
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al ejecutar compensación de déficit en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en compensate_guideline_deficit(): %s", e)
+    return None
+
 
 
 

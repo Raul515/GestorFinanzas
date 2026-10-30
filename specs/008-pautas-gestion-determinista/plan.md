@@ -49,7 +49,7 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
 
 ---
 
-### Fase 3: Asignaciones Positivas de Capital (Manejo de Excedentes y Barrido de Cierre) [EN PROGRESO]
+### Fase 3: Asignaciones Positivas de Capital (Manejo de Excedentes y Barrido de Cierre) [COMPLETADA]
 
 - **Objetivo**: Desarrollar los contratos y la ejecución atómica interactiva para la asignación de capital positivo: excedente en Necesidades (`NEEDS_SURPLUS`) con selector de modo (100% Total vs 50% con Colchón Interno), partición configurable del 20% a Deseos (hasta 4 partes de min. 5%), distribución de bonus/paga extra (`EXTRAORDINARY_INCOME`), y acción de "Barrido de Fin de Mes" (a partir del día 26) para remanentes.
 - **Archivos a crear/modificar**:
@@ -73,7 +73,7 @@ Este plan técnico desglosa la implementación de la **Especificación 008** en 
 
 ---
 
-### Fase 4: Compensación y Contención Negativa (Protección Presupuestaria y Disciplina) [PENDIENTE]
+### Fase 4: Compensación y Contención Negativa (Protección Presupuestaria y Disciplina) [COMPLETADA]
 
 - **Objetivo**: Desarrollar la lógica y los botones interactivos para escenarios de desviación adversa: ajuste compensatorio intermensual para sobregasto en Deseos (`WANTS_DEFICIT`), amortiguación de picos de Necesidades desde Deseos del mes (`NEEDS_DEFICIT`) y congelación de ocio ante caídas de ingresos (`INCOME_SHORTFALL`).
 - **Archivos a crear/modificar**:

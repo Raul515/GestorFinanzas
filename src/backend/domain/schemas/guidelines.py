@@ -164,3 +164,28 @@ class SweepResponse(BaseModel):
     emergency_fund_updated: bool = False
     new_emergency_fund_balance: Optional[float] = None
 
+
+class DeficitActionType(str, Enum):
+    WANTS_COMPENSATION_NEXT_MONTH = "WANTS_COMPENSATION_NEXT_MONTH"
+    NEEDS_ABSORPTION_CURRENT_WANTS = "NEEDS_ABSORPTION_CURRENT_WANTS"
+    FREEZE_WANTS = "FREEZE_WANTS"
+
+
+class CompensateDeficitRequest(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    month_key: str = Field(..., description="Identificador del mes en formato YYYY-MM")
+    action_type: DeficitActionType = Field(..., description="Tipo de acción de compensación o contención")
+    amount: float = Field(default=0.0, ge=0.0, description="Importe a compensar o amortiguar")
+    target_subcategory_id: Optional[int] = Field(default=None, description="Subcategoría objetivo para el ajuste")
+    target_subcategory_ids: Optional[List[int]] = Field(default=None, description="Lista de subcategorías para acciones colectivas (ej. congelar deseos)")
+
+
+class CompensateDeficitResponse(BaseModel):
+    success: bool
+    message: str
+    target_month: str
+    budgets_updated: int = 0
+    new_budget_amount: Optional[float] = None
+
+

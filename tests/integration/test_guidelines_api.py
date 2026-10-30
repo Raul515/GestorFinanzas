@@ -171,3 +171,102 @@ def test_api_sweep_month_surplus(client: TestClient, db_session, seed_data):
     assert data["emergency_fund_updated"] is True
     assert data["new_emergency_fund_balance"] == 2050.0
 
+
+def test_api_compensate_wants_deficit_next_month(client: TestClient, db_session, seed_data):
+    """Verifica que el ajuste compensatorio por exceso en deseos reduzca el presupuesto del mes siguiente."""
+    from backend.domain.models import budgets as pres_models
+
+    base_budget = pres_models.MonthlyBudget(
+        month="BASE",
+        subcategory_id=seed_data["sub_ocio_id"],
+        amount=400.0,
+    )
+    db_session.add(base_budget)
+    db_session.commit()
+
+    payload = {
+        "month_key": "2026-10",
+        "action_type": "WANTS_COMPENSATION_NEXT_MONTH",
+        "amount": 150.0,
+        "target_subcategory_id": seed_data["sub_ocio_id"],
+    }
+
+    response = client.post("/guidelines/compensate-deficit", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["target_month"] == "2026-11"
+    assert data["budgets_updated"] == 1
+    assert data["new_budget_amount"] == 250.0
+
+    # Comprobar persistencia en base de datos
+    saved_budget = (
+        db_session.query(pres_models.MonthlyBudget)
+        .filter(
+            pres_models.MonthlyBudget.month == "2026-11",
+            pres_models.MonthlyBudget.subcategory_id == seed_data["sub_ocio_id"],
+        )
+        .first()
+    )
+    assert saved_budget is not None
+    assert saved_budget.amount == 250.0
+
+
+def test_api_compensate_needs_absorption_current_month(client: TestClient, db_session, seed_data):
+    """Verifica la amortiguación de un déficit de necesidades desde el presupuesto de deseos del mes en curso."""
+    from backend.domain.models import budgets as pres_models
+
+    curr_budget = pres_models.MonthlyBudget(
+        month="2026-10",
+        subcategory_id=seed_data["sub_ocio_id"],
+        amount=300.0,
+    )
+    db_session.add(curr_budget)
+    db_session.commit()
+
+    payload = {
+        "month_key": "2026-10",
+        "action_type": "NEEDS_ABSORPTION_CURRENT_WANTS",
+        "amount": 100.0,
+        "target_subcategory_id": seed_data["sub_ocio_id"],
+    }
+
+    response = client.post("/guidelines/compensate-deficit", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["target_month"] == "2026-10"
+    assert data["budgets_updated"] == 1
+    assert data["new_budget_amount"] == 200.0
+
+
+def test_api_compensate_freeze_wants(client: TestClient, db_session, seed_data):
+    """Verifica que la congelación de deseos ante caída de ingresos fije las partidas de ocio a 0.00 €."""
+    from backend.domain.models import budgets as pres_models
+
+    curr_budget = pres_models.MonthlyBudget(
+        month="2026-10",
+        subcategory_id=seed_data["sub_ocio_id"],
+        amount=350.0,
+    )
+    db_session.add(curr_budget)
+    db_session.commit()
+
+    payload = {
+        "month_key": "2026-10",
+        "action_type": "FREEZE_WANTS",
+        "target_subcategory_ids": [seed_data["sub_ocio_id"]],
+    }
+
+    response = client.post("/guidelines/compensate-deficit", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["success"] is True
+    assert data["target_month"] == "2026-10"
+    assert data["budgets_updated"] == 1
+    assert data["new_budget_amount"] == 0.0
+
+
