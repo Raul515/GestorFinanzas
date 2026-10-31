@@ -140,8 +140,6 @@
    - **Sincronización Colaborativa de Caché de Análisis Fundamental (Ahorro de Tokens de IA)**:
      - Mecanismo de compartición o sincronización de análisis cualitativos y cuantitativos de mercado (Deep Dive / Quality Value) entre diferentes usuarios o instancias amigas.
      - Permite que si un usuario analiza una empresa (ej. `ITX.MC`), el informe estructurado y métricas puedan ser reutilizados por otro usuario dentro de la ventana de validez (TTL de 14 días), evitando llamadas redundantes a la API de Google Gemini y optimizando el consumo colectivo de cuota/tokens.
-   - **Métricas de Rendimiento y Profiling de Latencia en APIs Externas**:
-     - Monitorización de tiempos de respuesta en milisegundos para llamadas a Yahoo Finance, BCE y Gemini para diagnosticar cuellos de botella de red y optimizar tiempos de carga.
    - **Conector MCP / Gmail para Newsletters Financieras (Ingesta y Síntesis Agéntica de Tesis de Inversión)**:
      - Servidor MCP o conector seguro a la API de Gmail con permiso restringido (`gmail.readonly`) filtrado estrictamente por remitente (ej. newsletters especializadas como *Visual Faktory*) o etiqueta específica (`newsletter-inversion`).
      - Procesamiento y síntesis inteligente mediante el motor de LLM (ampliando el Radar de Noticias y el Copiloto):
