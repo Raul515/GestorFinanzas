@@ -419,6 +419,11 @@ src/backend/data/
 *.sqlite3
 *.db
 
+# BUZÓN DE SINCRONIZACIÓN LOCAL-FIRST CON SYNCTHING (SPEC 010)
+sync/
+sync/**
+*.json.tmp
+
 # ==========================================
 # REGLAS DE SEGURIDAD ESTRICTA Y SECRETOS LOCALES
 # ==========================================

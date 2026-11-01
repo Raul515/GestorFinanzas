@@ -186,3 +186,16 @@ class JointMonthlyContribution(Base):
     )
 
     account: Mapped["JointAccount"] = relationship("JointAccount", back_populates="contributions")
+
+
+class JointAppliedSyncEvent(Base):
+    """Modelo ORM para registrar eventos de sincronización aplicados y garantizar idempotencia absoluta."""
+    __tablename__ = "joint_applied_sync_events"
+
+    event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    applied_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+

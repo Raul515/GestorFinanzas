@@ -14,6 +14,7 @@ from .joint import (
     JointSinkingFund,
     JointTransaction,
     JointMonthlyContribution,
+    JointAppliedSyncEvent,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "JointSinkingFund",
     "JointTransaction",
     "JointMonthlyContribution",
+    "JointAppliedSyncEvent",
 ]

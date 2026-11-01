@@ -198,6 +198,7 @@ def test_joint_transaction_and_contribution_orm(db_session: Session):
 
     assert tx.id is not None
     assert tx.uuid == tx_uuid
+    assert tx.subcategory is not None
     assert tx.subcategory.name == "Supermercado"
 
     # Aportación mensual
