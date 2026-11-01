@@ -6,12 +6,12 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ### Fase 1: Modelos de Dominio SQLAlchemy 2.0 y Esquemas Pydantic v2 para el Espacio Conjunto
 
-- **Objetivo**: Desarrollar los modelos ORM de persistencia local en `finanzas.db` y los contratos fuertemente tipados Pydantic v2 para la Cuenta Conjunta, Huchas de Amortización, aportaciones mensuales y metadatos de sincronización.
+- **Objetivo**: Desarrollar los modelos ORM de persistencia local en `finanzas.db` y los contratos fuertemente tipados Pydantic v2 para la Cuenta Conjunta (restricción Singleton Household), Huchas de Amortización, aportaciones mensuales, esquema de Onboarding Inicial y metadatos de sincronización.
 - **Archivos a crear/modificar**:
   - `src/backend/domain/models/joint.py` [NUEVO: Modelos declarativos SQLAlchemy 2.0 `JointAccount`, `JointCategory`, `JointSubcategory`, `JointSinkingFund`, `JointTransaction`, `JointMonthlyContribution`].
   - `src/backend/domain/models/__init__.py` [MODIFICADO: Exportación de las nuevas entidades].
-  - `src/backend/domain/schemas/joint.py` [NUEVO: Enumeraciones `CohabitationStage`, `ContributionStrategy`, `SplitMode`, `SyncAction`, `SyncEntityType` y esquemas Pydantic v2 para request/response de todas las entidades conjuntas].
-  - `tests/unit/test_joint_models_and_schemas.py` [NUEVO: Suite unitaria con verificación de claves foráneas, restricciones de no-negatividad, validaciones de Pydantic y mapeo tipado].
+  - `src/backend/domain/schemas/joint.py` [NUEVO: Enumeraciones `CohabitationStage`, `ContributionStrategy`, `SplitMode`, `SyncAction`, `SyncEntityType`, esquemas Pydantic v2 de setup/onboarding `JointAccountSetupRequest`, respuesta de estado `JointStatusResponse`, resumen anual `JointAnnualSummaryResponse` y request/response de todas las entidades conjuntas].
+  - `tests/unit/test_joint_models_and_schemas.py` [NUEVO: Suite unitaria con verificación de claves foráneas, restricciones de no-negatividad, unicidad de cuenta conjunta (singleton), validaciones de Pydantic y mapeo tipado].
 - **Casos de Prueba a Verificar**:
   - Validación de campos obligatorios y tipos en `JointAccount` (etapa de convivencia, estrategia y ratios de referencia).
   - Integridad referencial de `JointTransaction` hacia `JointSubcategory` o `JointSinkingFund`.
@@ -27,16 +27,17 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ### Fase 2: Motor Contable Desacoplado de la Cuenta Conjunta y Diagnóstico de Salud Familiar
 
-- **Objetivo**: Implementar el servicio puro de lógica contable para el cálculo y distribución de aportaciones bajo ambas estrategias (Plantilla Nominal vs Porcentaje de Ingresos), gestión de huchas de amortización, semáforo de esfuerzo familiar y asiento atómico en el perfil personal.
+- **Objetivo**: Implementar el servicio puro de lógica contable para el cálculo y distribución de aportaciones bajo ambas estrategias (Plantilla Nominal vs Porcentaje de Ingresos), gestión de huchas de amortización, semáforo de esfuerzo familiar, asiento atómico en el perfil personal y cálculo de métricas anuales del hogar (sin desglose individual A vs B).
 - **Archivos a crear/modificar**:
-  - `src/backend/services/joint_accounting_service.py` [NUEVO: Funciones puras de cálculo de cuotas de aportación, reparto porcentual en huchas, auditoría de Tasa de Esfuerzo Familiar, y generación atómica de transacciones de salida personal / entrada conjunta].
+  - `src/backend/services/joint_accounting_service.py` [NUEVO: Funciones puras de cálculo de cuotas de aportación, reparto porcentual en huchas, auditoría de Tasa de Esfuerzo Familiar, cálculo de resumen anual consolidado del hogar —Total necesidades, Total ahorrado en huchas, Semáforo anual— y generación atómica de transacciones de salida personal / entrada conjunta].
   - `src/backend/domain/repositories/` [MODIFICADO: Métodos CRUD de repositorio SQLite para el espacio conjunto en `sqlite_crud.py` o repositorio dedicado].
-  - `tests/unit/test_joint_accounting_service.py` [NUEVO: Pruebas unitarias de cálculo con números reales mockeados para 50/50, proporcional y personalizado, tanto en Pre-Convivencia como en Convivencia Plena].
+  - `tests/unit/test_joint_accounting_service.py` [NUEVO: Pruebas unitarias de cálculo con números reales mockeados para 50/50, proporcional y personalizado, tanto en Pre-Convivencia como en Convivencia Plena, y métricas anuales familiares].
 - **Casos de Prueba a Verificar**:
   - Cálculo exacto en Estrategia A (Plantilla Nominal): suma de huchas fijas en Pre-Convivencia y suma de Necesidades + Huchas en Convivencia Plena.
   - Cálculo exacto en Estrategia B (Porcentaje de Ingresos): recaudación combinada y distribución porcentual exacta entre las Huchas de Amortización según `allocation_percentage`.
   - Imputación contable limpia en el perfil personal: salida clasificada como Necesidades (o Ahorro en Pre-Convivencia si se configuró así) sin generar ingresos ficticios.
   - Clasificación correcta del Semáforo de Tasa de Esfuerzo (Verde <50%, Amarillo 50-60%, Rojo >60%).
+  - Cálculo consolidado del Resumen Anual del Hogar certificando la ausencia de campos de comparación A vs B.
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_joint_accounting_service.py
@@ -67,13 +68,16 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ### Fase 4: Endpoints REST en FastAPI con Observabilidad Estructurada
 
-- **Objetivo**: Exponer las capacidades de la Cuenta Conjunta mediante un router REST fuertemente tipado en FastAPI, con middleware de observabilidad, validación Pydantic v2 y control de transacciones atómicas de base de datos.
+- **Objetivo**: Exponer las capacidades de la Cuenta Conjunta mediante un router REST fuertemente tipado en FastAPI, con endpoints para estado y onboarding inicial, configuración del hogar, huchas de amortización, aportaciones mensuales, transacciones conjuntas, diagnóstico anual y triggers de sincronización.
 - **Archivos a crear/modificar**:
-  - `src/backend/api/routers/joint.py` [NUEVO: Endpoints REST para configuración del hogar, huchas de amortización, aportaciones mensuales, transacciones conjuntas, diagnóstico de salud y triggers de sincronización].
+  - `src/backend/api/routers/joint.py` [NUEVO: Endpoints REST para estado/onboarding inicial, configuración del hogar, huchas de amortización, aportaciones mensuales, transacciones conjuntas, diagnóstico anual del hogar y triggers de sincronización].
   - `src/backend/main.py` [MODIFICADO: Registro del router `/joint`].
   - `tests/integration/test_joint_api.py` [NUEVO: Pruebas de integración HTTP con SQLite en memoria y cliente `TestClient`].
 - **Endpoints a Implementar**:
+  - `GET /joint/status`: Retorna si la cuenta conjunta está configurada (`is_configured: bool`).
+  - `POST /joint/setup`: Endpoint de onboarding que crea `JointAccount` y siembra el catálogo base de categorías comunes.
   - `GET /joint/account` y `PUT /joint/account`: Consulta y actualización de configuración del hogar (etapa, estrategia, porcentajes, ingresos de referencia).
+  - `GET /joint/annual-summary`: Retorna las métricas anuales del hogar (total necesidades, total huchas, tasa de esfuerzo) sin desglose A vs B.
   - `GET /joint/sinking-funds` y `POST /joint/sinking-funds`: Catálogo y alta de Huchas de Amortización.
   - `PUT /joint/sinking-funds/{fund_id}` y `DELETE /joint/sinking-funds/{fund_id}`: Edición y liquidación segura con reasignación de saldo.
   - `POST /joint/contributions/asentar-asistida`: Ejecución atómica del asiento mensual asistido (crea gasto personal, ingreso común y delta en outbox).
@@ -85,23 +89,26 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
   ```powershell
   .\venv\Scripts\pytest -v tests/integration/test_joint_api.py
   ```
-- **Criterio de Aceptación**: 100% de las pruebas de integración pasando con códigos de estado HTTP correctos (200, 201, 400, 404).
+- **Criterio de Aceptación**: 100% de las pruebas de integración pasando con códigos de estado HTTP correctos (200, 201, 400, 404, 409).
 
 ---
 
-### Fase 5: Integración en Frontend Streamlit (Vistas de Economía del Hogar y Flujo Asistido)
+### Fase 5: Integración en Frontend Streamlit (Arquitectura de Dos Pantallas 100% Independientes)
 
-- **Objetivo**: Implementar la capa de presentación interactiva en Streamlit: selector de contexto en la barra lateral (Perfil Personal vs Cuenta Conjunta), banner asistido de aportación en 1 clic el día 1, panel de Huchas de Amortización con barras de progreso, formulario de gastos del hogar y visualización del semáforo de esfuerzo.
+- **Objetivo**: Implementar la capa de presentación interactiva desacoplada: selector de contexto raíz en `st.sidebar` (Perfil Personal vs Economía del Hogar), guarda de no-intrusión en el perfil personal, Asistente de Bienvenida para el estado inicial cero, y pantalla independiente del hogar con sus 4 pestañas dedicadas (Resumen Anual con gráficas Altair y sin comparativas A vs B, 12 Meses del Hogar, Huchas de Amortización y Configuración/Syncthing).
 - **Archivos a crear/modificar**:
   - `src/frontend/api_client.py` [MODIFICADO: Métodos clientes con observabilidad estructurada y sanitización de logs para todos los endpoints `/joint/*`].
-  - `src/frontend/views/joint_view.py` [NUEVO: Componentes visuales desacoplados para la Cuenta Conjunta: asistente de configuración, tarjetas de huchas con barras de progreso Altair/Streamlit, diálogo de modificación de aportación, semáforo de salud y formulario sin categorías de ocio].
-  - `src/frontend/app.py` [MODIFICADO: Selector de contexto en `st.sidebar`, inyección del banner de aportación asistida en el perfil personal y renderizado condicional de la vista conjunta].
+  - `src/frontend/views/joint_view.py` [NUEVO: Componente visual desacoplado para la Economía del Hogar: Asistente de Bienvenida (onboarding), navegación por 4 pestañas (Resumen Anual con gráficas Altair y métricas del hogar sin desglose A vs B, 12 Meses del Hogar con tabla de facturas sin ocio, Tarjetas de Huchas de Amortización con barras de progreso, y Panel de Configuración/Syncthing)].
+  - `src/frontend/app.py` [MODIFICADO: Conmutador de contexto raíz en la cabecera de `st.sidebar`, guarda condicional para el banner mensual en el perfil personal solo si la cuenta está configurada, y renderizado condicional entre la vista personal y `joint_view.py`].
   - `tests/unit/test_joint_frontend.py` [NUEVO: Pruebas unitarias del cliente API y utilidades de presentación].
 - **Casos de Prueba a Verificar**:
-  - Visualización del selector de contexto y conmutación limpia entre "Mi Perfil Personal" y "Economía del Hogar".
-  - Funcionamiento del banner de inicio de mes: clic en `[⚡ Asentar Aportación]` y modal emergente de `[✏️ Modificar Importe]`.
-  - Ocultamiento de facturas y necesidades en modo Pre-Convivencia; activación de campos en modo Convivencia Plena.
-  - Renderizado fiel de las barras de progreso de las Huchas de Amortización y del semáforo de salud familiar.
+  - Conmutación limpia y completa entre "Mi Perfil Personal" y "Economía del Hogar".
+  - Estado Inicial Cero: al entrar a Economía del Hogar sin cuenta previa, se renderiza el Asistente de Bienvenida y el perfil personal no muestra ningún banner.
+  - Funcionamiento del banner de inicio de mes en perfil personal exclusivamente cuando la cuenta conjunta está configurada.
+  - Renderizado fiel de las 4 pestañas del hogar:
+    - Resumen Anual del Hogar: visualización de Total Necesidades, Total Ahorrado en Huchas, Tasa de Esfuerzo y gráficas Altair, certificando la ausencia de marcadores A vs B.
+    - 12 Meses del Hogar con gastos comunes de necesidades.
+    - Huchas de Amortización y semáforo familiar.
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_joint_frontend.py
@@ -114,7 +121,7 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 - **Objetivo**: Ejecutar una batería completa de pruebas end-to-end simulando la interacción entre dos dispositivos aislados (PC Windows y Mac), redactar la guía visual de emparejamiento con Syncthing, consolidar la memoria arquitectónica en `MEMORY.md` y preparar la fusión a `develop`.
 - **Archivos a crear/modificar**:
-  - `tests/integration/test_joint_e2e_flow.py` [NUEVO: Prueba end-to-end simulando: 1) Configuración inicial de pareja en PC y Mac; 2) Asiento asistido de aportación; 3) Intercambio de deltas JSON; 4) Ingesta en el segundo equipo; 5) Liquidación de gasto de hucha; 6) Verificación de saldos idénticos en ambos lados].
+  - `tests/integration/test_joint_e2e_flow.py` [NUEVO: Prueba end-to-end simulando: 1) Estado Cero inicial sin cuenta configurada y verificación de no-intrusión en perfil personal; 2) Configuración guiada vía onboarding en PC y Mac; 3) Asiento asistido de aportación con banner; 4) Intercambio de deltas JSON vía carpetas mockeadas; 5) Ingesta en el segundo equipo; 6) Liquidación de gasto de hucha; 7) Verificación de saldos idénticos y métricas del Resumen Anual sin desglose A vs B].
   - `docs/guia_sincronizacion_syncthing.md` [NUEVO: Guía clara y paso a paso para instalar y emparejar Syncthing entre Windows y macOS mediante Device ID en 3 minutos].
   - `MEMORY.md` [MODIFICADO: Registrar decisiones técnicas, cierre formal de Spec 010 y actualización del mapa de arquitectura].
   - `specs/README.md` [MODIFICADO: Actualizar índice de especificaciones con Spec 010 Completada].

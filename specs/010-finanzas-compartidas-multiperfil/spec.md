@@ -29,6 +29,9 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
 - **Pareja en Convivencia Plena (Viven juntos)**:
   - Comparten alquiler/hipoteca, suministros del hogar y supermercado.
   - Aportan a la cuenta común a principios de mes (mediante reparto 50/50, proporcional a ingresos o personalizado) para cubrir tanto las necesidades del mes como las huchas de ahorro familiar.
+- **Usuario Individual / Estado Inicial Cero (Sin Cuenta Conjunta configurada)**:
+  - Gestiona exclusivamente sus finanzas personales individuales.
+  - La aplicación opera en modo monousuario estricto con cero intrusión: las tablas de la cuenta conjunta permanecen vacías, no aparecen banners ni recordatorios de aportación en el perfil personal, y al acceder a la vista conjunta se le ofrece un asistente de bienvenida opcional.
 - **Usuario que Protege su Privacidad Personal**:
   - Desea comprar un regalo sorpresa de aniversario para su pareja, ropa personal o salir a cenar con sus amigos sin que su pareja reciba una notificación del importe o del comercio en su teléfono/ordenador.
   - El gasto se anota en su perfil personal bajo su 30% de Deseos; dicho apunte jamás sale de su disco duro.
@@ -54,6 +57,8 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
 
 ### RF-1: Modelo de Datos Desacoplado en `finanzas.db`
 - **Criterio EARS (Ubiquitous)**: EL SISTEMA DEBE almacenar tanto las entidades personales como las compartidas dentro del fichero SQLite local `finanzas.db` de cada usuario mediante esquemas declarativos de SQLAlchemy 2.0.
+- **Criterio EARS (Ubiquitous)**: Al inicializar el backend mediante `Base.metadata.create_all`, EL SISTEMA DEBE generar las tablas conjuntas vacías (0 registros DML). Las entidades de configuración y el catálogo de subcategorías se poblarán exclusivamente cuando el usuario complete el Asistente de Configuración Inicial.
+- **Criterio EARS (Ubiquitous)**: EL SISTEMA DEBE limitar estrictamente el espacio compartido a **exactamente una (1) Cuenta Conjunta del Hogar** por base de datos local (`Singleton Household`), diseñada para la coordinación económica entre los dos miembros de la pareja (`local_profile` y `remote_profile`). Queda fuera de alcance el soporte para múltiples grupos simultáneos.
 - **Criterio EARS (Ubiquitous)**: EL SISTEMA DEBE implementar las siguientes entidades para el espacio conjunto:
   1. `JointAccount`: Configuración del hogar, nombre del hogar, etapa de convivencia (`PRE_COHABITATION`, `COHABITATION`), estrategia de determinación de aportación (`NOMINAL_TEMPLATE`, `INCOME_PERCENTAGE`), modalidad de reparto por defecto (`EQUAL_50_50`, `INCOME_PROPORTIONAL`, `CUSTOM_FIXED`), ingresos de referencia de ambos miembros, porcentajes de aportación pactados (`member_a_contribution_pct`, `member_b_contribution_pct`) y fecha de creación.
   2. `JointCategory` y `JointSubcategory`: Catálogo estandarizado de conceptos del hogar dividido exclusivamente en:
@@ -110,10 +115,12 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
   - EL SISTEMA DEBE aplicar la regla determinista de pautas presupuestarias: el sobrecoste se amortigua contrayendo de forma natural el margen de Deseos (reduciendo el 30% a 25%), manteniendo inalterado y blindado el 20% de Ahorro e Inversión personal.
 
 ### RF-5: Flujo de Aportación Asistida al Inicio de Mes y Flexibilidad de Ajuste
-- **Criterio EARS (State-driven)**: MIENTRAS el usuario abra la aplicación en un mes nuevo natural (`YYYY-MM`) y no se haya registrado la aportación de dicho mes:
+- **Criterio EARS (State-driven)**: MIENTRAS exista una Cuenta Conjunta activa y configurada (`JointAccount` presente en base de datos) Y el usuario abra la aplicación en un mes nuevo natural (`YYYY-MM`) sin que se haya registrado la aportación de dicho mes:
   - EL SISTEMA DEBE renderizar en la cabecera del perfil personal un componente destacado de notificación:
     `📅 Nuevo Mes Detectado: [Nombre Mes] | Tu Aportación pactada al Hogar: [X,XX €] (Modalidad: [Tipo])`
   - Incluyendo dos botones de acción: `[⚡ Asentar Aportación]` y `[✏️ Modificar Importe]`.
+- **Criterio EARS (State-driven)**: MIENTRAS NO exista un registro en `JointAccount` (modo usuario individual / sin configurar):
+  - EL SISTEMA DEBE garantizar cero intrusión en el perfil personal: queda terminantemente prohibido renderizar este banner, notificaciones o alertas de aportación, preservando la experiencia monousuario intacta.
 - **Criterio EARS (Event-driven)**: CUANDO el usuario pulse `[✏️ Modificar Importe]`, EL SISTEMA DEBE abrir un diálogo emergente (*popover* o modal) que permita:
   1. Alterar la cifra exacta en euros a aportar para ese mes específico (ej. por un gasto médico imprevisto o mayor capacidad puntual).
   2. Cambiar temporalmente la modalidad de cálculo para el mes en curso sin modificar la configuración base por defecto.
@@ -171,11 +178,36 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
   - Toda transmisión de datos por la red Wi-Fi o Internet viaja cifrada con **TLS 1.3**.
   - Si un dispositivo ajeno se conecta a la misma red Wi-Fi, Syncthing descarta cualquier comunicación al no coincidir su Device ID con la lista de permitidos.
 
-### RF-11: Interfaz de Usuario en Streamlit
-- **Criterio EARS (Ubiquitous)**: EL SISTEMA DEBE incorporar un selector de contexto visual en la barra lateral (`st.sidebar`):
-  - 👤 **Mi Perfil Personal**: Vista individual existente (Presupuesto 50/30/20, transacciones privadas, fondos personales, inversiones, copiloto y comité asesor).
-  - 👥 **Economía del Hogar / Cuenta Conjunta**: Nueva vista interactiva con el saldo de tesorería común, estado de las Huchas de Amortización, formulario de gastos del hogar con subcategorías específicas (sin ocio), e histórico de aportaciones.
-- **Criterio EARS (State-driven)**: MIENTRAS se visualice la Cuenta Conjunta, EL SISTEMA DEBE mostrar en la barra lateral el indicador de estado de sincronización (*"Última sincronización: hace X minutos"* o *"Sin conexión / Cambios pendientes"*).
+### RF-11: Interfaz de Usuario en Streamlit — Arquitectura de Dos Pantallas 100% Independientes
+- **Criterio EARS (Ubiquitous)**: EL SISTEMA DEBE estructurar la aplicación en **dos pantallas visuales y funcionales completamente independientes**, alternables mediante un selector de contexto destacado en la cabecera de la barra lateral (`st.sidebar.radio` o selector dedicado):
+  - 🔘 `👤 Mi Perfil Personal`
+  - 🔘 `👥 Economía del Hogar (Cuenta Conjunta)`
+- **Criterio EARS (State-driven)**: MIENTRAS esté activo el modo `👤 Mi Perfil Personal`:
+  - EL SISTEMA DEBE renderizar el cuadro de mandos individual existente en su totalidad (Resumen Anual Personal, 12 Meses con regla 50/30/20, Presupuesto Base, Radar Macro, Screener, Deep Dive, Copiloto Patrimonial y Comité Asesor).
+  - Cero intrusión si la cuenta conjunta no está configurada. Si existe una cuenta conjunta activa, incorpora únicamente el banner discreto de inicio de mes de RF-5.
+- **Criterio EARS (State-driven)**: MIENTRAS esté activo el modo `👥 Economía del Hogar (Cuenta Conjunta)` y NO exista un registro en `JointAccount` (Estado Cero):
+  - EL SISTEMA DEBE renderizar el **Asistente de Bienvenida / Onboarding Inicial**, explicando la privacidad local-first y ofreciendo el botón `[✨ Configurar Espacio Compartido]`, el cual guía al usuario en la definición de nombre del hogar, etapa de convivencia y modalidad de aportación antes de habilitar la gestión común.
+- **Criterio EARS (State-driven)**: MIENTRAS esté activo el modo `👥 Economía del Hogar (Cuenta Conjunta)` y la cuenta esté configurada:
+  - EL SISTEMA DEBE ocultar por completo el menú y herramientas del perfil personal y renderizar una pantalla independiente con su propio selector de año del hogar y cuatro pestañas exclusivas:
+    1. **📊 Resumen Anual del Hogar**:
+       - Tarjetas de métricas consolidadas del hogar:
+         - **Total gastado en Necesidades Comunes** (Alquiler/Hipoteca, Luz, Agua, Gas, Internet, Supermercado, Comunidad y Seguros).
+         - **Total ahorrado en Huchas Conjuntas** (progreso anual acumulado en metas de ahorro).
+         - **Semáforo y Tasa de Esfuerzo Familiar del año** (auditoría determinista de sostenibilidad financiera).
+       - **Componente Gráfico Visual (Altair / Streamlit)**: Gráficos de barras apiladas/áreas mensuales mostrando la evolución de los gastos de necesidades y la dotación acumulada a las metas de futuro.
+       - **PROHIBICIÓN EXPLÍCITA**: Queda terminantemente prohibido desglosar, comparar o computar en el Resumen Anual el "Total aportado por el Usuario A vs Usuario B". La economía del hogar se presenta como una unidad familiar unificada para preservar la armonía y evitar contabilidades de reproches.
+    2. **📅 12 Meses del Hogar (Enero a Diciembre)**:
+       - Resumen mensual de tesorería del hogar (saldo inicial, total recaudado por aportaciones, gastos comunes del mes y saldo remanente).
+       - Formulario y tabla de gastos comunes (clasificados estrictamente bajo subcategorías de necesidades o cargos a huchas, sin categorías de ocio).
+    3. **🎯 Huchas de Amortización / Metas de Futuro**:
+       - Panel interactivo de huchas (Entrada de vivienda, Fondo Coche, Vacaciones, Emergencia Hogar).
+       - Tarjetas con saldo actual acumulado, objetivo monetario, porcentaje de progreso, cuota mensual fijada y meses restantes estimados.
+       - Botón para liquidar o ejecutar gastos directamente contra el saldo de la hucha.
+    4. **⚙️ Configuración del Hogar y Sincronización**:
+       - Estado del transporte Syncthing (Device IDs emparejados, timestamp del último delta procesado y botón para escaneo manual de `sync/inbox/`).
+       - Conmutador de etapa de convivencia (Pre-Convivencia vs Convivencia Plena).
+       - Ajustes de modalidad de cálculo (Nominal vs Porcentaje de ingresos) e ingresos de referencia de la pareja.
+- **Criterio EARS (State-driven)**: MIENTRAS se visualice la Cuenta Conjunta, EL SISTEMA DEBE mostrar en la barra lateral el indicador de estado de sincronización (*"Última sincronización: hace X minutos"* o *"Sin conexión / Cambios locales pendientes"*).
 
 ---
 
@@ -220,6 +252,12 @@ graph TD
    - Si un miembro experimenta un aumento o bajada de salario y se utiliza la Modalidad Proporcional, la actualización de sus ingresos recalcula de inmediato las cuotas futuras de aportación en la Plantilla Base del Hogar sin alterar los meses ya cerrados.
 5. **Intento de Introducir Ocio en la Cuenta Conjunta**:
    - El catálogo `JointCategory` carece de partidas de ocio; la interfaz no ofrece opciones de ocio para la cuenta común, asegurando que las salidas personales se costeen desde los presupuestos individuales de Deseos.
+6. **Usuario Individual sin Cuenta Conjunta (Estado Cero y Cero Intrusión)**:
+   - Mientras `JointAccount` no exista en base de datos, la app bloquea cualquier consulta a endpoints del hogar en el perfil personal y no despliega avisos ni banners mensuales. Al acceder a la vista conjunta, se activa el Asistente de Bienvenida sin generar registros de forma anticipada.
+7. **Restricción de Hogar Único (Singleton Household)**:
+   - Si se intenta invocar la creación de una segunda cuenta conjunta existiendo ya una registrada, el backend rechaza la operación con código HTTP 409 Conflict o validación de unicidad en base de datos.
+8. **Preservación de la Armonía en Resúmenes Anuales (Sin Marcadores Individuales)**:
+   - El Resumen Anual conjunto prohíbe explícitamente desglosar cuánto aportó el Usuario A frente al Usuario B. La evaluación anual mide únicamente el gasto total del hogar, el ahorro conjunto acumulado y la tasa de esfuerzo familiar consolidada con sus correspondientes gráficas visuales.
 
 ---
 
