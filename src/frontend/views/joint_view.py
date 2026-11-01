@@ -56,104 +56,147 @@ def _render_zero_state_wizard() -> None:
         """
     )
 
-    with st.form("joint_onboarding_form"):
-        st.subheader("1. Identificación del Hogar")
-        account_name = st.text_input(
-            "Nombre del Hogar o Cuenta Común",
-            value="Hogar Compartido",
-            help="Ejemplo: Hogar Martínez-López, Casa Nuestra, etc.",
+    # Detección de invitación previa enviada por la pareja vía Syncthing (Opción A)
+    inv_resp = api_client.get_joint_invitation()
+    has_invitation = inv_resp.get("has_invitation", False)
+
+    if has_invitation:
+        inv = inv_resp.get("invitation", {})
+        h_name = inv.get("household_name", "Hogar Compartido")
+        creator = inv.get("member_a_name", "tu pareja")
+        split_lbl = "Al 50%" if "50" in str(inv.get("split_mode", "50")) else "Proporcional a Ingresos"
+        cohab_lbl = "Convivencia Inicial" if "DATING" in str(inv.get("cohabitation_stage", "")) or "PRE" in str(inv.get("cohabitation_stage", "")) else "Matrimonio / Proyecto a Largo Plazo"
+
+        st.markdown(
+            f"""
+            <div style="background: linear-gradient(135deg, #064e3b, #0f172a); border: 2px solid #10b981; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <h3 style="color: #6ee7b7; margin: 0 0 8px 0;">🎉 ¡Invitación de Hogar Detectada!</h3>
+                <p style="color: #f1f5f9; margin: 0 0 10px 0; font-size: 1rem;">
+                    Tu pareja (<b>{creator}</b>) ya ha configurado el hogar <b>'{h_name}'</b> en su ordenador y lo ha compartido contigo a través de Syncthing.
+                </p>
+                <p style="color: #cbd5e1; margin: 0 0 14px 0; font-size: 0.9rem;">
+                    • <b>Modo de Reparto pactado</b>: {split_lbl}<br>
+                    • <b>Etapa de Convivencia</b>: {cohab_lbl}
+                </p>
+                <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">
+                    Al unirte, este dispositivo adoptará automáticamente la configuración común sin riesgo de discrepancias ni duplicados.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            member_a_name = st.text_input(
-                "Tu Nombre (Miembro A - Dispositivo Local)",
-                value="Raúl",
-                help="Identificador que figurará en tus aportaciones conjuntas.",
-            )
-            member_a_income = st.number_input(
-                "Tu Salario Neto Mensual Estimado (€)",
-                min_value=0.0,
-                value=2000.0,
-                step=50.0,
-                help="Utilizado de forma confidencial para el cálculo del semáforo y reparto proporcional.",
-            )
-
-        with col_b:
-            member_b_name = st.text_input(
-                "Nombre de tu Pareja (Miembro B - Cotitular)",
-                value="Pareja",
-                help="Nombre de la otra persona del hogar.",
-            )
-            member_b_income = st.number_input(
-                "Salario Neto Mensual Estimado de tu Pareja (€)",
-                min_value=0.0,
-                value=2000.0,
-                step=50.0,
-                help="Utilizado para la Tasa de Esfuerzo Familiar combinada.",
-            )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("2. Reglas de Convivencia y Reparto")
-        col_c, col_d = st.columns(2)
-        with col_c:
-            split_mode_choice = st.selectbox(
-                "Modo de Reparto de Gastos",
-                options=["Al 50% (EQUAL)", "Proporcional a Ingresos Netos (PROPORTIONAL)"],
-                index=0,
-                help="Define cómo se calcula la aportación mensual de cada persona a la cuenta común.",
-            )
-            split_mode = "EQUAL" if "50%" in split_mode_choice else "PROPORTIONAL"
-
-        with col_d:
-            cohab_choice = st.selectbox(
-                "Etapa de Convivencia",
-                options=[
-                    "Convivencia Inicial / Alquiler (DATING_COHABITATION)",
-                    "Matrimonio / Proyecto a Largo Plazo (MARRIAGE_LONG_TERM)",
-                ],
-                index=0,
-                help="En convivencia inicial, tu aportación se registra como Gasto Fijo en tu perfil. En matrimonio, como Ahorro/Inversión Futuro.",
-            )
-            cohabitation_stage = "DATING_COHABITATION" if "DATING" in cohab_choice else "MARRIAGE_LONG_TERM"
-
-        initial_balance = st.number_input(
-            "Saldo Inicial en la Cuenta Conjunta (€)",
-            min_value=0.0,
-            value=0.0,
-            step=50.0,
-            help="Saldo de tesorería actualmente disponible en la cuenta bancaria común.",
-        )
-
-        st.info(
-            "ℹ️ Al crear la cuenta conjunta, se inicializarán automáticamente las subcategorías de necesidades comunes "
-            "(Alquiler/Hipoteca, Supermercado, Luz, Agua, Seguros del Hogar, etc.) y se habilitará la sincronización Syncthing."
-        )
-
-        submitted = st.form_submit_button("🚀 Iniciar y Activar Cuenta Conjunta", use_container_width=True)
-        if submitted:
-            if not account_name.strip() or not member_a_name.strip() or not member_b_name.strip():
-                st.error("Por favor completa los nombres requeridos.")
-                return
-
-            payload = {
-                "account_name": account_name.strip(),
-                "member_a_name": member_a_name.strip(),
-                "member_b_name": member_b_name.strip(),
-                "split_mode": split_mode,
-                "cohabitation_stage": cohabitation_stage,
-                "member_a_estimated_income": float(member_a_income),
-                "member_b_estimated_income": float(member_b_income),
-                "current_balance": float(initial_balance),
-            }
-
-            with st.spinner("Configurando el espacio del hogar..."):
-                res = api_client.setup_joint_account(payload)
-                if res:
-                    st.success("🎉 ¡Cuenta conjunta configurada exitosamente!")
+        if st.button("✨ Unirse a este Hogar en 1-Clic", type="primary", use_container_width=True, key="btn_accept_inv"):
+            with st.spinner("Conectando con la cuenta conjunta de tu pareja..."):
+                res_acc = api_client.accept_joint_invitation()
+                if res_acc:
+                    st.success("🎉 ¡Te has unido a la cuenta conjunta exitosamente!")
                     st.rerun()
                 else:
-                    st.error("❌ Ocurrió un error al crear la cuenta conjunta. Revisa los registros.")
+                    st.error("❌ Ocurrió un error al aceptar la invitación.")
+
+        st.markdown("<hr style='margin: 25px 0 15px 0; border: 0; border-top: 1px dashed #475569;'>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #94a3b8; font-size: 0.9rem;'>O si lo prefieres, puedes ignorar la invitación y configurar una cuenta distinta manualmente:</p>", unsafe_allow_html=True)
+
+    with st.expander("📝 Configurar Cuenta Conjunta Manualmente", expanded=(not has_invitation)):
+        with st.form("joint_onboarding_form"):
+            st.subheader("1. Identificación del Hogar")
+            account_name = st.text_input(
+                "Nombre del Hogar o Cuenta Común",
+                value="Hogar Compartido",
+                help="Ejemplo: Hogar Martínez-López, Casa Nuestra, etc.",
+            )
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                member_a_name = st.text_input(
+                    "Tu Nombre (Miembro A - Dispositivo Local)",
+                    value="Raúl",
+                    help="Identificador que figurará en tus aportaciones conjuntas.",
+                )
+                member_a_income = st.number_input(
+                    "Tu Salario Neto Mensual Estimado (€)",
+                    min_value=0.0,
+                    value=2000.0,
+                    step=50.0,
+                    help="Utilizado de forma confidencial para el cálculo del semáforo y reparto proporcional.",
+                )
+
+            with col_b:
+                member_b_name = st.text_input(
+                    "Nombre de tu Pareja (Miembro B - Cotitular)",
+                    value="Pareja",
+                    help="Nombre de la otra persona del hogar.",
+                )
+                member_b_income = st.number_input(
+                    "Salario Neto Mensual Estimado de tu Pareja (€)",
+                    min_value=0.0,
+                    value=2000.0,
+                    step=50.0,
+                    help="Utilizado para la Tasa de Esfuerzo Familiar combinada.",
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("2. Reglas de Convivencia y Reparto")
+            col_c, col_d = st.columns(2)
+            with col_c:
+                split_mode_choice = st.selectbox(
+                    "Modo de Reparto de Gastos",
+                    options=["Al 50% (EQUAL)", "Proporcional a Ingresos Netos (PROPORTIONAL)"],
+                    index=0,
+                    help="Define cómo se calcula la aportación mensual de cada persona a la cuenta común.",
+                )
+                split_mode = "EQUAL" if "50%" in split_mode_choice else "PROPORTIONAL"
+
+            with col_d:
+                cohab_choice = st.selectbox(
+                    "Etapa de Convivencia",
+                    options=[
+                        "Convivencia Inicial / Alquiler (DATING_COHABITATION)",
+                        "Matrimonio / Proyecto a Largo Plazo (MARRIAGE_LONG_TERM)",
+                    ],
+                    index=0,
+                    help="En convivencia inicial, tu aportación se registra como Gasto Fijo en tu perfil. En matrimonio, como Ahorro/Inversión Futuro.",
+                )
+                cohabitation_stage = "DATING_COHABITATION" if "DATING" in cohab_choice else "MARRIAGE_LONG_TERM"
+
+            initial_balance = st.number_input(
+                "Saldo Inicial en la Cuenta Conjunta (€)",
+                min_value=0.0,
+                value=0.0,
+                step=50.0,
+                help="Saldo de tesorería actualmente disponible en la cuenta bancaria común.",
+            )
+
+            st.info(
+                "ℹ️ Al crear la cuenta conjunta, se inicializarán automáticamente las subcategorías de necesidades comunes "
+                "(Alquiler/Hipoteca, Supermercado, Luz, Agua, Seguros del Hogar, etc.) y se habilitará la sincronización Syncthing."
+            )
+
+            submitted = st.form_submit_button("🚀 Iniciar y Activar Cuenta Conjunta", use_container_width=True)
+            if submitted:
+                if not account_name.strip() or not member_a_name.strip() or not member_b_name.strip():
+                    st.error("Por favor completa los nombres requeridos.")
+                    return
+
+                payload = {
+                    "account_name": account_name.strip(),
+                    "member_a_name": member_a_name.strip(),
+                    "member_b_name": member_b_name.strip(),
+                    "split_mode": split_mode,
+                    "cohabitation_stage": cohabitation_stage,
+                    "member_a_estimated_income": float(member_a_income),
+                    "member_b_estimated_income": float(member_b_income),
+                    "current_balance": float(initial_balance),
+                }
+
+                with st.spinner("Configurando el espacio del hogar..."):
+                    res = api_client.setup_joint_account(payload)
+                    if res:
+                        st.success("🎉 ¡Cuenta conjunta configurada exitosamente!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Ocurrió un error al crear la cuenta conjunta. Revisa los registros.")
+
 
 
 # =====================================================================
@@ -720,3 +763,41 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                 st.rerun()
             else:
                 st.error("❌ Error al actualizar los parámetros de la cuenta conjunta.")
+
+    st.markdown("<hr style='margin: 30px 0 20px 0; border: 0; border-top: 1px solid #7f1d1d;'>", unsafe_allow_html=True)
+    with st.expander("🚨 Zona de Peligro: Desactivar Cuenta Conjunta y Regresar a Estado Cero"):
+        st.markdown(
+            """
+            <div style="background: rgba(127, 29, 29, 0.2); border: 1px solid #ef4444; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+                <p style="color: #fca5a5; font-size: 0.95rem; margin: 0 0 8px 0; font-weight: 600;">
+                    ⚠️ Acción Destructiva para el Espacio Compartido
+                </p>
+                <p style="color: #cbd5e1; font-size: 0.85rem; margin: 0;">
+                    Esta acción purgará los datos de la cuenta conjunta, categorías compartidas, transacciones comunes,
+                    huchas del hogar y vaciará las bandejas de sincronización (outbox/inbox).<br>
+                    <b>Tus datos personales (transacciones individuales, categorías privadas y fondos de seguridad) permanecerán intactos y a salvo.</b>
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        confirm_reset = st.checkbox(
+            "Entiendo que esta acción desactivará la cuenta conjunta en este equipo y la devolverá al Estado Inicial.",
+            key="chk_confirm_reset",
+        )
+
+        if st.button(
+            "🗑️ Desactivar Cuenta Conjunta y Volver al Estado Cero",
+            type="primary",
+            disabled=not confirm_reset,
+            use_container_width=True,
+            key="btn_danger_reset",
+        ):
+            with st.spinner("Purgando cuenta conjunta y limpiando sincronización..."):
+                ok = api_client.reset_joint_account()
+                if ok:
+                    st.success("✅ Cuenta conjunta desactivada con éxito. Volviendo al estado inicial...")
+                    st.rerun()
+                else:
+                    st.error("❌ Error al purgar la cuenta conjunta en el servidor.")

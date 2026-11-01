@@ -1091,6 +1091,52 @@ def get_sync_status() -> Dict[str, Any]:
     return {"is_synchronized": False, "outbox_pending_count": 0, "inbox_pending_count": 0}
 
 
+def reset_joint_account() -> bool:
+    """Purga la cuenta conjunta completa y vacía los buzones de sincronización (regreso a Estado Cero)."""
+    url = f"{API_URL}/joint/reset"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en reset_joint_account (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en reset_joint_account en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en reset_joint_account(): %s", e)
+    return False
+
+
+def get_joint_invitation() -> Dict[str, Any]:
+    """Comprueba si hay una invitación de hogar pendiente enviada por la pareja."""
+    url = f"{API_URL}/joint/invitation"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_invitation (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_invitation en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_invitation(): %s", e)
+    return {"has_invitation": False, "invitation": None}
+
+
+def accept_joint_invitation() -> Optional[Dict[str, Any]]:
+    """Acepta la invitación de hogar detectada en 1 clic (Opción A)."""
+    url = f"{API_URL}/joint/accept-invitation"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en accept_joint_invitation (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en accept_joint_invitation en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en accept_joint_invitation(): %s", e)
+    return None
+
+
+
 
 
 

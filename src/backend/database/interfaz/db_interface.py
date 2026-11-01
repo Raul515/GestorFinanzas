@@ -282,6 +282,11 @@ class IJointRepository(ABC):
         """Registra una aportación mensual a la cuenta común."""
         pass
 
+    @abstractmethod
+    def reset_joint_account(self) -> bool:
+        """Purga todas las entidades del espacio conjunto, devolviendo la base de datos al Estado Cero."""
+        pass
+
 
 class IRepository(
     ICategoryRepository,

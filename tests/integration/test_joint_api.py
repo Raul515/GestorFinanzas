@@ -273,3 +273,90 @@ def test_joint_sync_endpoints(client: TestClient, api_sync_dir: str):
     process_resp = client.post("/joint/sync/process-inbox")
     assert process_resp.status_code == 200
     assert process_resp.json()["status"] == "ok"
+
+
+def test_joint_reset_lifecycle(client: TestClient):
+    """Verifica el restablecimiento completo de la cuenta conjunta a Estado Cero (/joint/reset)."""
+    # 1. Configurar cuenta y datos
+    client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Hogar a Purgar",
+            "cohabitation_stage": "COHABITATION",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "split_mode": "EQUAL_50_50",
+            "member_a_reference_income": 2000.0,
+            "member_b_reference_income": 2000.0,
+        },
+    )
+    # Crear una hucha
+    client.post(
+        "/joint/sinking-funds",
+        json={"name": "Hucha Temporal", "target_amount": 500.0, "current_balance": 100.0},
+    )
+    assert client.get("/joint/status").json()["is_configured"] is True
+    assert len(client.get("/joint/sinking-funds").json()) == 1
+
+    # 2. Resetear cuenta conjunta
+    reset_resp = client.post("/joint/reset")
+    assert reset_resp.status_code == 200
+    assert reset_resp.json()["status"] == "success"
+
+    # 3. Comprobar que regresó al Estado Cero
+    assert client.get("/joint/status").json()["is_configured"] is False
+    assert client.get("/joint/account").status_code == 404
+    assert client.get("/joint/sinking-funds").json() == []
+    assert client.get("/joint/transactions").json() == []
+
+
+def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_dir: str):
+    """Verifica la detección automática de invitación y adopción en 1 clic (Opción A)."""
+    import json
+
+    # 1. Inicialmente no hay invitaciones ni cuenta configurada
+    inv_init = client.get("/joint/invitation")
+    assert inv_init.status_code == 200
+    assert inv_init.json()["has_invitation"] is False
+
+    # 2. Simular que la pareja deposita un delta ACCOUNT en sync/inbox/
+    inbox_dir = Path(api_sync_dir) / "inbox"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    invitation_payload = {
+        "event_id": "evt-inv-001",
+        "origin_device_id": "REMOTE_PARTNER_MAC",
+        "entity_type": "ACCOUNT",
+        "action": "UPSERT",
+        "payload": {
+            "household_name": "Hogar Compartido D&R",
+            "cohabitation_stage": "PRE_COHABITATION",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "split_mode": "EQUAL_50_50",
+            "member_a_reference_income": 2500.0,
+            "member_b_reference_income": 2100.0,
+            "member_a_name": "David",
+            "member_b_name": "Raquel",
+        },
+    }
+    with open(inbox_dir / "account_delta.json", "w", encoding="utf-8") as f:
+        json.dump(invitation_payload, f)
+
+    # 3. Detección de la invitación
+    inv_detected = client.get("/joint/invitation")
+    assert inv_detected.status_code == 200
+    res_inv = inv_detected.json()
+    assert res_inv["has_invitation"] is True
+    assert res_inv["invitation"]["household_name"] == "Hogar Compartido D&R"
+    assert res_inv["invitation"]["member_a_name"] == "David"
+
+    # 4. Aceptar la invitación en 1 clic
+    accept_resp = client.post("/joint/accept-invitation")
+    assert accept_resp.status_code == 201
+    acc = accept_resp.json()
+    assert acc["household_name"] == "Hogar Compartido D&R"
+    assert acc["local_profile"] == "MEMBER_B"
+    assert acc["remote_profile"] == "MEMBER_A"
+
+    # 5. La cuenta ya existe, por lo que /joint/invitation retorna False y re-aceptar da 409
+    assert client.get("/joint/invitation").json()["has_invitation"] is False
+    assert client.post("/joint/accept-invitation").status_code == 409
+

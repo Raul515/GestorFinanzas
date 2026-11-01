@@ -206,6 +206,48 @@ def test_api_client_sync_endpoints():
         assert inbox_res["processed_count"] == 2
 
 
+def test_api_client_reset_joint_account():
+    """Valida la llamada para restablecer la cuenta conjunta a Estado Cero."""
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"status": "success"}
+        mock_post.return_value = mock_resp
+
+        res = api_client.reset_joint_account()
+        assert res is True
+        mock_post.assert_called_once()
+
+
+def test_api_client_invitation_endpoints():
+    """Valida los métodos de detección y aceptación de invitación del hogar (Opción A)."""
+    # Get invitation
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "has_invitation": True,
+            "invitation": {"household_name": "Casa Nuestra", "member_a_name": "Raúl"},
+        }
+        mock_get.return_value = mock_resp
+
+        inv = api_client.get_joint_invitation()
+        assert inv["has_invitation"] is True
+        assert inv["invitation"]["household_name"] == "Casa Nuestra"
+
+    # Accept invitation
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {"id": 1, "account_name": "Casa Nuestra"}
+        mock_post.return_value = mock_resp
+
+        acc = api_client.accept_joint_invitation()
+        assert acc is not None
+        assert acc["account_name"] == "Casa Nuestra"
+
+
+
 # =====================================================================
 # 2. PRUEBAS DE ENRUTAMIENTO DE VISTA JOINT_VIEW
 # =====================================================================

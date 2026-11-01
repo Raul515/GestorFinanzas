@@ -774,4 +774,25 @@ class SQLiteRepository(IRepository):
         self.db.refresh(db_contrib)
         return db_contrib
 
+    def reset_joint_account(self) -> bool:
+        """Purga todas las entidades del espacio conjunto, devolviendo la base de datos al Estado Cero."""
+        # 1. Purgar eventos aplicados de sincronización
+        self.db.query(joint_model.JointAppliedSyncEvent).delete()
+
+        # 2. Obtener y eliminar la cuenta conjunta (cascade elimina subentidades)
+        account = self.get_joint_account()
+        if account:
+            self.db.delete(account)
+        else:
+            # Purgar por seguridad si existieran registros huérfanos
+            self.db.query(joint_model.JointTransaction).delete()
+            self.db.query(joint_model.JointMonthlyContribution).delete()
+            self.db.query(joint_model.JointSinkingFund).delete()
+            self.db.query(joint_model.JointSubcategory).delete()
+            self.db.query(joint_model.JointCategory).delete()
+
+        self.db.commit()
+        return True
+
+
 

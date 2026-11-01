@@ -4,7 +4,7 @@ Proporciona endpoints fuertemente tipados con observabilidad estructurada, valid
 y control de transacciones para onboarding, configuración, huchas, aportaciones y sincronización.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 import logging
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.componentes.sqlite_db import get_db
 from backend.domain.models import transactions as personal_trans_model
+from backend.domain.models.joint import JointAppliedSyncEvent
 from backend.domain.schemas import joint as schemas
 from backend.services.joint_accounting_service import (
     calculate_joint_annual_summary,
@@ -124,6 +125,100 @@ def update_joint_account(
         origin_device_id=sync_service.local_device_id,
     )
     return account
+
+
+@router.get("/invitation")
+def check_joint_invitation(
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """
+    Comprueba si existe una invitación entrante en sync/inbox/ para unirse a un hogar
+    creado previamente por la pareja.
+    """
+    account = repo.get_joint_account()
+    if account:
+        return {"has_invitation": False, "invitation": None}
+
+    invitation = sync_service.get_pending_invitation()
+    if invitation:
+        return {"has_invitation": True, "invitation": invitation}
+    return {"has_invitation": False, "invitation": None}
+
+
+@router.post("/accept-invitation", response_model=schemas.JointAccountResponse, status_code=status.HTTP_201_CREATED)
+def accept_joint_invitation(
+    db: Session = Depends(get_db),
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+):
+    """
+    Acepta la invitación detectada en sync/inbox/ y configura la cuenta conjunta local
+    con los perfiles complementarios invertidos (Opción A).
+    """
+    existing = repo.get_joint_account()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe una cuenta conjunta configurada en este dispositivo.",
+        )
+
+    invitation = sync_service.get_pending_invitation()
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró ninguna invitación pendiente en la bandeja de entrada.",
+        )
+
+    stage_val = invitation.get("cohabitation_stage", "PRE_COHABITATION")
+    strategy_val = invitation.get("contribution_strategy", "NOMINAL_TEMPLATE")
+    split_val = invitation.get("split_mode", "EQUAL_50_50")
+
+    setup_req = schemas.JointAccountSetupRequest(
+        household_name=invitation["household_name"],
+        cohabitation_stage=schemas.CohabitationStage(stage_val) if hasattr(schemas.CohabitationStage, stage_val) else schemas.CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=schemas.ContributionStrategy(strategy_val) if hasattr(schemas.ContributionStrategy, strategy_val) else schemas.ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=schemas.SplitMode(split_val) if hasattr(schemas.SplitMode, split_val) else schemas.SplitMode.EQUAL_50_50,
+        member_a_reference_income=float(invitation.get("member_a_reference_income", 0.0)),
+        member_b_reference_income=float(invitation.get("member_b_reference_income", 0.0)),
+        member_a_contribution_pct=50.0,
+        member_b_contribution_pct=50.0,
+        local_profile=schemas.ProfileIdentifier.MEMBER_B,
+        remote_profile=schemas.ProfileIdentifier.MEMBER_A,
+    )
+
+    account = repo.create_joint_account(setup_req)
+
+    # Registrar evento de cuenta como aplicado
+    applied = JointAppliedSyncEvent(
+        event_id=invitation["event_id"],
+        entity_type="ACCOUNT",
+        action="UPSERT",
+        applied_at=datetime.now(timezone.utc),
+    )
+    db.add(applied)
+    db.commit()
+
+    # Procesar cualquier otro evento en espera en inbox (huchas, etc.)
+    sync_service.process_inbox(db)
+
+    return account
+
+
+@router.post("/reset")
+def reset_joint_account(
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """
+    Purga la cuenta conjunta completa y limpia las carpetas de sincronización,
+    devolviendo el sistema al Estado Cero de monousuario.
+    """
+    repo.reset_joint_account()
+    sync_service.clear_sync_folders()
+    logger.info("Cuenta conjunta reseteada al Estado Cero exitosamente.")
+    return {"status": "success", "message": "Cuenta conjunta purgada y restablecida al Estado Cero."}
+
 
 
 # ==========================================

@@ -405,3 +405,50 @@ class JointSyncService:
             "last_applied_at": last_applied_dt.isoformat() if last_applied_dt else None,
             "is_synchronized": outbox_pending == 0 and inbox_pending == 0,
         }
+
+    def clear_sync_folders(self) -> None:
+        """Elimina todos los archivos delta de las carpetas de sincronización para volver al Estado Cero."""
+        for folder in (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir):
+            if folder.exists():
+                for file_path in folder.glob("*"):
+                    if file_path.is_file():
+                        try:
+                            file_path.unlink()
+                        except Exception as exc:
+                            logger.warning("Error eliminando archivo delta %s: %s", file_path, exc)
+
+    def get_pending_invitation(self) -> Optional[Dict[str, Any]]:
+        """
+        Inspecciona sync/inbox/ buscando si hay un evento entrante de tipo ACCOUNT emitido por la pareja.
+        Retorna el payload de la cuenta si existe, o None si no hay invitaciones.
+        """
+        if not self.inbox_dir.exists():
+            return None
+
+        inbox_files = [
+            f for f in self.inbox_dir.iterdir()
+            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+        ]
+        for file_path in inbox_files:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                entity = data.get("entity_type")
+                if entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT":
+                    if data.get("origin_device_id") != self.local_device_id:
+                        payload = data.get("payload", {})
+                        return {
+                            "event_id": data.get("event_id"),
+                            "origin_device_id": data.get("origin_device_id"),
+                            "household_name": payload.get("household_name") or payload.get("account_name", "Hogar Compartido"),
+                            "cohabitation_stage": payload.get("cohabitation_stage", "PRE_COHABITATION"),
+                            "split_mode": payload.get("split_mode", "EQUAL_50_50"),
+                            "contribution_strategy": payload.get("contribution_strategy", "NOMINAL_TEMPLATE"),
+                            "member_a_reference_income": payload.get("member_a_reference_income", 0.0),
+                            "member_b_reference_income": payload.get("member_b_reference_income", 0.0),
+                            "member_a_name": payload.get("member_a_name", "Miembro A"),
+                            "member_b_name": payload.get("member_b_name", "Miembro B"),
+                        }
+            except Exception as exc:
+                logger.warning("Error inspeccionando posible invitación en %s: %s", file_path.name, exc)
+        return None
