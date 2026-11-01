@@ -50,6 +50,8 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
 - **HU-5 (Sincronización P2P Segura y Asíncrona)**: Como pareja que no siempre tiene el ordenador encendido al mismo tiempo, queremos que los movimientos de la cuenta común se sincronicen en segundo plano vía Syncthing de forma cifrada cuando ambos equipos se conecten a la red.
 - **HU-6 (Diagnóstico de Salud Financiera Familiar)**: Como miembro de la pareja, quiero conocer el semáforo de esfuerzo de nuestro hogar para saber si nuestros costes fijos comunes superan el 50% de nuestros ingresos combinados y evitar vivir por encima de nuestras posibilidades.
 - **HU-7 (Blindaje de Ocio en la Cuenta Común)**: Como usuario que protege la armonía de pareja, quiero que la cuenta conjunta no admita categorías de ocio individual para evitar disputas sobre compras personales.
+- **HU-8 (Restablecimiento Completo / Vuelta a Estado Cero)**: Como usuario que está probando la cuenta conjunta o que decide desvincularla, quiero disponer de una opción clara para desactivar la cuenta conjunta y purgar sus datos en 1 clic para volver al Estado Cero de monousuario sin dejar rastros en mi aplicación personal.
+- **HU-9 (Onboarding Guiado Asimétrico / Unirse al Hogar en 1 Clic)**: Como miembro de la pareja que abre la app en su ordenador tras haber configurado mi pareja el hogar, quiero que el sistema detecte la configuración recibida por Syncthing y me permita unirme con 1 solo clic asignándome mi perfil automáticamente, sin tener que volver a rellenar el formulario ni correr el riesgo de introducir datos discordantes.
 
 ---
 
@@ -208,6 +210,13 @@ El **objetivo** de esta especificación es implementar una **Arquitectura Multi-
        - Conmutador de etapa de convivencia (Pre-Convivencia vs Convivencia Plena).
        - Ajustes de modalidad de cálculo (Nominal vs Porcentaje de ingresos) e ingresos de referencia de la pareja.
 - **Criterio EARS (State-driven)**: MIENTRAS se visualice la Cuenta Conjunta, EL SISTEMA DEBE mostrar en la barra lateral el indicador de estado de sincronización (*"Última sincronización: hace X minutos"* o *"Sin conexión / Cambios locales pendientes"*).
+
+### RF-8: Restablecimiento y Purga de Cuenta Conjunta (Volver a Estado Cero)
+- **Criterio EARS (Event-driven)**: CUANDO el usuario confirme la acción de *"Desactivar Cuenta Conjunta y Volver al Estado Cero"* desde la pestaña de configuración, EL SISTEMA DEBE purgar físicamente todas las entidades del espacio conjunto (`JointAccount`, `JointTransaction`, `JointSinkingFund`, `JointMonthlyContribution`, `JointCategory`, `JointSubcategory`, `JointAppliedSyncEvent`), vaciar las carpetas de deltas locales (`sync/outbox/`, `sync/inbox/`, `sync/processed/`) y devolver la aplicación inmediatamente al Estado Cero monousuario sin alterar en absoluto ninguna tabla ni transacción del perfil personal.
+
+### RF-9: Detección Automática de Invitación y Onboarding Único (Opción A)
+- **Criterio EARS (Event-driven)**: CUANDO un usuario que se encuentre en Estado Cero acceda a la vista de Economía del Hogar y existan deltas de tipo `ACCOUNT` en la bandeja `sync/inbox/` emitidos por el dispositivo de la pareja, EL SISTEMA DEBE detectar la invitación y desplegar una tarjeta interactiva con el nombre del hogar y miembro originador (*"Se ha detectado el hogar '{household_name}' creado por {member_a_name}"*).
+- **Criterio EARS (Event-driven)**: CUANDO el usuario pulse *"Unirse al Hogar en 1-Clic"*, EL SISTEMA DEBE adoptar de forma idéntica la configuración del hogar, asignar automáticamente los perfiles complementarios (`local_profile = MEMBER_B`, `remote_profile = MEMBER_A`), inicializar el catálogo de necesidades y activar la cuenta conjunta sin requerir que el segundo usuario vuelva a rellenar el formulario de onboarding ni arriesgar discordancias en los parámetros del hogar.
 
 ---
 

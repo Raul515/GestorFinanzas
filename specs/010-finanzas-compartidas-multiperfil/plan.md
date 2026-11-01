@@ -117,7 +117,7 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ---
 
-### Fase 6: Pruebas Integrales E2E, Guía de Syncthing y Consolidación de Memoria
+### Fase 6: Pruebas Integrales E2E, Guía de Syncthing y Consolidación de Memoria [COMPLETADA]
 
 - **Objetivo**: Ejecutar una batería completa de pruebas end-to-end simulando la interacción entre dos dispositivos aislados (PC Windows y Mac), redactar la guía visual de emparejamiento con Syncthing, consolidar la memoria arquitectónica en `MEMORY.md` y preparar la fusión a `develop`.
 - **Archivos a crear/modificar**:
@@ -130,3 +130,27 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
   .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
   ```
 - **Criterio de Aceptación**: 100% de todas las pruebas de la especificación pasando, cero advertencias en `compileall` y verificación activa de `.gitignore`.
+
+---
+
+### Fase 7: Mejoras y Correcciones (Reset a Estado Cero y Onboarding Único con Detección Automática)
+
+- **Objetivo**: Implementar dos capacidades clave orientadas a la experiencia de usuario y resiliencia en pruebas reales:
+  1. **Restablecimiento y Regreso al Estado Cero en 1 Clic**: Endpoint `POST /joint/reset` y botón en la interfaz Streamlit para desactivar/purgar la cuenta conjunta y volver al estado inicial sin cuenta configurada (cero intrusión) de forma inmediata y segura sin tocar la consola.
+  2. **Onboarding Único con Detección Automática de Invitación (Opción A)**: Detección en el segundo dispositivo del delta `ACCOUNT` emitido por la pareja vía Syncthing (`sync/inbox/`), ofreciendo la opción *"Unirse al Hogar en 1-Clic"* con asignación automática de perfiles complementarios (`local_profile = MEMBER_B`, `remote_profile = MEMBER_A`), eliminando el riesgo de discrepancias o configuraciones asimétricas.
+- **Archivos a crear/modificar**:
+  - `src/backend/database/componentes/sqlite_crud.py` [MODIFICADO: Método `reset_joint_account()` para purgar registros de entidades del hogar].
+  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Detección de invitaciones de cuenta en buzón inbox y limpieza de carpetas locales en reset].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `POST /joint/reset` y `GET /joint/invitation`].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos `reset_joint_account()` y `get_joint_invitation()`].
+  - `src/frontend/views/joint_view.py` [MODIFICADO:
+    1) Tarjeta interactiva *"Unirse al Hogar creado por tu pareja"* en el asistente Zero-State.
+    2) Botón de peligro `[🗑️ Desactivar Cuenta Conjunta y Volver al Estado Cero]` en la pestaña `⚙️ Configuración del Hogar`].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas unitarias para reset y detección de invitación].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración para `/joint/reset` y `/joint/invitation`].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando, reversibilidad garantizada a Estado Cero y adopción simétrica sin discordancias.
+
