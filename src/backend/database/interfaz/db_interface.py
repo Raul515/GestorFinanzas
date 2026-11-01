@@ -204,6 +204,85 @@ class ICopilotRepository(ABC):
         pass
 
 
+class IJointRepository(ABC):
+    """Interfaz del repositorio para el espacio conjunto del hogar (Spec 010)."""
+
+    @abstractmethod
+    def get_joint_account(self) -> Optional[Any]:
+        """Obtiene la cuenta conjunta configurada o None si no existe."""
+        pass
+
+    @abstractmethod
+    def create_joint_account(self, setup_data: Any) -> Any:
+        """Inicializa la cuenta conjunta y el catálogo base de necesidades comunes."""
+        pass
+
+    @abstractmethod
+    def update_joint_account(self, update_data: Any) -> Optional[Any]:
+        """Actualiza la configuración de la cuenta conjunta."""
+        pass
+
+    @abstractmethod
+    def get_joint_categories(self) -> List[Any]:
+        """Obtiene las categorías de necesidades del hogar."""
+        pass
+
+    @abstractmethod
+    def get_joint_subcategories(self, category_id: Optional[int] = None) -> List[Any]:
+        """Obtiene las subcategorías de necesidades del hogar."""
+        pass
+
+    @abstractmethod
+    def get_joint_sinking_funds(self, status: Optional[str] = None) -> List[Any]:
+        """Obtiene el listado de huchas de amortización del hogar."""
+        pass
+
+    @abstractmethod
+    def get_joint_sinking_fund(self, fund_id: int) -> Optional[Any]:
+        """Obtiene una hucha de amortización específica."""
+        pass
+
+    @abstractmethod
+    def create_joint_sinking_fund(self, fund: Any) -> Any:
+        """Crea una nueva hucha de amortización."""
+        pass
+
+    @abstractmethod
+    def update_joint_sinking_fund(self, fund_id: int, fund_update: Any) -> Optional[Any]:
+        """Actualiza una hucha de amortización."""
+        pass
+
+    @abstractmethod
+    def delete_joint_sinking_fund(self, fund_id: int, reallocate_to_fund_id: Optional[int] = None) -> bool:
+        """Elimina una hucha de amortización reasignando su saldo si corresponde."""
+        pass
+
+    @abstractmethod
+    def get_joint_transactions(self, year: Optional[int] = None, month: Optional[str] = None) -> List[Any]:
+        """Obtiene las transacciones conjuntas registradas."""
+        pass
+
+    @abstractmethod
+    def create_joint_transaction(self, tx: Any) -> Any:
+        """Registra una transacción conjunta."""
+        pass
+
+    @abstractmethod
+    def delete_joint_transaction(self, tx_id: int) -> Optional[str]:
+        """Elimina una transacción conjunta retornando su UUID para el tombstone."""
+        pass
+
+    @abstractmethod
+    def get_joint_contributions(self, year: Optional[int] = None, month: Optional[str] = None) -> List[Any]:
+        """Obtiene las aportaciones mensuales efectuadas."""
+        pass
+
+    @abstractmethod
+    def create_joint_contribution(self, contrib: Any) -> Any:
+        """Registra una aportación mensual a la cuenta común."""
+        pass
+
+
 class IRepository(
     ICategoryRepository,
     IBudgetRepository,
@@ -212,9 +291,11 @@ class IRepository(
     IMarketCacheRepository,
     IWatchlistRepository,
     ICopilotRepository,
+    IJointRepository,
     ABC,
 ):
     """Interfaz unificada del repositorio del sistema."""
     pass
+
 
 

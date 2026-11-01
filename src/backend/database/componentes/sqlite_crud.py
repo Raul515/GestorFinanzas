@@ -9,6 +9,7 @@ from backend.domain.models import (
     market_cache as cache_model,
     watchlist as watchlist_model,
     copilot as copilot_model,
+    joint as joint_model,
 )
 from backend.domain.schemas import (
     categories as cat_schema,
@@ -16,6 +17,7 @@ from backend.domain.schemas import (
     transactions as trans_schema,
     watchlist as watchlist_schema,
     copilot as copilot_schema,
+    joint as joint_schema,
 )
 from typing import Optional, Any, List, Dict
 import json
@@ -475,4 +477,301 @@ class SQLiteRepository(IRepository):
             .order_by(copilot_model.CopilotMessage.created_at.asc())
             .all()
         )
+
+    # ==========================================
+    # 8. Espacio Conjunto / Hogar (Spec 010)
+    # ==========================================
+
+    def get_joint_account(self) -> Optional[joint_model.JointAccount]:
+        """Obtiene la cuenta conjunta configurada o None si el usuario aún no la ha creado."""
+        return self.db.query(joint_model.JointAccount).filter(joint_model.JointAccount.id == 1).first()
+
+    def create_joint_account(
+        self, setup_data: joint_schema.JointAccountSetupRequest
+    ) -> joint_model.JointAccount:
+        """Crea la cuenta conjunta e inicializa el catálogo base de necesidades comunes."""
+        existing = self.get_joint_account()
+        if existing:
+            raise ValueError("Ya existe una cuenta conjunta configurada en este dispositivo.")
+
+        data = setup_data.model_dump()
+        account = joint_model.JointAccount(
+            id=1,
+            household_name=data["household_name"],
+            cohabitation_stage=data["cohabitation_stage"].value if hasattr(data["cohabitation_stage"], "value") else str(data["cohabitation_stage"]),
+            contribution_strategy=data["contribution_strategy"].value if hasattr(data["contribution_strategy"], "value") else str(data["contribution_strategy"]),
+            split_mode=data["split_mode"].value if hasattr(data["split_mode"], "value") else str(data["split_mode"]),
+            member_a_reference_income=data.get("member_a_reference_income", 0.0),
+            member_b_reference_income=data.get("member_b_reference_income", 0.0),
+            member_a_contribution_pct=data.get("member_a_contribution_pct", 50.0),
+            member_b_contribution_pct=data.get("member_b_contribution_pct", 50.0),
+            local_profile=data["local_profile"].value if hasattr(data["local_profile"], "value") else str(data["local_profile"]),
+            remote_profile=data["remote_profile"].value if hasattr(data["remote_profile"], "value") else str(data["remote_profile"]),
+        )
+        self.db.add(account)
+        self.db.flush()
+
+        # Sembrar catálogo estandarizado de conceptos comunes (sin ocio)
+        cat_needs = joint_model.JointCategory(
+            joint_account_id=1,
+            name="Necesidades Básicas del Hogar",
+            type="JOINT_NEEDS",
+        )
+        self.db.add(cat_needs)
+        self.db.flush()
+
+        default_subcats = [
+            "Vivienda (Alquiler / Hipoteca)",
+            "Suministros (Luz, Agua, Gas, Internet)",
+            "Alimentación y Supermercado",
+            "Comunidad y Seguros del Hogar",
+        ]
+        for sub_name in default_subcats:
+            self.db.add(
+                joint_model.JointSubcategory(
+                    joint_category_id=cat_needs.id,
+                    name=sub_name,
+                    monthly_budget=0.0,
+                )
+            )
+
+        self.db.commit()
+        self.db.refresh(account)
+        return account
+
+    def update_joint_account(
+        self, update_data: joint_schema.JointAccountUpdate
+    ) -> Optional[joint_model.JointAccount]:
+        """Actualiza la configuración de la cuenta conjunta."""
+        account = self.get_joint_account()
+        if not account:
+            return None
+
+        update_dict = update_data.model_dump(exclude_unset=True)
+        for field, value in update_dict.items():
+            if value is not None:
+                val_to_set = value.value if hasattr(value, "value") else value
+                setattr(account, field, val_to_set)
+
+        self.db.commit()
+        self.db.refresh(account)
+        return account
+
+    def get_joint_categories(self) -> List[joint_model.JointCategory]:
+        """Obtiene las categorías del hogar junto a sus subcategorías."""
+        return self.db.query(joint_model.JointCategory).filter(joint_model.JointCategory.joint_account_id == 1).all()
+
+    def create_joint_category(self, category: joint_schema.JointCategoryCreate) -> joint_model.JointCategory:
+        """Crea una categoría de necesidades del hogar."""
+        data = category.model_dump()
+        db_item = joint_model.JointCategory(
+            joint_account_id=1,
+            name=data["name"],
+            type="JOINT_NEEDS",
+        )
+        self.db.add(db_item)
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def get_joint_subcategories(self, category_id: Optional[int] = None) -> List[joint_model.JointSubcategory]:
+        """Obtiene las subcategorías de necesidades comunes."""
+        query = self.db.query(joint_model.JointSubcategory)
+        if category_id:
+            query = query.filter(joint_model.JointSubcategory.joint_category_id == category_id)
+        return query.all()
+
+    def create_joint_subcategory(self, subcategory: joint_schema.JointSubcategoryCreate) -> joint_model.JointSubcategory:
+        """Crea una nueva subcategoría de necesidades comunes."""
+        data = subcategory.model_dump()
+        db_item = joint_model.JointSubcategory(
+            joint_category_id=data["joint_category_id"],
+            name=data["name"],
+            monthly_budget=data.get("monthly_budget", 0.0),
+        )
+        self.db.add(db_item)
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def get_joint_sinking_funds(self, status: Optional[str] = None) -> List[joint_model.JointSinkingFund]:
+        """Obtiene las huchas de amortización, filtrando opcionalmente por estado."""
+        query = self.db.query(joint_model.JointSinkingFund).filter(joint_model.JointSinkingFund.joint_account_id == 1)
+        if status:
+            query = query.filter(joint_model.JointSinkingFund.status == status)
+        return query.order_by(joint_model.JointSinkingFund.priority.asc()).all()
+
+    def get_joint_sinking_fund(self, fund_id: int) -> Optional[joint_model.JointSinkingFund]:
+        """Obtiene una hucha de amortización por su ID."""
+        return (
+            self.db.query(joint_model.JointSinkingFund)
+            .filter(
+                joint_model.JointSinkingFund.id == fund_id,
+                joint_model.JointSinkingFund.joint_account_id == 1,
+            )
+            .first()
+        )
+
+    def create_joint_sinking_fund(self, fund: joint_schema.JointSinkingFundCreate) -> joint_model.JointSinkingFund:
+        """Crea una nueva meta de amortización / hucha del hogar."""
+        data = fund.model_dump()
+        status_val = data.get("status", "ACTIVE")
+        if hasattr(status_val, "value"):
+            status_val = status_val.value
+
+        db_item = joint_model.JointSinkingFund(
+            joint_account_id=1,
+            name=data["name"],
+            target_amount=data["target_amount"],
+            current_balance=data.get("current_balance", 0.0),
+            monthly_target_amount=data.get("monthly_target_amount", 0.0),
+            allocation_percentage=data.get("allocation_percentage", 0.0),
+            status=str(status_val),
+            priority=data.get("priority", 1),
+        )
+        self.db.add(db_item)
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def update_joint_sinking_fund(
+        self, fund_id: int, fund_update: joint_schema.JointSinkingFundUpdate
+    ) -> Optional[joint_model.JointSinkingFund]:
+        """Actualiza una meta de amortización."""
+        fund = self.get_joint_sinking_fund(fund_id)
+        if not fund:
+            return None
+
+        update_dict = fund_update.model_dump(exclude_unset=True)
+        for field, value in update_dict.items():
+            if value is not None:
+                val_to_set = value.value if hasattr(value, "value") else value
+                setattr(fund, field, val_to_set)
+
+        self.db.commit()
+        self.db.refresh(fund)
+        return fund
+
+    def delete_joint_sinking_fund(self, fund_id: int, reallocate_to_fund_id: Optional[int] = None) -> bool:
+        """Elimina una hucha de amortización; si tiene saldo remanente, lo reasigna a otra hucha activa."""
+        fund = self.get_joint_sinking_fund(fund_id)
+        if not fund:
+            return False
+
+        if fund.current_balance > 0 and reallocate_to_fund_id:
+            target_fund = self.get_joint_sinking_fund(reallocate_to_fund_id)
+            if target_fund:
+                target_fund.current_balance += fund.current_balance
+
+        self.db.delete(fund)
+        self.db.commit()
+        return True
+
+    def get_joint_transactions(
+        self, year: Optional[int] = None, month: Optional[str] = None
+    ) -> List[joint_model.JointTransaction]:
+        """Obtiene el historial de gastos comunes o movimientos de huchas."""
+        query = self.db.query(joint_model.JointTransaction).filter(joint_model.JointTransaction.joint_account_id == 1)
+        if year:
+            query = query.filter(extract("year", joint_model.JointTransaction.date) == year)
+        if month:
+            # month en formato YYYY-MM
+            try:
+                parts = month.split("-")
+                m_year, m_num = int(parts[0]), int(parts[1])
+                query = query.filter(
+                    extract("year", joint_model.JointTransaction.date) == m_year,
+                    extract("month", joint_model.JointTransaction.date) == m_num,
+                )
+            except Exception as exc:
+                logger.warning("Formato de mes inválido en get_joint_transactions: %s", exc)
+
+        return query.order_by(joint_model.JointTransaction.date.desc()).all()
+
+    def create_joint_transaction(self, tx: joint_schema.JointTransactionCreate) -> joint_model.JointTransaction:
+        """Registra una transacción en el espacio conjunto."""
+        data = tx.model_dump()
+        profile_val = data["created_by_profile"]
+        if hasattr(profile_val, "value"):
+            profile_val = profile_val.value
+
+        db_tx = joint_model.JointTransaction(
+            uuid=data.get("uuid") or str(joint_model.uuid.uuid4()),
+            joint_account_id=1,
+            date=data["date"],
+            amount=data["amount"],
+            description=data["description"],
+            joint_subcategory_id=data.get("joint_subcategory_id"),
+            joint_sinking_fund_id=data.get("joint_sinking_fund_id"),
+            created_by_profile=str(profile_val),
+        )
+        self.db.add(db_tx)
+
+        # Si el gasto proviene de una hucha de amortización, descontar el saldo
+        if db_tx.joint_sinking_fund_id:
+            fund = self.get_joint_sinking_fund(db_tx.joint_sinking_fund_id)
+            if fund:
+                fund.current_balance = max(0.0, fund.current_balance - db_tx.amount)
+
+        self.db.commit()
+        self.db.refresh(db_tx)
+        return db_tx
+
+    def delete_joint_transaction(self, tx_id: int) -> Optional[str]:
+        """Elimina una transacción y retorna su UUID para emitir el tombstone de sincronización."""
+        tx = (
+            self.db.query(joint_model.JointTransaction)
+            .filter(
+                joint_model.JointTransaction.id == tx_id,
+                joint_model.JointTransaction.joint_account_id == 1,
+            )
+            .first()
+        )
+        if not tx:
+            return None
+
+        tx_uuid = tx.uuid
+
+        # Si procedía de una hucha de amortización, restaurar el saldo
+        if tx.joint_sinking_fund_id:
+            fund = self.get_joint_sinking_fund(tx.joint_sinking_fund_id)
+            if fund:
+                fund.current_balance += tx.amount
+
+        self.db.delete(tx)
+        self.db.commit()
+        return tx_uuid
+
+    def get_joint_contributions(
+        self, year: Optional[int] = None, month: Optional[str] = None
+    ) -> List[joint_model.JointMonthlyContribution]:
+        """Obtiene las aportaciones mensuales registradas."""
+        query = self.db.query(joint_model.JointMonthlyContribution).filter(joint_model.JointMonthlyContribution.joint_account_id == 1)
+        if year:
+            query = query.filter(joint_model.JointMonthlyContribution.month.like(f"{year}-%"))
+        if month:
+            query = query.filter(joint_model.JointMonthlyContribution.month == month)
+        return query.order_by(joint_model.JointMonthlyContribution.contribution_date.desc()).all()
+
+    def create_joint_contribution(
+        self, contrib: joint_schema.JointMonthlyContributionCreate
+    ) -> joint_model.JointMonthlyContribution:
+        """Registra una aportación mensual a la tesorería común."""
+        data = contrib.model_dump()
+        profile_val = data["contributor_profile"]
+        if hasattr(profile_val, "value"):
+            profile_val = profile_val.value
+
+        db_contrib = joint_model.JointMonthlyContribution(
+            joint_account_id=1,
+            month=data["month"],
+            contributor_profile=str(profile_val),
+            amount=data["amount"],
+            contribution_date=data["contribution_date"],
+        )
+        self.db.add(db_contrib)
+        self.db.commit()
+        self.db.refresh(db_contrib)
+        return db_contrib
+
 
