@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -21,6 +22,7 @@ try:
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
+    from frontend.views.joint_view import render_joint_view
 except ImportError:
     from services.financial_calculator import (  # type: ignore
         calculate_category_totals,
@@ -31,6 +33,9 @@ except ImportError:
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
+    from views.joint_view import render_joint_view  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="Gestor Finanzas", layout="wide")
 
@@ -40,10 +45,16 @@ if os.path.exists(css_path):
     with open(css_path) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-st.title("Gestor de Finanzas Personales")
+# Sidebar para selección de modo de gestión
+st.sidebar.header("Espacio de Trabajo")
+context_mode = st.sidebar.radio(
+    "Modo de Gestión",
+    options=["👤 Mi Perfil Personal", "👥 Economía del Hogar (Cuenta Conjunta)"],
+    index=0,
+)
 
-# Sidebar para selección de año
-st.sidebar.header("Configuración")
+st.sidebar.markdown("---")
+st.sidebar.header("Configuración Temporal")
 year_today = date.today().year
 year_selected = st.sidebar.number_input("Año", min_value=2000, max_value=2100, value=year_today, step=1)
 
@@ -51,6 +62,71 @@ MESES_NOMBRES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
+
+
+def _render_personal_assisted_contribution_banner(year: int) -> None:
+    """Muestra un banner si la aportación a la cuenta conjunta para el mes actual está pendiente."""
+    today = date.today()
+    curr_month_str = f"{today.year}-{today.month:02d}"
+    curr_month_name = MESES_NOMBRES[today.month - 1] if 1 <= today.month <= 12 else str(today.month)
+
+    try:
+        contributions = api_client.get_joint_contributions(year=today.year, month=curr_month_str)
+        already_paid = any(c.get("contributor_profile") == "MEMBER_A" for c in contributions)
+        if not already_paid:
+            account = api_client.get_joint_account()
+            if account:
+                member_a_name = account.get("member_a_name", "Miembro A")
+                est_income = float(account.get("member_a_estimated_income", 2000.0))
+                default_amount = round(est_income * 0.4, 2) if est_income > 0 else 500.0
+
+                st.info(
+                    f"🔔 **Aportación Pendiente al Hogar ({curr_month_name} {today.year})**: "
+                    f"Aún no has registrado tu aportación mensual para gastos comunes."
+                )
+                col_b1, col_b2 = st.columns([3, 1])
+                with col_b1:
+                    contrib_amount = st.number_input(
+                        f"Importe aportación de {member_a_name} (€)",
+                        min_value=1.0,
+                        value=default_amount,
+                        step=25.0,
+                        key="assisted_contrib_input",
+                    )
+                with col_b2:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
+                        payload = {
+                            "month": curr_month_str,
+                            "amount": float(contrib_amount),
+                            "contributor_profile": "MEMBER_A",
+                            "contribution_date": today.isoformat(),
+                        }
+                        res = api_client.asentar_aportacion_asistida(payload)
+                        if res:
+                            st.success("✅ Aportación transferida y registrada en tu cuenta personal y conjunta.")
+                            st.rerun()
+                        else:
+                            st.error("❌ No se pudo asentar la aportación.")
+    except Exception as e:
+        logger.warning("No se pudo comprobar la aportación asistida: %s", e)
+
+
+if context_mode == "👥 Economía del Hogar (Cuenta Conjunta)":
+    st.title("Economía del Hogar (Cuenta Conjunta)")
+    render_joint_view(selected_year=year_selected)
+    st.stop()
+
+st.title("Gestor de Finanzas Personales")
+
+# Banner asistido de inicio de mes (solo si cuenta conjunta está configurada)
+try:
+    joint_status = api_client.get_joint_status()
+    if joint_status.get("is_configured"):
+        _render_personal_assisted_contribution_banner(year_selected)
+except Exception as e:
+    logger.warning("Error al comprobar el estado de la cuenta conjunta: %s", e)
+
 
 # Pestañas de Navegación (Resumen Anual + 12 Meses + Presupuesto Base + Radar Macro + Screener + Deep Dive + Copiloto + Comité Asesor)
 tabs_list = (

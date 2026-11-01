@@ -782,6 +782,316 @@ def revert_guideline_strategy(month_key: str, scenario_type: str = "NEEDS_SURPLU
     return None
 
 
+# ==========================================
+# ESPACIO CONJUNTO / HOGAR (SPEC 010)
+# ==========================================
+
+def get_joint_status() -> Dict[str, Any]:
+    """Consulta si la cuenta conjunta está configurada o si nos encontramos en Estado Cero."""
+    url = f"{API_URL}/joint/status"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Respuesta no exitosa en get_joint_status (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de conexión al consultar /joint/status en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_status(): %s", e)
+    return {"is_configured": False}
+
+
+def setup_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
+    """Ejecuta el onboarding inicial para crear la cuenta conjunta."""
+    url = f"{API_URL}/joint/setup"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en setup_joint_account (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en setup_joint_account en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en setup_joint_account(): %s", e)
+    return None
+
+
+def get_joint_account() -> Optional[Dict[str, Any]]:
+    """Obtiene la configuración activa de la cuenta conjunta."""
+    url = f"{API_URL}/joint/account"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_account (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_account en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_account(): %s", e)
+    return None
+
+
+def update_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
+    """Actualiza los parámetros del hogar."""
+    url = f"{API_URL}/joint/account"
+    try:
+        response = requests.put(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en update_joint_account (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en update_joint_account en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_joint_account(): %s", e)
+    return None
+
+
+def get_joint_categories() -> List[Dict[str, Any]]:
+    """Obtiene el catálogo de categorías del hogar."""
+    url = f"{API_URL}/joint/categories"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_categories (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_categories en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_categories(): %s", e)
+    return []
+
+
+def get_joint_subcategories(category_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Obtiene las subcategorías de necesidades comunes."""
+    url = f"{API_URL}/joint/subcategories"
+    params = {}
+    if category_id:
+        params["category_id"] = category_id
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_subcategories (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_subcategories en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_subcategories(): %s", e)
+    return []
+
+
+def get_joint_sinking_funds(status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Obtiene las metas de ahorro / huchas de amortización del hogar."""
+    url = f"{API_URL}/joint/sinking-funds"
+    params = {}
+    if status:
+        params["status"] = status
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_sinking_funds (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_sinking_funds en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_sinking_funds(): %s", e)
+    return []
+
+
+def create_joint_sinking_fund(payload: dict) -> Optional[Dict[str, Any]]:
+    """Crea una nueva hucha de amortización."""
+    url = f"{API_URL}/joint/sinking-funds"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en create_joint_sinking_fund (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en create_joint_sinking_fund en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_joint_sinking_fund(): %s", e)
+    return None
+
+
+def update_joint_sinking_fund(fund_id: int, payload: dict) -> Optional[Dict[str, Any]]:
+    """Edita una hucha de amortización existente."""
+    url = f"{API_URL}/joint/sinking-funds/{fund_id}"
+    try:
+        response = requests.put(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en update_joint_sinking_fund (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en update_joint_sinking_fund en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_joint_sinking_fund(): %s", e)
+    return None
+
+
+def delete_joint_sinking_fund(fund_id: int, reallocate_to_fund_id: Optional[int] = None) -> bool:
+    """Elimina una hucha de amortización, reasignando su saldo a otra meta si corresponde."""
+    url = f"{API_URL}/joint/sinking-funds/{fund_id}"
+    params = {}
+    if reallocate_to_fund_id:
+        params["reallocate_to_fund_id"] = reallocate_to_fund_id
+    try:
+        response = requests.delete(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en delete_joint_sinking_fund (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_joint_sinking_fund en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_joint_sinking_fund(): %s", e)
+    return False
+
+
+def get_joint_transactions(year: Optional[int] = None, month: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Obtiene los gastos del hogar registrados."""
+    url = f"{API_URL}/joint/transactions"
+    params = {}
+    if year:
+        params["year"] = year
+    if month:
+        params["month"] = month
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_transactions (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_transactions en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_transactions(): %s", e)
+    return []
+
+
+def create_joint_transaction(payload: dict) -> Optional[Dict[str, Any]]:
+    """Registra un nuevo gasto común del hogar."""
+    url = f"{API_URL}/joint/transactions"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en create_joint_transaction (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en create_joint_transaction en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_joint_transaction(): %s", e)
+    return None
+
+
+def delete_joint_transaction(tx_id: int) -> bool:
+    """Elimina una transacción conjunta."""
+    url = f"{API_URL}/joint/transactions/{tx_id}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en delete_joint_transaction (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_joint_transaction en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_joint_transaction(): %s", e)
+    return False
+
+
+def get_joint_contributions(year: Optional[int] = None, month: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Obtiene el historial de aportaciones a la cuenta común."""
+    url = f"{API_URL}/joint/contributions"
+    params = {}
+    if year:
+        params["year"] = year
+    if month:
+        params["month"] = month
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_contributions (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_contributions en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_contributions(): %s", e)
+    return []
+
+
+def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
+    """Ejecuta el asiento asistido en 1 clic de inicio de mes."""
+    url = f"{API_URL}/joint/contributions/asentar-asistida"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en asentar_aportacion_asistida (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en asentar_aportacion_asistida en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en asentar_aportacion_asistida(): %s", e)
+    return None
+
+
+def get_joint_health() -> Optional[Dict[str, Any]]:
+    """Consulta la Tasa de Esfuerzo Familiar y el semáforo determinista."""
+    url = f"{API_URL}/joint/health"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_health (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_health en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_health(): %s", e)
+    return None
+
+
+def get_joint_annual_summary(year: int) -> Optional[Dict[str, Any]]:
+    """Consulta el Resumen Anual consolidado del hogar (sin comparativas A vs B)."""
+    url = f"{API_URL}/joint/annual-summary"
+    params = {"year": year}
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_annual_summary (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_annual_summary en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_annual_summary(): %s", e)
+    return None
+
+
+def trigger_process_inbox() -> Dict[str, Any]:
+    """Dispara el procesamiento de los deltas de Syncthing en sync/inbox/."""
+    url = f"{API_URL}/joint/sync/process-inbox"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en trigger_process_inbox (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en trigger_process_inbox en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en trigger_process_inbox(): %s", e)
+    return {"status": "error"}
+
+
+def get_sync_status() -> Dict[str, Any]:
+    """Obtiene el estado de sincronización y métricas de deltas pendientes."""
+    url = f"{API_URL}/joint/sync/status"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_sync_status (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_sync_status en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_sync_status(): %s", e)
+    return {"is_synchronized": False, "outbox_pending_count": 0, "inbox_pending_count": 0}
+
+
+
 
 
 
