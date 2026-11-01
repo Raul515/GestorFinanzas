@@ -16,6 +16,7 @@ from backend.api.routers import (
     committee,
     guidelines,
     metrics,
+    joint,
 )
 from backend.database.componentes.sqlite_db import init_db
 
@@ -74,6 +75,7 @@ app.include_router(copilot.router)
 app.include_router(committee.router)
 app.include_router(guidelines.router)
 app.include_router(metrics.router)
+app.include_router(joint.router)
 
 
 
