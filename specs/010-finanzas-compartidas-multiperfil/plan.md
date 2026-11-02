@@ -133,15 +133,25 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ---
 
-### Fase 7: Mejoras y Correcciones (Reset a Estado Cero y Onboarding Único con Detección Automática)
+### Fase 7: Mejoras, Auditoría de Resiliencia y Corrección de Bugs [COMPLETADA]
 
-- **Objetivo**: Implementar dos capacidades clave orientadas a la experiencia de usuario y resiliencia en pruebas reales:
+- **Objetivo**: Implementar capacidades clave de usabilidad, corregir los 4 bugs identificados en la auditoría previa al cierre de la especificación e incorporar la Mejora 1 para el cálculo dinámico de cuotas:
   1. **Restablecimiento y Regreso al Estado Cero en 1 Clic**: Endpoint `POST /joint/reset` y botón en la interfaz Streamlit para desactivar/purgar la cuenta conjunta y volver al estado inicial sin cuenta configurada (cero intrusión) de forma inmediata y segura sin tocar la consola.
   2. **Onboarding Único con Detección Automática de Invitación (Opción A)**: Detección en el segundo dispositivo del delta `ACCOUNT` emitido por la pareja vía Syncthing (`sync/inbox/`), ofreciendo la opción *"Unirse al Hogar en 1-Clic"* con asignación automática de perfiles complementarios (`local_profile = MEMBER_B`, `remote_profile = MEMBER_A`), eliminando el riesgo de discrepancias o configuraciones asimétricas.
+  3. **Corrección de Bugs de Auditoría**:
+     - **BUG-1 (Preservación de Nombres de Miembros en Invitación)**: `accept_joint_invitation` propaga explícitamente `member_a_name` y `member_b_name` al configurar el hogar en el dispositivo de la pareja.
+     - **BUG-2 (Perfil Dinámico en Banner de Aportación)**: `_render_personal_assisted_contribution_banner` en `app.py` resuelve dinámicamente `local_profile` y el nombre del miembro local, eliminando el valor estático `MEMBER_A`.
+     - **BUG-3 (Resiliencia ante IDs Discordantes en Deltas)**: Inclusión de `subcategory_name` y `sinking_fund_name` en el payload JSON de deltas de transacciones emitidas para tolerancia a discordancias de autoincrementales entre bases de datos independientes.
+     - **BUG-4 (Sincronización de Hucha Receptora)**: Emisión de delta `UPSERT` para la hucha receptora tras eliminar una hucha con reasignación de saldo remanente (`reallocate_to_fund_id`).
+  4. **Mejora 1 (Cálculo Dinámico en Banner Mensual Personal)**:
+     - Nuevo endpoint `GET /joint/contributions/calculation` en FastAPI que evalúa la cuota exacta según la estrategia contable del hogar (fija 50/50 o porcentaje de nómina), consumido por `app.py` para pre-rellenar el importe exacto a transferir.
 
+---
 
-- **Mejoras Futuras Registradas (Post-Spec)**:
-  - **Alerta de Sobregasto en Huchas de Amortización**: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
-  - **Exportación Consolidada del Hogar a Excel / CSV**: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
-  - **Visor de Sincronización Avanzado en UI**: En el panel de configuración, visualización de deltas archivados en `sync/processed/` y funcionalidad para inspeccionar o reintentar eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
+### Registro de Mejoras Futuras (Post-Spec)
+
+- **Alerta de Sobregasto en Huchas de Amortización**: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
+- **Exportación Consolidada del Hogar a Excel / CSV**: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
+- **Visor de Sincronización Avanzado en UI**: En el panel de configuración, visualización de deltas archivados en `sync/processed/` y funcionalidad para inspeccionar o reintentar eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
+
 
