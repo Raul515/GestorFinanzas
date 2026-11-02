@@ -322,3 +322,43 @@ def test_get_sync_status(temp_sync_dir: str, db_session: Session):
     status_pending = service.get_sync_status(db_session)
     assert status_pending["is_synchronized"] is False
     assert status_pending["outbox_pending_count"] == 1
+
+
+def test_device_id_persistence_and_invitation_detection(temp_sync_dir: str):
+    """Verifica que el identificador de dispositivo sea persistente y reconozca invitaciones."""
+    temp_data_dir = Path(temp_sync_dir) / "data"
+    from backend.services.joint_sync_service import get_or_create_device_id
+
+    dev_id1 = get_or_create_device_id(temp_data_dir)
+    assert dev_id1
+    assert (temp_data_dir / "device_id.txt").exists()
+
+    # Relectura debe retornar exactamente el mismo ID
+    dev_id2 = get_or_create_device_id(temp_data_dir)
+    assert dev_id1 == dev_id2
+
+    # Invitación emitida por un dispositivo A hacia la bandeja de entrada de un dispositivo B
+    service_b = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_EVITA")
+
+    invitation_payload = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "UPSERT",
+        "origin_device_id": "LOCAL_DEVICE",  # Origen heredado / remoto
+        "timestamp_utc": "2026-11-02T16:00:00Z",
+        "payload": {
+            "household_name": "Vidita con Evita",
+            "member_a_name": "Raúl",
+            "member_b_name": "Evita",
+            "cohabitation_stage": "PRE_COHABITATION",
+            "split_mode": "EQUAL_50_50",
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_account.json", "w", encoding="utf-8") as f:
+        json.dump(invitation_payload, f)
+
+    inv = service_b.get_pending_invitation()
+    assert inv is not None
+    assert inv["household_name"] == "Vidita con Evita"
+    assert inv["member_a_name"] == "Raúl"
+

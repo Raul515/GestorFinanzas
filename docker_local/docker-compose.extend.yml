@@ -3,6 +3,7 @@ services:
     command: ["/bin/bash", "/app/images/backend/start_services.sh"]
     environment:
       - PYTHONPATH=/app/src:/app
+      - DEVICE_ID=${DEVICE_ID:-}
     volumes:
       - ../:/app
       - /app/.venv

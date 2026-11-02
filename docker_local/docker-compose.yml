@@ -10,6 +10,9 @@ services:
       - app-network
     volumes:
       - ../src/backend/data:/app/src/backend/data
+      - ../sync:/app/sync
+    environment:
+      - DEVICE_ID=${DEVICE_ID:-}
 
   frontend:
     build: 

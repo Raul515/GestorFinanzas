@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import platform
 import shutil
 from typing import Any, Dict, List, Optional
 import uuid
@@ -32,10 +33,45 @@ from backend.domain.schemas.joint import (
 logger = logging.getLogger(__name__)
 
 
+def get_or_create_device_id(data_dir: Optional[Path] = None) -> str:
+    """
+    Obtiene o genera de forma persistente un identificador único de dispositivo.
+    Prioridad:
+    1. Variable de entorno DEVICE_ID (si está definida y no vacía).
+    2. Archivo device_id.txt en el directorio data/ (persiste en disco/volumen Docker).
+    3. Generación automática y almacenamiento persistente (nombre de host + uuid parcial).
+    """
+    env_id = os.environ.get("DEVICE_ID")
+    if env_id and env_id.strip():
+        return env_id.strip()
+
+    if data_dir is None:
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    device_id_file = data_dir / "device_id.txt"
+    if device_id_file.exists():
+        try:
+            stored_id = device_id_file.read_text(encoding="utf-8").strip()
+            if stored_id:
+                return stored_id
+        except Exception as exc:
+            logger.warning("No se pudo leer device_id.txt: %s", exc)
+
+    node_name = platform.node() or "device"
+    clean_node = "".join(c for c in node_name if c.isalnum() or c in ("-", "_"))[:12] or "device"
+    new_id = f"{clean_node}_{uuid.uuid4().hex[:8]}"
+    try:
+        device_id_file.write_text(new_id, encoding="utf-8")
+    except Exception as exc:
+        logger.warning("No se pudo persistir device_id.txt en disco: %s", exc)
+    return new_id
+
+
 class JointSyncService:
     """Servicio de gestión de buzones de sincronización y resolución de conflictos LWW."""
 
-    def __init__(self, base_sync_dir: Optional[str] = None, local_device_id: str = "LOCAL_DEVICE"):
+    def __init__(self, base_sync_dir: Optional[str] = None, local_device_id: Optional[str] = None):
         if base_sync_dir:
             self.base_dir = Path(base_sync_dir)
         else:
@@ -47,7 +83,7 @@ class JointSyncService:
         self.inbox_dir = self.base_dir / "inbox"
         self.processed_dir = self.base_dir / "processed"
         self.error_dir = self.base_dir / "error"
-        self.local_device_id = local_device_id
+        self.local_device_id = local_device_id or get_or_create_device_id()
 
         # Asegurar creación de la jerarquía de carpetas
         self._ensure_directories()
@@ -435,11 +471,12 @@ class JointSyncService:
                     data = json.load(f)
                 entity = data.get("entity_type")
                 if entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT":
-                    if data.get("origin_device_id") != self.local_device_id:
+                    origin = data.get("origin_device_id")
+                    if origin != self.local_device_id or origin == "LOCAL_DEVICE":
                         payload = data.get("payload", {})
                         return {
                             "event_id": data.get("event_id"),
-                            "origin_device_id": data.get("origin_device_id"),
+                            "origin_device_id": origin,
                             "household_name": payload.get("household_name") or payload.get("account_name", "Hogar Compartido"),
                             "cohabitation_stage": payload.get("cohabitation_stage", "PRE_COHABITATION"),
                             "split_mode": payload.get("split_mode", "EQUAL_50_50"),
