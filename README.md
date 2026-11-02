@@ -96,7 +96,17 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 - **Botón `↩️ Deshacer Estrategia` con Popover de Confirmación**: Permite anular atómicamente la estrategia ejecutada, eliminando transacciones vinculadas y restaurando saldos.
 - **Detección Elegante de Meses y Años Vacíos**: Presentación limpia con estado *"Mes/Año sin Información Financiera"* en períodos sin transacciones ni presupuestos, evitando falsas felicitaciones o tablas engañosas.
 
+### 11. 👥 Finanzas Compartidas y Cuenta Conjunta Multi-Perfil (Spec 010)
+- **Privacidad Real e Independencia Absoluta**: Tu perfil personal (`finanzas.db`) nunca sale de tu ordenador; el ocio y los gastos privados permanecen 100% invisibles para tu pareja.
+- **Sincronización P2P Descentralizada (Syncthing)**: Intercambio de deltas JSON atómicos y cifrados punto a punto sin servidores centrales en la nube ni bases de datos compartidas.
+- **Gestión Integral del Hogar**: Gastos comunes de necesidades (sin ocio), fondo común de aportaciones recibidas y Huchas de Amortización (*Sinking Funds*) con semáforo de salud familiar.
+- **Doble Modalidad de Convivencia**: *Pre-Convivencia* (bloqueo automático de alquileres corrientes y canalización exclusiva a ahorro conjunto) y *Convivencia Plena* (gastos corrientes compartidos).
+- **Banner Mensual Asistido en 1-Clic**: Detección automática al inicio de cada mes en el perfil individual, prellenado dinámico con la cuota calculada exacta de aportación y asiento atómico en ambas cuentas.
+- **Onboarding Automático en 1-Clic y Resiliencia**: Detección de invitaciones de la pareja en buzón de entrada y restablecimiento seguro al Estado Cero en 1 clic.
+- 📖 **Documentación**: Consulta el [Manual de Usuario para Parejas](docs/manual_usuario_cuenta_conjunta.md) y la [Guía de Sincronización Syncthing](docs/guia_sincronizacion_syncthing.md).
+
 ---
+
 
 ## 🛠️ Arquitectura y Tecnologías
 
