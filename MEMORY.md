@@ -144,3 +144,8 @@
         - Permitir al usuario dar de alta nuevas subcategorías personalizadas directamente desde la ventana de configuración, asociándolas a su categoría correspondiente (Necesidades Básicas, Deseos o Ahorro e Inversión).
         - Gestión y mantenimiento del catálogo de subcategorías con validaciones de integridad referencial para proteger presupuestos y transacciones históricas.
         - Alcance y detalles definitivos a formalizar en su correspondiente especificación formal previa (specs/).
+     - **Mejoras Futuras de Finanzas Compartidas (Post-Spec 010)**:
+       - *Alerta de Sobregasto en Huchas de Amortización*: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
+       - *Exportación Consolidada del Hogar a Excel / CSV*: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
+       - *Visor de Sincronización Avanzado en UI*: En el panel de configuración del hogar, visualización de deltas archivados en `sync/processed/` e inspección o reintento de eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
+
