@@ -128,6 +128,45 @@ def update_joint_account(
     return account
 
 
+@router.post("/resend-invitation")
+def resend_joint_invitation(
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Re-emite el evento delta de invitación de cuenta conjunta para que Syncthing lo entregue a la pareja."""
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay una cuenta conjunta configurada para invitar.",
+        )
+
+    event = sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.ACCOUNT,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "household_name": account.household_name,
+            "cohabitation_stage": account.cohabitation_stage,
+            "contribution_strategy": account.contribution_strategy,
+            "split_mode": account.split_mode,
+            "member_a_reference_income": account.member_a_reference_income,
+            "member_b_reference_income": account.member_b_reference_income,
+            "member_a_contribution_pct": account.member_a_contribution_pct,
+            "member_b_contribution_pct": account.member_b_contribution_pct,
+            "member_a_name": account.member_a_name,
+            "member_b_name": account.member_b_name,
+            "local_profile": account.local_profile,
+            "remote_profile": account.remote_profile,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+    return {
+        "success": True,
+        "message": "Invitación re-emitida con éxito a sync/outbox/.",
+        "event_id": event.event_id,
+    }
+
+
 @router.get("/invitation")
 def check_joint_invitation(
     repo: SQLiteRepository = Depends(get_repo),

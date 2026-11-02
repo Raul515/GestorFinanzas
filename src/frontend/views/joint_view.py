@@ -799,13 +799,24 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
     with col_s3:
         st.metric("Deltas en Inbox", sync_status.get("inbox_pending_count", 0))
 
-    if st.button("🔄 Procesar Bandeja de Entrada Ahora (Inbox)", use_container_width=True):
-        with st.spinner("Procesando deltas entrantes de Syncthing..."):
-            res = api_client.trigger_process_inbox()
-            processed = res.get("processed_count", 0)
-            ignored = res.get("ignored_count", 0)
-            st.success(f"Procesamiento finalizado. Eventos aplicados: {processed}, Ignorados por idempotencia: {ignored}.")
-            st.rerun()
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🔄 Procesar Bandeja de Entrada Ahora (Inbox)", use_container_width=True):
+            with st.spinner("Procesando deltas entrantes de Syncthing..."):
+                res = api_client.trigger_process_inbox()
+                processed = res.get("processed_count", 0)
+                ignored = res.get("ignored_count", 0)
+                st.success(f"Procesamiento finalizado. Eventos aplicados: {processed}, Ignorados por idempotencia: {ignored}.")
+                st.rerun()
+    with col_btn2:
+        if st.button("📤 Reenviar Invitación a mi Pareja", use_container_width=True):
+            with st.spinner("Regenerando invitación del hogar en Outbox..."):
+                if api_client.resend_joint_invitation():
+                    st.success("¡Invitación regenerada en Outbox! Syncthing la enviará a tu pareja.")
+                    st.rerun()
+                else:
+                    st.error("Error al reenviar la invitación.")
+
 
     st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
     st.markdown("### Parámetros de la Cuenta Conjunta")

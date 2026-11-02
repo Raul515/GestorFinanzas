@@ -1151,6 +1151,23 @@ def accept_joint_invitation() -> Optional[Dict[str, Any]]:
     return None
 
 
+def resend_joint_invitation() -> bool:
+
+    """Solicita al backend que vuelva a emitir la invitación para la pareja en outbox/."""
+    url = f"{API_URL}/joint/resend-invitation"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en resend_joint_invitation (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en resend_joint_invitation en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en resend_joint_invitation(): %s", e)
+    return False
+
+
+
 
 
 
