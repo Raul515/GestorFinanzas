@@ -428,21 +428,46 @@ def record_assisted_contribution(
             detail="Cuenta conjunta no configurada.",
         )
 
+    stage = schemas.CohabitationStage(account.cohabitation_stage) if hasattr(account, "cohabitation_stage") else schemas.CohabitationStage.PRE_COHABITATION
     eff_subcat_id = req.personal_subcategory_id
+
     if not eff_subcat_id:
-        # Buscar por defecto la subcategoría personal adecuada
+        from backend.domain.schemas import categories as personal_cat_schemas
+
+        # Determinar categoría y nombre objetivo según la etapa de convivencia
+        if stage == schemas.CohabitationStage.PRE_COHABITATION:
+            target_subcat_name = "Aportación Cuenta Conjunta (Ahorro Futuro)"
+        else:
+            target_subcat_name = "Aportación Cuenta Conjunta (Gastos del Hogar)"
+
         subcats = repo.get_subcategories()
-        # Buscar "Aportación a Cuenta Conjunta" o "Ahorro Futuro Común"
-        target_name = "Aportación a Cuenta Conjunta"
-        match = next((s for s in subcats if target_name.lower() in s.name.lower()), None)
+        match = next(
+            (s for s in subcats if target_subcat_name.lower() in s.name.lower() or "cuenta conjunta" in s.name.lower()),
+            None
+        )
         if match:
             eff_subcat_id = match.id
-        elif subcats:
-            eff_subcat_id = subcats[0].id
         else:
-            eff_subcat_id = 1
+            # Buscar categoría padre adecuada
+            cats = repo.get_categories()
+            if stage == schemas.CohabitationStage.PRE_COHABITATION:
+                parent_cat = next((c for c in cats if getattr(c, "type", "") == "ahorro" or "ahorro" in getattr(c, "name", "").lower()), None)
+            else:
+                parent_cat = next((c for c in cats if (getattr(c, "type", "") == "gasto" and "necesidad" in getattr(c, "name", "").lower()) or "necesidad" in getattr(c, "name", "").lower()), None)
 
-    stage = schemas.CohabitationStage(account.cohabitation_stage)
+            if not parent_cat:
+                parent_cat = next((c for c in cats if getattr(c, "type", "") in ("ahorro", "gasto")), cats[0] if cats else None)
+
+            if parent_cat:
+                created_subcat = repo.create_subcategory(
+                    personal_cat_schemas.SubcategoryCreate(
+                        name=target_subcat_name,
+                        category_id=parent_cat.id,
+                    )
+                )
+                eff_subcat_id = created_subcat.id
+            else:
+                eff_subcat_id = subcats[0].id if subcats else 1
     res_plan = prepare_assisted_contribution(
         month=req.month,
         contributor_profile=req.contributor_profile,

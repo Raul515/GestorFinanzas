@@ -442,6 +442,8 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
     st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
 
     # Formulario para registrar nuevo gasto común
+    is_pre_cohabitation = account.get("cohabitation_stage") in ("PRE_COHABITATION", "DATING_COHABITATION")
+
     with st.expander(f"➕ Registrar Gasto Común en {selected_month_name}", expanded=False):
         subcategories = api_client.get_joint_subcategories()
         sinking_funds = api_client.get_joint_sinking_funds(status="ACTIVE")
@@ -449,19 +451,27 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
         subcat_map = {s["id"]: s["name"] for s in subcategories} if subcategories else {}
         fund_map = {f["id"]: f["name"] for f in sinking_funds} if sinking_funds else {}
 
-        # Radio selector fuera del form para reactividad instantánea en Streamlit
-        charge_type = st.radio(
-            "Tipo de Imputación",
-            options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
-            horizontal=True,
-            key=f"charge_type_{selected_month_name}",
-            help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha de ahorro acumulada.",
-        )
+        if is_pre_cohabitation:
+            charge_type = "Cargo a Hucha de Amortización"
+            st.info(
+                "ℹ️ **Modo Pre-Convivencia Activo**: Los gastos comunes de vivienda (alquiler, suministros, supermercado) "
+                "están desactivados porque aún no compartís domicilio. Todo gasto común se imputa directamente a una "
+                "Hucha de Amortización de vuestro ahorro conjunto."
+            )
+        else:
+            # Radio selector fuera del form para reactividad instantánea en Streamlit
+            charge_type = st.radio(
+                "Tipo de Imputación",
+                options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
+                horizontal=True,
+                key=f"charge_type_{selected_month_name}",
+                help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha de ahorro acumulada.",
+            )
 
         with st.form("new_joint_tx_form"):
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Factura Luz Endesa, Compra Mercadona...")
+                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Billetes de avión, Factura Luz...")
                 tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
                 tx_date = st.date_input("Fecha", value=date.today())
 
@@ -486,7 +496,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                             format_func=lambda k: fund_map[k],
                         )
                     else:
-                        st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Seguro Coche).")
+                        st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Entrada de Piso).")
 
                 paid_options = ["COMMON", "MEMBER_A", "MEMBER_B"]
                 paid_labels = {
@@ -527,7 +537,32 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                     else:
                         st.error("❌ Error al guardar el gasto común.")
 
-    st.markdown("#### Historial de Gastos del Mes")
+    # 1. Historial de Aportaciones Recibidas en el Mes
+    st.markdown("#### 📥 Historial de Aportaciones Recibidas")
+    if not contributions:
+        st.info(f"Aún no hay aportaciones asentadas en {selected_month_name} {selected_year}.")
+    else:
+        contrib_rows = []
+        for cb in contributions:
+            p_profile = cb.get("contributor_profile")
+            p_name = (
+                account.get("member_a_name", "Miembro A")
+                if p_profile == "MEMBER_A"
+                else account.get("member_b_name", "Miembro B")
+            )
+            contrib_rows.append({
+                "Fecha": cb.get("contribution_date"),
+                "Aportante": p_name,
+                "Mes Aplicado": cb.get("month"),
+                "Importe (€)": f"{cb.get('amount', 0.0):,.2f} €",
+            })
+        df_cb = pd.DataFrame(contrib_rows)
+        st.dataframe(df_cb[["Fecha", "Aportante", "Mes Aplicado", "Importe (€)"]], use_container_width=True)
+
+    st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px dashed #334155;'>", unsafe_allow_html=True)
+
+    # 2. Historial de Gastos Comunes del Mes
+    st.markdown("#### 📤 Historial de Gastos Comunes Ejecutados")
     if not transactions:
         st.info(f"No hay gastos comunes registrados en {selected_month_name} {selected_year}.")
     else:
