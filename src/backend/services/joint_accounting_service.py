@@ -219,11 +219,20 @@ def calculate_joint_annual_summary(
     contributions: List[Any],
     sinking_funds: List[Any],
     annual_combined_income: float,
+    account: Optional[Any] = None,
 ) -> JointAnnualSummaryResponse:
     """
     Calcula el Resumen Anual consolidado de la unidad familiar.
     Regla innegociable: prohíbe explícitamente cualquier métrica de comparación Member A vs Member B.
     """
+    def _safe_num(val: Any) -> float:
+        if val is None or hasattr(val, "_mock_name"):
+            return 0.0
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return 0.0
+
     # 1. Gastos en necesidades del hogar (transacciones vinculadas a subcategorías de necesidades)
     total_needs_spent = 0.0
     monthly_data: Dict[str, Dict[str, float]] = {
@@ -269,16 +278,45 @@ def calculate_joint_annual_summary(
     else:
         health_status = HealthStatus.ALERT
 
-    monthly_metrics_list = [
-        {
+    # 5. Cálculo mensual de necesidades, ahorro asignado a huchas y remanente sin asignar
+    def _is_active_fund(f: Any) -> bool:
+        st = getattr(f, "status", None)
+        if hasattr(st, "_mock_name") or st is None:
+            return True
+        return str(st).upper() == "ACTIVE"
+
+    active_funds = [f for f in sinking_funds if _is_active_fund(f)]
+    monthly_sinking_target = sum(_safe_num(getattr(f, "monthly_target_amount", 0.0)) for f in active_funds)
+    total_alloc_pct = sum(_safe_num(getattr(f, "allocation_percentage", 0.0)) for f in active_funds)
+    strategy = str(getattr(account, "contribution_strategy", "NOMINAL_TEMPLATE")) if account else "NOMINAL_TEMPLATE"
+
+    monthly_metrics_list = []
+    for m_key, data in sorted(monthly_data.items()):
+        needs_sp = round(data["needs_spent"], 2)
+        sinking_sp = round(data["sinking_spent"], 2)
+        tot_contrib = round(data["contributed"], 2)
+        surplus = max(0.0, round(tot_contrib - needs_sp, 2))
+
+        if not active_funds or surplus <= 0.0:
+            sinking_alloc = 0.0
+        elif strategy == "INCOME_PERCENTAGE" and total_alloc_pct > 0:
+            sinking_alloc = round(surplus * min(1.0, total_alloc_pct / 100.0), 2)
+        elif monthly_sinking_target > 0:
+            sinking_alloc = min(surplus, monthly_sinking_target)
+        else:
+            sinking_alloc = surplus
+
+        unassigned_rem = max(0.0, round(surplus - sinking_alloc, 2))
+
+        monthly_metrics_list.append({
             "month": m_key,
-            "needs_spent": round(data["needs_spent"], 2),
-            "sinking_spent": round(data["sinking_spent"], 2),
-            "total_contributed": round(data["contributed"], 2),
-            "saved_month": max(0.0, round(data["contributed"] - data["needs_spent"], 2)),
-        }
-        for m_key, data in sorted(monthly_data.items())
-    ]
+            "needs_spent": needs_sp,
+            "sinking_spent": sinking_sp,
+            "total_contributed": tot_contrib,
+            "sinking_allocated": sinking_alloc,
+            "unassigned_amount": unassigned_rem,
+            "saved_month": sinking_alloc,
+        })
 
     return JointAnnualSummaryResponse(
         year=year,

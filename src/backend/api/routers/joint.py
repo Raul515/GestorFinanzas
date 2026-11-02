@@ -577,6 +577,7 @@ def get_joint_annual_summary(
         contributions=contribs,
         sinking_funds=funds,
         annual_combined_income=annual_combined_income,
+        account=account,
     )
 
 

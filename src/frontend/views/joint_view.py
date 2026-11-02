@@ -368,7 +368,14 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
 
             needs_spent = float(item.get("needs_spent", 0.0))
             total_contributed = float(item.get("total_contributed", item.get("contributed", 0.0)))
-            saved_month = float(item.get("saved_month", max(0.0, round(total_contributed - needs_spent, 2))))
+            sinking_allocated = float(item.get("sinking_allocated", 0.0))
+            surplus = max(0.0, round(total_contributed - needs_spent, 2))
+            unassigned_amount = float(
+                item.get(
+                    "unassigned_amount",
+                    max(0.0, round(surplus - sinking_allocated, 2)),
+                )
+            )
 
             # Columna 1: Aportaciones Recibidas
             records.append({
@@ -379,7 +386,7 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
                 "Mes_Num": m_num,
                 "Stack_Order": 1,
             })
-            # Columna 2: Destino (Necesidades Comunes + Ahorro Común del Mes)
+            # Columna 2: Destino (Necesidades Comunes + Ahorro en Huchas + Remanente Sin Asignar)
             records.append({
                 "Mes": m_name,
                 "Columna": "2. Destino",
@@ -391,10 +398,18 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
             records.append({
                 "Mes": m_name,
                 "Columna": "2. Destino",
-                "Concepto": "Ahorro Común del Mes",
-                "Importe": saved_month,
+                "Concepto": "Ahorro en Huchas",
+                "Importe": sinking_allocated,
                 "Mes_Num": m_num,
                 "Stack_Order": 2,
+            })
+            records.append({
+                "Mes": m_name,
+                "Columna": "2. Destino",
+                "Concepto": "Remanente Sin Asignar",
+                "Importe": unassigned_amount,
+                "Mes_Num": m_num,
+                "Stack_Order": 3,
             })
 
         df_chart = pd.DataFrame(records)
@@ -408,8 +423,13 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
                 color=alt.Color(
                     "Concepto:N",
                     scale=alt.Scale(
-                        domain=["Aportaciones Recibidas", "Necesidades Comunes", "Ahorro Común del Mes"],
-                        range=["#10b981", "#3b82f6", "#06b6d4"],
+                        domain=[
+                            "Aportaciones Recibidas",
+                            "Necesidades Comunes",
+                            "Ahorro en Huchas",
+                            "Remanente Sin Asignar",
+                        ],
+                        range=["#10b981", "#3b82f6", "#06b6d4", "#64748b"],
                     ),
                     legend=alt.Legend(title="Concepto", orient="top"),
                 ),
