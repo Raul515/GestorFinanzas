@@ -145,6 +145,21 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
      - **BUG-4 (Sincronización de Hucha Receptora)**: Emisión de delta `UPSERT` para la hucha receptora tras eliminar una hucha con reasignación de saldo remanente (`reallocate_to_fund_id`).
   4. **Mejora 1 (Cálculo Dinámico en Banner Mensual Personal)**:
      - Nuevo endpoint `GET /joint/contributions/calculation` en FastAPI que evalúa la cuota exacta según la estrategia contable del hogar (fija 50/50 o porcentaje de nómina), consumido por `app.py` para pre-rellenar el importe exacto a transferir.
+- **Archivos creados/modificados**:
+  - `src/backend/database/componentes/sqlite_crud.py` [MODIFICADO: Métodos `reset_joint_account()` y `get_joint_subcategory()`].
+  - `src/backend/database/interfaz/db_interface.py` [MODIFICADO: Firma abstracta `get_joint_subcategory()`].
+  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Detección de invitaciones de cuenta en buzón inbox y limpieza de carpetas locales en reset].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `POST /joint/reset`, `GET /joint/invitation`, `POST /joint/accept-invitation`, `GET /joint/contributions/calculation`, propagación de nombres en invitación, inclusión de nombres en deltas y sincronización de hucha receptora].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos `reset_joint_account()`, `get_joint_invitation()`, `accept_joint_invitation()` y `get_joint_contribution_calculation()`].
+  - `src/frontend/views/joint_view.py` [MODIFICADO: Tarjeta interactiva *"Unirse al Hogar creado por tu pareja"* en el asistente Zero-State y botón `[🗑️ Desactivar Cuenta Conjunta y Volver al Estado Cero]`].
+  - `src/frontend/app.py` [MODIFICADO: Banner de aportación asistida personal con resolución dinámica de `local_profile` y prellenado con cuota matemática calculada].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas unitarias para reset, invitación y cálculo de cuota].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración para `/joint/reset`, `/joint/invitation`, `/joint/contributions/calculation` y comprobación de nombres de miembros].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
+  ```
+- **Criterio de Aceptación**: 100% de las 48 pruebas de la especificación pasando, reversibilidad garantizada a Estado Cero y tolerancia cross-device sin discrepancias.
 
 ---
 
