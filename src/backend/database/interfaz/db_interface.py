@@ -233,6 +233,12 @@ class IJointRepository(ABC):
         pass
 
     @abstractmethod
+    def get_joint_subcategory(self, subcategory_id: int) -> Optional[Any]:
+        """Obtiene una subcategoría de necesidades por ID."""
+        pass
+
+
+    @abstractmethod
     def get_joint_sinking_funds(self, status: Optional[str] = None) -> List[Any]:
         """Obtiene el listado de huchas de amortización del hogar."""
         pass

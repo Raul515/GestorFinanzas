@@ -138,19 +138,10 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 - **Objetivo**: Implementar dos capacidades clave orientadas a la experiencia de usuario y resiliencia en pruebas reales:
   1. **Restablecimiento y Regreso al Estado Cero en 1 Clic**: Endpoint `POST /joint/reset` y botón en la interfaz Streamlit para desactivar/purgar la cuenta conjunta y volver al estado inicial sin cuenta configurada (cero intrusión) de forma inmediata y segura sin tocar la consola.
   2. **Onboarding Único con Detección Automática de Invitación (Opción A)**: Detección en el segundo dispositivo del delta `ACCOUNT` emitido por la pareja vía Syncthing (`sync/inbox/`), ofreciendo la opción *"Unirse al Hogar en 1-Clic"* con asignación automática de perfiles complementarios (`local_profile = MEMBER_B`, `remote_profile = MEMBER_A`), eliminando el riesgo de discrepancias o configuraciones asimétricas.
-- **Archivos a crear/modificar**:
-  - `src/backend/database/componentes/sqlite_crud.py` [MODIFICADO: Método `reset_joint_account()` para purgar registros de entidades del hogar].
-  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Detección de invitaciones de cuenta en buzón inbox y limpieza de carpetas locales en reset].
-  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `POST /joint/reset` y `GET /joint/invitation`].
-  - `src/frontend/api_client.py` [MODIFICADO: Métodos `reset_joint_account()` y `get_joint_invitation()`].
-  - `src/frontend/views/joint_view.py` [MODIFICADO:
-    1) Tarjeta interactiva *"Unirse al Hogar creado por tu pareja"* en el asistente Zero-State.
-    2) Botón de peligro `[🗑️ Desactivar Cuenta Conjunta y Volver al Estado Cero]` en la pestaña `⚙️ Configuración del Hogar`].
-  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas unitarias para reset y detección de invitación].
-  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración para `/joint/reset` y `/joint/invitation`].
-- **Puerta de Verificación**:
-  ```powershell
-  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
-  ```
-- **Criterio de Aceptación**: 100% de las pruebas pasando, reversibilidad garantizada a Estado Cero y adopción simétrica sin discordancias.
+
+
+- **Mejoras Futuras Registradas (Post-Spec)**:
+  - **Alerta de Sobregasto en Huchas de Amortización**: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
+  - **Exportación Consolidada del Hogar a Excel / CSV**: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
+  - **Visor de Sincronización Avanzado en UI**: En el panel de configuración, visualización de deltas archivados en `sync/processed/` y funcionalidad para inspeccionar o reintentar eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
 

@@ -136,6 +136,32 @@ def test_api_client_transactions_and_contributions():
         assert res_asistida["month"] == "2026-11"
 
 
+def test_api_client_get_joint_contribution_calculation():
+    """Valida la consulta del cálculo dinámico de cuotas mensuales (Mejora 1)."""
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "total_monthly_needs": 1000.0,
+            "member_a_contribution": 600.0,
+            "member_b_contribution": 400.0,
+            "local_profile": "MEMBER_A",
+        }
+        mock_get.return_value = mock_resp
+
+        res = api_client.get_joint_contribution_calculation()
+        assert res is not None
+        assert res["member_a_contribution"] == 600.0
+        assert res["member_b_contribution"] == 400.0
+
+    # Resiliencia ante error de red
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = requests.exceptions.RequestException("Network error")
+        res = api_client.get_joint_contribution_calculation()
+        assert res is None
+
+
+
 def test_api_client_annual_summary_and_health():
     """Valida la consulta de Resumen Anual y Salud Financiera del Hogar."""
     # Annual Summary

@@ -18,6 +18,7 @@ from backend.domain.models.joint import JointAppliedSyncEvent
 from backend.domain.schemas import joint as schemas
 from backend.services.joint_accounting_service import (
     calculate_joint_annual_summary,
+    calculate_monthly_contributions,
     evaluate_household_health,
     prepare_assisted_contribution,
 )
@@ -176,6 +177,8 @@ def accept_joint_invitation(
 
     setup_req = schemas.JointAccountSetupRequest(
         household_name=invitation["household_name"],
+        member_a_name=invitation.get("member_a_name", "Miembro A"),
+        member_b_name=invitation.get("member_b_name", "Miembro B"),
         cohabitation_stage=schemas.CohabitationStage(stage_val) if hasattr(schemas.CohabitationStage, stage_val) else schemas.CohabitationStage.PRE_COHABITATION,
         contribution_strategy=schemas.ContributionStrategy(strategy_val) if hasattr(schemas.ContributionStrategy, strategy_val) else schemas.ContributionStrategy.NOMINAL_TEMPLATE,
         split_mode=schemas.SplitMode(split_val) if hasattr(schemas.SplitMode, split_val) else schemas.SplitMode.EQUAL_50_50,
@@ -323,6 +326,26 @@ def delete_joint_sinking_fund(
         payload={"name": fund_name},
         origin_device_id=sync_service.local_device_id,
     )
+
+    # Si se reasignó saldo a otra hucha activa, sincronizar el nuevo saldo de la receptora (BUG-4)
+    if reallocate_to_fund_id:
+        target_fund = repo.get_joint_sinking_fund(reallocate_to_fund_id)
+        if target_fund:
+            sync_service.emit_event(
+                entity_type=schemas.SyncEntityType.SINKING_FUND,
+                action=schemas.SyncAction.UPSERT,
+                payload={
+                    "name": target_fund.name,
+                    "target_amount": float(target_fund.target_amount),
+                    "current_balance": float(target_fund.current_balance),
+                    "monthly_target_amount": float(target_fund.monthly_target_amount),
+                    "allocation_percentage": float(target_fund.allocation_percentage),
+                    "status": target_fund.status,
+                    "priority": target_fund.priority,
+                },
+                origin_device_id=sync_service.local_device_id,
+            )
+
     return {"deleted": True, "fund_id": fund_id}
 
 
@@ -356,6 +379,19 @@ def create_joint_transaction(
 
     tx = repo.create_joint_transaction(tx_create)
 
+    # Resolver nombres descriptivos para tolerancia ante IDs discordantes en sincronización (BUG-3)
+    subcat_name = None
+    if tx.joint_subcategory_id:
+        subcat = repo.get_joint_subcategory(tx.joint_subcategory_id)
+        if subcat:
+            subcat_name = subcat.name
+
+    sinking_name = None
+    if tx.joint_sinking_fund_id:
+        fund = repo.get_joint_sinking_fund(tx.joint_sinking_fund_id)
+        if fund:
+            sinking_name = fund.name
+
     # Emitir delta para sync
     sync_service.emit_event(
         entity_type=schemas.SyncEntityType.TRANSACTION,
@@ -366,7 +402,9 @@ def create_joint_transaction(
             "amount": tx.amount,
             "description": tx.description,
             "joint_subcategory_id": tx.joint_subcategory_id,
+            "subcategory_name": subcat_name,
             "joint_sinking_fund_id": tx.joint_sinking_fund_id,
+            "sinking_fund_name": sinking_name,
             "created_by_profile": tx.created_by_profile,
         },
         origin_device_id=sync_service.local_device_id,
@@ -406,6 +444,56 @@ def get_joint_contributions(
 ):
     """Obtiene el historial de aportaciones realizadas por ambos miembros."""
     return repo.get_joint_contributions(year=year, month=month)
+
+
+@router.get("/contributions/calculation")
+def get_joint_contribution_calculation(
+    repo: SQLiteRepository = Depends(get_repo),
+) -> Dict[str, Any]:
+    """
+    Calcula de forma pura las cuotas mensuales a aportar por cada miembro según las reglas del hogar (Mejora 1).
+    """
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuenta conjunta no configurada.",
+        )
+
+    subcats = repo.get_joint_subcategories()
+    needs_budget = sum(float(s.monthly_budget) for s in subcats) if subcats else 0.0
+
+    funds = repo.get_joint_sinking_funds()
+    funds_dicts = [
+        {
+            "id": f.id,
+            "status": f.status,
+            "monthly_target_amount": float(f.monthly_target_amount),
+            "allocation_percentage": float(f.allocation_percentage),
+        }
+        for f in funds
+    ]
+
+    stage_val = schemas.CohabitationStage(account.cohabitation_stage) if hasattr(account, "cohabitation_stage") else schemas.CohabitationStage.PRE_COHABITATION
+    strat_val = schemas.ContributionStrategy(account.contribution_strategy) if hasattr(account, "contribution_strategy") else schemas.ContributionStrategy.NOMINAL_TEMPLATE
+    split_val = schemas.SplitMode(account.split_mode) if hasattr(account, "split_mode") else schemas.SplitMode.EQUAL_50_50
+
+    calc = calculate_monthly_contributions(
+        cohabitation_stage=stage_val,
+        contribution_strategy=strat_val,
+        split_mode=split_val,
+        needs_budget=needs_budget,
+        sinking_funds=funds_dicts,
+        member_a_income=float(account.member_a_reference_income),
+        member_b_income=float(account.member_b_reference_income),
+        member_a_contribution_pct=float(account.member_a_contribution_pct),
+        member_b_contribution_pct=float(account.member_b_contribution_pct),
+    )
+    calc["local_profile"] = account.local_profile
+    calc["remote_profile"] = account.remote_profile
+    calc["member_a_name"] = account.member_a_name
+    calc["member_b_name"] = account.member_b_name
+    return calc
 
 
 @router.post("/contributions/asentar-asistida", status_code=status.HTTP_201_CREATED)

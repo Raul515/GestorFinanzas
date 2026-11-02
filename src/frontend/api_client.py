@@ -1015,6 +1015,21 @@ def get_joint_contributions(year: Optional[int] = None, month: Optional[str] = N
     return []
 
 
+def get_joint_contribution_calculation() -> Optional[Dict[str, Any]]:
+    """Consulta el cálculo dinámico de las cuotas mensuales del hogar (Mejora 1)."""
+    url = f"{API_URL}/joint/contributions/calculation"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_contribution_calculation (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_contribution_calculation en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_contribution_calculation(): %s", e)
+    return None
+
+
 def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
     """Ejecuta el asiento asistido en 1 clic de inicio de mes."""
     url = f"{API_URL}/joint/contributions/asentar-asistida"

@@ -223,6 +223,14 @@ def test_assisted_contribution_flow(client: TestClient):
     assert len(contribs_resp.json()) == 1
     assert contribs_resp.json()[0]["amount"] == 750.0
 
+    # Comprobar endpoint de cálculo dinámico de cuotas (Mejora 1)
+    calc_resp = client.get("/joint/contributions/calculation")
+    assert calc_resp.status_code == 200
+    calc_data = calc_resp.json()
+    assert "member_a_contribution" in calc_data
+    assert "member_b_contribution" in calc_data
+    assert calc_data["local_profile"] == "MEMBER_A"
+
 
 def test_joint_health_and_annual_summary_endpoints(client: TestClient):
     """Verifica /joint/health y /joint/annual-summary sin marcadores A vs B."""
@@ -353,6 +361,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert accept_resp.status_code == 201
     acc = accept_resp.json()
     assert acc["household_name"] == "Hogar Compartido D&R"
+    assert acc["member_a_name"] == "David"
+    assert acc["member_b_name"] == "Raquel"
     assert acc["local_profile"] == "MEMBER_B"
     assert acc["remote_profile"] == "MEMBER_A"
 

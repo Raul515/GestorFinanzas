@@ -583,6 +583,11 @@ class SQLiteRepository(IRepository):
             query = query.filter(joint_model.JointSubcategory.joint_category_id == category_id)
         return query.all()
 
+    def get_joint_subcategory(self, subcategory_id: int) -> Optional[joint_model.JointSubcategory]:
+        """Obtiene una subcategoría de necesidades comunes por ID."""
+        return self.db.query(joint_model.JointSubcategory).filter(joint_model.JointSubcategory.id == subcategory_id).first()
+
+
     def create_joint_subcategory(self, subcategory: joint_schema.JointSubcategoryCreate) -> joint_model.JointSubcategory:
         """Crea una nueva subcategoría de necesidades comunes."""
         data = subcategory.model_dump()

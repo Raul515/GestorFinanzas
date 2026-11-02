@@ -71,43 +71,65 @@ def _render_personal_assisted_contribution_banner(year: int) -> None:
     curr_month_name = MESES_NOMBRES[today.month - 1] if 1 <= today.month <= 12 else str(today.month)
 
     try:
-        contributions = api_client.get_joint_contributions(year=today.year, month=curr_month_str)
-        already_paid = any(c.get("contributor_profile") == "MEMBER_A" for c in contributions)
-        if not already_paid:
-            account = api_client.get_joint_account()
-            if account:
-                member_a_name = account.get("member_a_name", "Miembro A")
-                est_income = float(account.get("member_a_estimated_income", 2000.0))
-                default_amount = round(est_income * 0.4, 2) if est_income > 0 else 500.0
+        account = api_client.get_joint_account()
+        if not account:
+            return
 
-                st.info(
-                    f"🔔 **Aportación Pendiente al Hogar ({curr_month_name} {today.year})**: "
-                    f"Aún no has registrado tu aportación mensual para gastos comunes."
+        loc_profile = account.get("local_profile", "MEMBER_A")
+        contributions = api_client.get_joint_contributions(year=today.year, month=curr_month_str)
+        already_paid = any(c.get("contributor_profile") == loc_profile for c in contributions)
+
+        if not already_paid:
+            # Obtener cálculo dinámico exacto según la estrategia del hogar (Mejora 1)
+            calc = api_client.get_joint_contribution_calculation()
+            if calc:
+                default_amount = (
+                    float(calc.get("member_a_contribution", 500.0))
+                    if loc_profile == "MEMBER_A"
+                    else float(calc.get("member_b_contribution", 500.0))
                 )
-                col_b1, col_b2 = st.columns([3, 1])
-                with col_b1:
-                    contrib_amount = st.number_input(
-                        f"Importe aportación de {member_a_name} (€)",
-                        min_value=1.0,
-                        value=default_amount,
-                        step=25.0,
-                        key="assisted_contrib_input",
-                    )
-                with col_b2:
-                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-                    if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
-                        payload = {
-                            "month": curr_month_str,
-                            "amount": float(contrib_amount),
-                            "contributor_profile": "MEMBER_A",
-                            "contribution_date": today.isoformat(),
-                        }
-                        res = api_client.asentar_aportacion_asistida(payload)
-                        if res:
-                            st.success("✅ Aportación transferida y registrada en tu cuenta personal y conjunta.")
-                            st.rerun()
-                        else:
-                            st.error("❌ No se pudo asentar la aportación.")
+            else:
+                ref_income = (
+                    float(account.get("member_a_reference_income", 2000.0))
+                    if loc_profile == "MEMBER_A"
+                    else float(account.get("member_b_reference_income", 2000.0))
+                )
+                default_amount = round(ref_income * 0.4, 2) if ref_income > 0 else 500.0
+
+            local_name = (
+                account.get("member_a_name", "Miembro A")
+                if loc_profile == "MEMBER_A"
+                else account.get("member_b_name", "Miembro B")
+            )
+
+            st.info(
+                f"🔔 **Aportación Pendiente al Hogar ({curr_month_name} {today.year})**: "
+                f"Aún no has registrado tu aportación mensual para gastos comunes."
+            )
+            col_b1, col_b2 = st.columns([3, 1])
+            with col_b1:
+                contrib_amount = st.number_input(
+                    f"Importe aportación de {local_name} (€)",
+                    min_value=1.0,
+                    value=max(1.0, float(default_amount)),
+                    step=25.0,
+                    key="assisted_contrib_input",
+                )
+            with col_b2:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
+                    payload = {
+                        "month": curr_month_str,
+                        "amount": float(contrib_amount),
+                        "contributor_profile": loc_profile,
+                        "contribution_date": today.isoformat(),
+                    }
+                    res = api_client.asentar_aportacion_asistida(payload)
+                    if res:
+                        st.success("✅ Aportación transferida y registrada en tu cuenta personal y conjunta.")
+                        st.rerun()
+                    else:
+                        st.error("❌ No se pudo asentar la aportación.")
     except Exception as e:
         logger.warning("No se pudo comprobar la aportación asistida: %s", e)
 
