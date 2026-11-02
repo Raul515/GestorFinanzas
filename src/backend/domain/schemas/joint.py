@@ -80,8 +80,34 @@ class JointAccountSetupRequest(BaseModel):
     member_b_reference_income: float = Field(ge=0.0, default=0.0)
     member_a_contribution_pct: float = Field(ge=0.0, le=100.0, default=50.0)
     member_b_contribution_pct: float = Field(ge=0.0, le=100.0, default=50.0)
+    member_a_name: str = Field(default="Miembro A", max_length=100)
+    member_b_name: str = Field(default="Miembro B", max_length=100)
     local_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_A
     remote_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_B
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        d = dict(data)
+        if "account_name" in d and "household_name" not in d:
+            d["household_name"] = d.pop("account_name")
+        if "member_a_estimated_income" in d and "member_a_reference_income" not in d:
+            d["member_a_reference_income"] = d.pop("member_a_estimated_income")
+        if "member_b_estimated_income" in d and "member_b_reference_income" not in d:
+            d["member_b_reference_income"] = d.pop("member_b_estimated_income")
+        stage = d.get("cohabitation_stage")
+        if stage in ("DATING_COHABITATION", "PRE"):
+            d["cohabitation_stage"] = "PRE_COHABITATION"
+        elif stage in ("MARRIAGE_LONG_TERM", "COHABITATION", "FULL"):
+            d["cohabitation_stage"] = "COHABITATION"
+        split = d.get("split_mode")
+        if split in ("EQUAL", "50_50", "EQUAL_50_50"):
+            d["split_mode"] = "EQUAL_50_50"
+        elif split in ("PROPORTIONAL", "INCOME_PROPORTIONAL"):
+            d["split_mode"] = "INCOME_PROPORTIONAL"
+        return d
 
     @model_validator(mode="after")
     def validate_profiles_different(self) -> "JointAccountSetupRequest":
@@ -104,6 +130,8 @@ class JointAccountBase(BaseModel):
     member_b_reference_income: float = Field(ge=0.0, default=0.0)
     member_a_contribution_pct: float = Field(ge=0.0, le=100.0, default=50.0)
     member_b_contribution_pct: float = Field(ge=0.0, le=100.0, default=50.0)
+    member_a_name: str = Field(default="Miembro A", max_length=100)
+    member_b_name: str = Field(default="Miembro B", max_length=100)
     local_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_A
     remote_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_B
 
@@ -118,8 +146,34 @@ class JointAccountUpdate(BaseModel):
     member_b_reference_income: Optional[float] = Field(default=None, ge=0.0)
     member_a_contribution_pct: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     member_b_contribution_pct: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    member_a_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    member_b_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     local_profile: Optional[ProfileIdentifier] = None
     remote_profile: Optional[ProfileIdentifier] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        d = dict(data)
+        if "account_name" in d and "household_name" not in d:
+            d["household_name"] = d.pop("account_name")
+        if "member_a_estimated_income" in d and "member_a_reference_income" not in d:
+            d["member_a_reference_income"] = d.pop("member_a_estimated_income")
+        if "member_b_estimated_income" in d and "member_b_reference_income" not in d:
+            d["member_b_reference_income"] = d.pop("member_b_estimated_income")
+        stage = d.get("cohabitation_stage")
+        if stage in ("DATING_COHABITATION", "PRE"):
+            d["cohabitation_stage"] = "PRE_COHABITATION"
+        elif stage in ("MARRIAGE_LONG_TERM", "COHABITATION", "FULL"):
+            d["cohabitation_stage"] = "COHABITATION"
+        split = d.get("split_mode")
+        if split in ("EQUAL", "50_50", "EQUAL_50_50"):
+            d["split_mode"] = "EQUAL_50_50"
+        elif split in ("PROPORTIONAL", "INCOME_PROPORTIONAL"):
+            d["split_mode"] = "INCOME_PROPORTIONAL"
+        return d
 
 
 class JointAccountResponse(JointAccountBase):

@@ -507,6 +507,8 @@ class SQLiteRepository(IRepository):
             member_b_contribution_pct=data.get("member_b_contribution_pct", 50.0),
             local_profile=data["local_profile"].value if hasattr(data["local_profile"], "value") else str(data["local_profile"]),
             remote_profile=data["remote_profile"].value if hasattr(data["remote_profile"], "value") else str(data["remote_profile"]),
+            member_a_name=data.get("member_a_name", "Miembro A"),
+            member_b_name=data.get("member_b_name", "Miembro B"),
         )
         self.db.add(account)
         self.db.flush()

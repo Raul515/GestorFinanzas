@@ -141,31 +141,23 @@ def _render_zero_state_wizard() -> None:
             with col_c:
                 split_mode_choice = st.selectbox(
                     "Modo de Reparto de Gastos",
-                    options=["Al 50% (EQUAL)", "Proporcional a Ingresos Netos (PROPORTIONAL)"],
+                    options=["Al 50% cada uno (EQUAL_50_50)", "Proporcional a Ingresos Netos (INCOME_PROPORTIONAL)"],
                     index=0,
                     help="Define cómo se calcula la aportación mensual de cada persona a la cuenta común.",
                 )
-                split_mode = "EQUAL" if "50%" in split_mode_choice else "PROPORTIONAL"
+                split_mode = "EQUAL_50_50" if "50%" in split_mode_choice else "INCOME_PROPORTIONAL"
 
             with col_d:
                 cohab_choice = st.selectbox(
                     "Etapa de Convivencia",
                     options=[
-                        "Convivencia Inicial / Alquiler (DATING_COHABITATION)",
-                        "Matrimonio / Proyecto a Largo Plazo (MARRIAGE_LONG_TERM)",
+                        "Convivencia Plena / Compartiendo Hogar (COHABITATION)",
+                        "Pre-Convivencia / Viviendo Separados (PRE_COHABITATION)",
                     ],
                     index=0,
-                    help="En convivencia inicial, tu aportación se registra como Gasto Fijo en tu perfil. En matrimonio, como Ahorro/Inversión Futuro.",
+                    help="En convivencia plena se gestionan facturas del hogar (alquiler, suministros, súper) + huchas. En pre-convivencia se ahorra para metas futuras sin costes de vivienda.",
                 )
-                cohabitation_stage = "DATING_COHABITATION" if "DATING" in cohab_choice else "MARRIAGE_LONG_TERM"
-
-            initial_balance = st.number_input(
-                "Saldo Inicial en la Cuenta Conjunta (€)",
-                min_value=0.0,
-                value=0.0,
-                step=50.0,
-                help="Saldo de tesorería actualmente disponible en la cuenta bancaria común.",
-            )
+                cohabitation_stage = "COHABITATION" if "Convivencia Plena" in cohab_choice or "Compartiendo" in cohab_choice else "PRE_COHABITATION"
 
             st.info(
                 "ℹ️ Al crear la cuenta conjunta, se inicializarán automáticamente las subcategorías de necesidades comunes "
@@ -179,14 +171,16 @@ def _render_zero_state_wizard() -> None:
                     return
 
                 payload = {
-                    "account_name": account_name.strip(),
+                    "household_name": account_name.strip(),
                     "member_a_name": member_a_name.strip(),
                     "member_b_name": member_b_name.strip(),
                     "split_mode": split_mode,
                     "cohabitation_stage": cohabitation_stage,
-                    "member_a_estimated_income": float(member_a_income),
-                    "member_b_estimated_income": float(member_b_income),
-                    "current_balance": float(initial_balance),
+                    "contribution_strategy": "NOMINAL_TEMPLATE",
+                    "member_a_reference_income": float(member_a_income),
+                    "member_b_reference_income": float(member_b_income),
+                    "local_profile": "MEMBER_A",
+                    "remote_profile": "MEMBER_B",
                 }
 
                 with st.spinner("Configurando el espacio del hogar..."):
@@ -210,21 +204,34 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
     is_synced = sync_status.get("is_synchronized", True)
     sync_badge = "🟢 Sincronizado" if is_synced else "🟡 Sincronización Pendiente"
 
+    cohab_val = account.get("cohabitation_stage", "PRE_COHABITATION")
     cohab_text = (
-        "Convivencia Inicial"
-        if account.get("cohabitation_stage") == "DATING_COHABITATION"
-        else "Matrimonio / Proyecto Largo Plazo"
+        "Pre-Convivencia"
+        if cohab_val in ("PRE_COHABITATION", "DATING_COHABITATION")
+        else "Convivencia Plena"
     )
-    split_text = "Reparto 50/50" if account.get("split_mode") == "EQUAL" else "Reparto Proporcional"
+    split_val = account.get("split_mode", "EQUAL_50_50")
+    split_text = "Reparto 50/50" if "50" in str(split_val) else "Reparto Proporcional"
+
+    # Calcular saldo de tesorería del año
+    tx_all = api_client.get_joint_transactions(year=selected_year)
+    contrib_all = api_client.get_joint_contributions(year=selected_year)
+    total_contrib = sum(float(c.get("amount", 0.0)) for c in contrib_all)
+    total_spent = sum(float(t.get("amount", 0.0)) for t in tx_all)
+    current_treasury = total_contrib - total_spent
+
+    household_title = account.get("household_name") or account.get("account_name", "Hogar Compartido")
+    member_a_display = account.get("member_a_name", "Miembro A")
+    member_b_display = account.get("member_b_name", "Miembro B")
 
     st.markdown(
         f"""
         <div style="background: linear-gradient(135deg, #1e293b, #0f172a); padding: 18px 24px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
                 <div>
-                    <h2 style="color: #f8fafc; margin: 0; font-size: 1.5rem;">👥 {account.get('account_name', 'Hogar Compartido')}</h2>
+                    <h2 style="color: #f8fafc; margin: 0; font-size: 1.5rem;">👥 {household_title}</h2>
                     <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 0.9rem;">
-                        Miembros: <b>{account.get('member_a_name', 'Miembro A')}</b> y <b>{account.get('member_b_name', 'Miembro B')}</b> |
+                        Miembros: <b>{member_a_display}</b> y <b>{member_b_display}</b> |
                         {cohab_text} | {split_text}
                     </p>
                 </div>
@@ -233,7 +240,7 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
                         {sync_badge}
                     </span>
                     <h3 style="color: #38bdf8; margin: 6px 0 0 0; font-size: 1.3rem;">
-                        {account.get('current_balance', 0.0):,.2f} € <small style="font-size: 0.75rem; color: #94a3b8;">(Saldo Tesorería)</small>
+                        {current_treasury:,.2f} € <small style="font-size: 0.75rem; color: #94a3b8;">(Saldo Tesorería)</small>
                     </h3>
                 </div>
             </div>
@@ -714,46 +721,48 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
     st.markdown("### Parámetros de la Cuenta Conjunta")
 
     with st.form("edit_joint_account_form"):
-        new_acc_name = st.text_input("Nombre del Hogar", value=account.get("account_name", ""))
+        new_acc_name = st.text_input("Nombre del Hogar", value=account.get("household_name") or account.get("account_name", ""))
 
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            new_mem_a = st.text_input("Nombre Miembro A", value=account.get("member_a_name", ""))
+            new_mem_a = st.text_input("Nombre Miembro A", value=account.get("member_a_name", "Miembro A"))
             new_inc_a = st.number_input(
-                "Salario Estimado Miembro A (€)",
+                "Salario de Referencia Miembro A (€)",
                 min_value=0.0,
-                value=float(account.get("member_a_estimated_income", 0.0)),
+                value=float(account.get("member_a_reference_income") or account.get("member_a_estimated_income", 0.0)),
                 step=50.0,
             )
 
         with col_p2:
-            new_mem_b = st.text_input("Nombre Miembro B", value=account.get("member_b_name", ""))
+            new_mem_b = st.text_input("Nombre Miembro B", value=account.get("member_b_name", "Miembro B"))
             new_inc_b = st.number_input(
-                "Salario Estimado Miembro B (€)",
+                "Salario de Referencia Miembro B (€)",
                 min_value=0.0,
-                value=float(account.get("member_b_estimated_income", 0.0)),
+                value=float(account.get("member_b_reference_income") or account.get("member_b_estimated_income", 0.0)),
                 step=50.0,
             )
 
         col_p3, col_p4 = st.columns(2)
         with col_p3:
-            current_split = account.get("split_mode", "EQUAL")
-            split_idx = 0 if current_split == "EQUAL" else 1
-            new_split = st.selectbox("Modo de Reparto", ["EQUAL", "PROPORTIONAL"], index=split_idx)
+            current_split = account.get("split_mode", "EQUAL_50_50")
+            split_idx = 0 if "50" in str(current_split) else 1
+            new_split_choice = st.selectbox("Modo de Reparto", ["Al 50% cada uno (EQUAL_50_50)", "Proporcional a Ingresos Netos (INCOME_PROPORTIONAL)"], index=split_idx)
+            new_split = "EQUAL_50_50" if "50%" in new_split_choice else "INCOME_PROPORTIONAL"
 
         with col_p4:
-            current_cohab = account.get("cohabitation_stage", "DATING_COHABITATION")
-            cohab_idx = 0 if current_cohab == "DATING_COHABITATION" else 1
-            new_cohab = st.selectbox("Etapa de Convivencia", ["DATING_COHABITATION", "MARRIAGE_LONG_TERM"], index=cohab_idx)
+            current_cohab = account.get("cohabitation_stage", "PRE_COHABITATION")
+            cohab_idx = 0 if "PRE" in str(current_cohab) or "DATING" in str(current_cohab) else 1
+            new_cohab_choice = st.selectbox("Etapa de Convivencia", ["Pre-Convivencia / Viviendo Separados (PRE_COHABITATION)", "Convivencia Plena / Compartiendo Hogar (COHABITATION)"], index=cohab_idx)
+            new_cohab = "PRE_COHABITATION" if "Pre" in new_cohab_choice else "COHABITATION"
 
         acc_saved = st.form_submit_button("💾 Guardar Cambios de Configuración", use_container_width=True)
         if acc_saved:
             payload_acc = {
-                "account_name": new_acc_name.strip(),
+                "household_name": new_acc_name.strip(),
                 "member_a_name": new_mem_a.strip(),
                 "member_b_name": new_mem_b.strip(),
-                "member_a_estimated_income": float(new_inc_a),
-                "member_b_estimated_income": float(new_inc_b),
+                "member_a_reference_income": float(new_inc_a),
+                "member_b_reference_income": float(new_inc_b),
                 "split_mode": new_split,
                 "cohabitation_stage": new_cohab,
             }
