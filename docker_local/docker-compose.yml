@@ -9,6 +9,7 @@ services:
     networks: 
       - app-network
     volumes:
+      - ../src/backend:/app/src/backend
       - ../src/backend/data:/app/src/backend/data
       - ../sync:/app/sync
     environment:
@@ -26,9 +27,13 @@ services:
       - backend
     networks: 
       - app-network
+    volumes:
+      - ../src/frontend:/app/src/frontend
+      - ../src/backend:/app/src/backend
     environment:
       - PYTHONPATH=/app/src:/app
       - API_URL=http://backend_gestor:8000
+
 
 
 networks: 
