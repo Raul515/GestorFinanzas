@@ -11,7 +11,14 @@ from backend.domain.models import categories as cat_model
 def populate():
     """Inicializa la base de datos y puebla las categorías y subcategorías iniciales si está vacía."""
     init_db()
+    try:
+        from backend.services.joint_sync_service import JointSyncService
+        JointSyncService()
+    except Exception as exc:
+        print(f"Aviso inicializando carpetas de sincronización: {exc}")
+
     db = SessionLocal()
+
 
     # Comprobar si ya existen datos en la base de datos
     if db.query(cat_model.Category).first():
