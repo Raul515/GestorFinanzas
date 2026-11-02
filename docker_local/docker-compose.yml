@@ -12,6 +12,7 @@ services:
       - ../src/backend/data:/app/src/backend/data
       - ../sync:/app/sync
     environment:
+      - PYTHONPATH=/app/src:/app
       - DEVICE_ID=${DEVICE_ID:-}
 
   frontend:
@@ -26,7 +27,9 @@ services:
     networks: 
       - app-network
     environment:
+      - PYTHONPATH=/app/src:/app
       - API_URL=http://backend_gestor:8000
+
 
 networks: 
   app-network:

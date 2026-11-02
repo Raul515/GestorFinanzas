@@ -10,8 +10,10 @@ WORKDIR /app
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app/src:/app" \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on
+
 
 COPY requirements/backend.txt /app/requirements.txt
 
