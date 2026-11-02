@@ -449,20 +449,23 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
         subcat_map = {s["id"]: s["name"] for s in subcategories} if subcategories else {}
         fund_map = {f["id"]: f["name"] for f in sinking_funds} if sinking_funds else {}
 
+        # Radio selector fuera del form para reactividad instantánea en Streamlit
+        charge_type = st.radio(
+            "Tipo de Imputación",
+            options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
+            horizontal=True,
+            key=f"charge_type_{selected_month_name}",
+            help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha de ahorro acumulada.",
+        )
+
         with st.form("new_joint_tx_form"):
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Factura Luz Endesa")
+                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Factura Luz Endesa, Compra Mercadona...")
                 tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
                 tx_date = st.date_input("Fecha", value=date.today())
 
             with col_f2:
-                charge_type = st.radio(
-                    "Tipo de Imputación",
-                    options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
-                    horizontal=True,
-                )
-
                 chosen_subcat_id = None
                 chosen_fund_id = None
 
@@ -478,18 +481,27 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 else:
                     if fund_map:
                         chosen_fund_id = st.selectbox(
-                            "Hucha a Cargar",
+                            "Hucha a Cargar (se descontará de su saldo)",
                             options=list(fund_map.keys()),
                             format_func=lambda k: fund_map[k],
                         )
                     else:
-                        st.caption("No hay huchas activas creadas. Crea una en la pestaña 'Huchas de Amortización'.")
+                        st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Seguro Coche).")
 
-                paid_by = st.selectbox(
-                    "Pagado Por",
-                    options=["MEMBER_A", "MEMBER_B"],
-                    format_func=lambda k: account.get("member_a_name", "Miembro A") if k == "MEMBER_A" else account.get("member_b_name", "Miembro B"),
+                paid_options = ["COMMON", "MEMBER_A", "MEMBER_B"]
+                paid_labels = {
+                    "COMMON": "💳 Cuenta Bancaria Común del Hogar",
+                    "MEMBER_A": f"👤 {account.get('member_a_name', 'Miembro A')} (Adelantado con tarjeta personal)",
+                    "MEMBER_B": f"👤 {account.get('member_b_name', 'Miembro B')} (Adelantado con tarjeta personal)",
+                }
+                paid_choice = st.selectbox(
+                    "Medio de Pago / Pagado Por",
+                    options=paid_options,
+                    index=0,
+                    format_func=lambda k: paid_labels[k],
+                    help="Por defecto sale del presupuesto común del hogar. Si uno de los dos adelantó el dinero de su bolsillo, indícalo aquí.",
                 )
+                paid_by = account.get("local_profile", "MEMBER_A") if paid_choice == "COMMON" else paid_choice
 
             tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", use_container_width=True)
             if tx_submitted:
@@ -498,7 +510,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 elif charge_type == "Necesidad Común del Hogar" and not chosen_subcat_id:
                     st.error("Debes seleccionar una subcategoría de necesidad común.")
                 elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
-                    st.error("Debes seleccionar la hucha de amortización a cargar.")
+                    st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
                 else:
                     payload_tx = {
                         "description": tx_desc.strip(),
