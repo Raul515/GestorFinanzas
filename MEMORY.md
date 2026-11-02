@@ -148,4 +148,12 @@
        - *Alerta de Sobregasto en Huchas de Amortización*: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
        - *Exportación Consolidada del Hogar a Excel / CSV*: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
        - *Visor de Sincronización Avanzado en UI*: En el panel de configuración del hogar, visualización de deltas archivados en `sync/processed/` e inspección o reintento de eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
+     - **Gestión y Copias de Seguridad de Base de Datos en Interfaz (Backup & Restore)**:
+       - *Objetivo y Alcance*: Dotar a la aplicación de un módulo de copias de seguridad accesible desde la interfaz gráfica para proteger el patrimonio y el histórico financiero ante fallos de disco o errores operativos, sin requerir manipulación manual de archivos SQLite.
+       - *Funcionalidades Clave previstas*:
+         - **Generación y Descarga en 1-Clic**: Creación de instantánea atómica y consistente de `finanzas.db` en caliente (usando `VACUUM INTO` o `sqlite3.backup` de SQLite), descargable al vuelo desde Streamlit o almacenada en una carpeta rotativa local `backups/`.
+         - **Monitorización e Información del Último Backup**: Tarjeta visual en ajustes mostrando fecha y hora del último respaldo realizado, tamaño del fichero y aviso preventivo si han transcurrido más de N días sin respaldo.
+         - **Respaldos Automáticos Periódicos**: Opción configurable de copia automática silenciosa en segundo plano (ej. semanal o mensual) con política de retención rotativa (ej. conservar los 5 backups más recientes).
+         - **Restauración Asistida con Comprobación de Integridad**: Posibilidad de subir o seleccionar un archivo de copia con verificación estructural previa (`PRAGMA integrity_check`) y confirmación protegida.
+
 
