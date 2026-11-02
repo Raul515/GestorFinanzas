@@ -205,82 +205,143 @@ GestorFinanzas/
 ## 📦 Instalación y Puesta en Marcha
 
 ### Requisitos Previos
-- Python 3.11 instalado.
-- Git instalado.
-- *(Opcional)* Clave de API de Google Gemini (`GEMINI_API_KEY`) para las síntesis cualitativas y el Copiloto/Comité (los cálculos matemáticos contables son 100% locales y deterministas).
+- **Python 3.11** instalado (para ejecución nativa con entorno virtual) o **Docker Desktop** (para ejecución en contenedores).
+- **Git** instalado en el sistema.
+- **Syncthing** *(Obligatorio únicamente si vas a usar la Cuenta Conjunta en pareja)*: Software de sincronización P2P gratuito y de código abierto para mantener sincronizados los gastos comunes entre dos ordenadores (Windows y Mac) sin servidores en la nube.
+- *(Opcional)* **Clave de API de Google Gemini (`GEMINI_API_KEY`)**: Necesaria únicamente para los módulos de inteligencia artificial (Copiloto, Comité Asesor LangGraph y síntesis de noticias). Todo el motor contable 50/30/20, pautas de gestión y cuenta conjunta son **100% locales, deterministas y no requieren conexión ni claves externas**.
 
 ---
 
-### Opción 1: Ejecución Local en Entorno Virtual (Oficial)
+### Opción 1: Ejecución Local en Entorno Virtual (`venv`)
 
-1. **Clonar el repositorio**:
-   ```powershell
-   git clone https://github.com/Raul515/GestorFinanzas.git
-   cd GestorFinanzas
-   ```
+Esta opción es la recomendada para desarrollo y uso diario ligero. Sigue los pasos según tu sistema operativo:
 
-2. **Crear y activar el entorno virtual (`venv`)**:
-   ```powershell
-   # En Windows PowerShell:
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
+#### 1. Clonar el repositorio
+```bash
+git clone https://github.com/Raul515/GestorFinanzas.git
+cd GestorFinanzas
+```
 
-   # En Linux / macOS:
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
+#### 2. Crear y activar el entorno virtual (`venv`)
+- **En Windows (PowerShell)**:
+  ```powershell
+  python -m venv venv
+  .\venv\Scripts\Activate.ps1
+  ```
+- **En macOS / Linux (Terminal Bash o Zsh)**:
+  ```bash
+  python3 -m venv venv
+  source venv/bin/activate
+  ```
 
-3. **Instalar dependencias**:
-   ```powershell
-   pip install -r requirements/backend.txt
-   pip install -r requirements/frontend.txt
-   ```
+#### 3. Instalar dependencias
+Con el entorno virtual activo:
+```bash
+pip install -r requirements/backend.txt
+pip install -r requirements/frontend.txt
+```
 
-4. **Configurar variables de entorno**:
-   Copia el archivo de plantilla `.env.example` a `.env` (registrado en `.gitignore`):
-   ```powershell
-   cp .env.example .env
-   ```
-   Edita `.env` con tu clave:
-   ```env
-   GEMINI_API_KEY="tu_clave_de_gemini_aqui"
-   GEMINI_MODEL="gemini-2.5-pro"
-   ```
+#### 4. Configurar variables de entorno
+Crea tu archivo `.env` a partir de la plantilla:
+- **En Windows (PowerShell)**:
+  ```powershell
+  Copy-Item .env.example .env
+  ```
+- **En macOS / Linux**:
+  ```bash
+  cp .env.example .env
+  ```
+*(Opcional: Abre `.env` y añade tu `GEMINI_API_KEY` si deseas habilitar los asistentes de IA).*
 
-5. **Inicializar la base de datos local**:
-   ```powershell
-   $env:PYTHONPATH="src"
-   .\venv\Scripts\python src/backend/init_db_data.py
-   ```
+#### 5. Inicializar la base de datos local
+Crea el catálogo inicial de categorías y estructura en SQLite:
+- **En Windows (PowerShell)**:
+  ```powershell
+  $env:PYTHONPATH="src"
+  .\venv\Scripts\python src/backend/init_db_data.py
+  ```
+- **En macOS / Linux**:
+  ```bash
+  PYTHONPATH=src python3 src/backend/init_db_data.py
+  ```
 
-6. **Iniciar el Backend (FastAPI)**:
-   ```powershell
-   $env:PYTHONPATH="src"
-   .\venv\Scripts\uvicorn backend.api.main:app --reload --port 8000
-   ```
+#### 6. Iniciar los Servicios
+Necesitarás dos terminales (ambas con el entorno `venv` activado):
 
-7. **Iniciar el Frontend (Streamlit)** (en otra terminal con `venv` activo):
-   ```powershell
-   $env:PYTHONPATH="src"
-   .\venv\Scripts\streamlit run src/frontend/app.py
-   ```
-   Abre tu navegador en: **`http://localhost:8501`** (Documentación interactiva de la API en `http://localhost:8000/docs`).
+- **Terminal 1 — Iniciar el Backend (FastAPI)**:
+  - *Windows (PowerShell)*:
+    ```powershell
+    $env:PYTHONPATH="src"
+    .\venv\Scripts\uvicorn backend.api.main:app --reload --port 8000
+    ```
+  - *macOS / Linux*:
+    ```bash
+    PYTHONPATH=src uvicorn backend.api.main:app --reload --port 8000
+    ```
+  *(La documentación interactiva Swagger estará disponible en: `http://localhost:8000/docs`).*
+
+- **Terminal 2 — Iniciar el Frontend (Streamlit)**:
+  - *Windows (PowerShell)*:
+    ```powershell
+    $env:PYTHONPATH="src"
+    .\venv\Scripts\streamlit run src/frontend/app.py
+    ```
+  - *macOS / Linux*:
+    ```bash
+    PYTHONPATH=src streamlit run src/frontend/app.py
+    ```
+
+Accede a la aplicación en tu navegador web en: **`http://localhost:8501`**.
 
 ---
 
-### Opción 2: Con Docker Compose
+### Opción 2: Ejecución con Docker Compose (Multiplataforma)
 
-1. Dirígete a la carpeta `docker_local`:
+La opción ideal para poner en marcha el sistema completo en segundos con todas las dependencias aisladas, válida de forma idéntica en **Windows** (con Docker Desktop y motor WSL2) y en **macOS** (Docker Desktop para Apple Silicon M1/M2/M3 o Intel):
+
+1. **Asegúrate de tener Docker Desktop abierto y corriendo**.
+2. **Entrar en el directorio de Docker**:
    ```bash
    cd docker_local
    ```
-2. Levanta los contenedores con recarga automática:
+3. **Construir y levantar los contenedores**:
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.extend.yml up --build
    ```
-3. Accede a Streamlit en **`http://localhost:8501`**.
+4. **Acceder a la aplicación**:
+   - Interfaz Gráfica (Streamlit): **`http://localhost:8501`**
+   - API REST y Documentación Swagger: **`http://localhost:8000/docs`**
+5. **Detener los servicios**:
+   Pulsa `Ctrl + C` en la terminal o ejecuta:
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.extend.yml down
+   ```
 
 ---
+
+### 🔄 Puesta en Marcha de la Cuenta Conjunta (Sincronización con Syncthing)
+
+Si vas a compartir la economía del hogar con tu pareja (ej. tu ordenador con Windows y el suyo con Mac), **no necesitas contratar ningún servidor ni subir tus datos a la nube**:
+
+1. **¿Qué hace Syncthing?**: 
+   Sincroniza en tiempo real y de forma cifrada (punto a punto) la carpeta local `sync/` de la aplicación, transmitiendo únicamente pequeños eventos de gastos comunes o aportaciones. Tu cuenta personal y tu base de datos privada (`finanzas.db`) nunca salen de tu ordenador.
+2. **Descarga e Instalación**:
+   - **En Windows**: Descarga e instala [SyncTrayzor](https://github.com/canton7/SyncTrayzor/releases) (la interfaz gráfica más cómoda) o el instalador oficial de [syncthing.net](https://syncthing.net/).
+   - **En macOS**: Descarga [Syncthing macOS](https://github.com/syncthing/syncthing-macos/releases) o instálalo vía Homebrew en la terminal:
+     ```bash
+     brew install --cask syncthing
+     ```
+3. **Emparejamiento en 3 Minutos**:
+   - Abre la consola de Syncthing en `http://127.0.0.1:8384` en ambos ordenadores.
+   - Copia el **Device ID** de un equipo y añádelo como *Dispositivo Remoto* en el otro.
+   - Conecta las carpetas de intercambio (`sync/outbox` de uno hacia `sync/inbox` del otro).
+   - ¡Listo! En el momento en que crees el hogar en la aplicación, el segundo equipo detectará automáticamente la invitación con un aviso de **"Unirse al Hogar en 1-Clic"**.
+4. 📖 **Guías Detalladas**:
+   - Para entender el funcionamiento y uso diario: [Manual de Usuario para Parejas](docs/manual_usuario_cuenta_conjunta.md).
+   - Para ver la configuración paso a paso de Syncthing con capturas: [Guía de Sincronización Syncthing](docs/guia_sincronizacion_syncthing.md).
+
+---
+
 
 ## 🧪 Verificación y Suite de Pruebas
 
