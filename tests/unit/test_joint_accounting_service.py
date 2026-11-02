@@ -257,8 +257,10 @@ def test_calculate_joint_annual_summary():
 
     # Verificar que el mes de Enero tiene 700 € y Febrero 800 €
     assert summary.monthly_metrics[0]["needs_spent"] == 700.0
+    assert summary.monthly_metrics[0]["saved_month"] == 300.0
     assert summary.monthly_metrics[1]["needs_spent"] == 800.0
     assert summary.monthly_metrics[1]["sinking_spent"] == 250.0
+    assert summary.monthly_metrics[1]["saved_month"] == 200.0
 
     # Comprobación de blindaje: CERO marcadores individuales
     dumped = summary.model_dump()

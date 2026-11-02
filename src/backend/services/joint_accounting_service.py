@@ -275,6 +275,7 @@ def calculate_joint_annual_summary(
             "needs_spent": round(data["needs_spent"], 2),
             "sinking_spent": round(data["sinking_spent"], 2),
             "total_contributed": round(data["contributed"], 2),
+            "saved_month": max(0.0, round(data["contributed"] - data["needs_spent"], 2)),
         }
         for m_key, data in sorted(monthly_data.items())
     ]

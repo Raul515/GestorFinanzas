@@ -351,7 +351,7 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### Evolución Mensual: Necesidades Gastadas vs Aportaciones")
+    st.markdown("#### 📊 Evolución Mensual: Aportaciones vs Destino (Necesidades y Ahorro)")
 
     # Gráfica visual con Altair
     monthly_metrics = annual_summary.get("monthly_metrics", [])
@@ -366,17 +366,35 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
                 m_name = m_key
                 m_num = 1
 
+            needs_spent = float(item.get("needs_spent", 0.0))
+            total_contributed = float(item.get("total_contributed", item.get("contributed", 0.0)))
+            saved_month = float(item.get("saved_month", max(0.0, round(total_contributed - needs_spent, 2))))
+
+            # Columna 1: Aportaciones Recibidas
             records.append({
                 "Mes": m_name,
+                "Columna": "1. Aportaciones",
+                "Concepto": "Aportaciones Recibidas",
+                "Importe": total_contributed,
+                "Mes_Num": m_num,
+                "Stack_Order": 1,
+            })
+            # Columna 2: Destino (Necesidades Comunes + Ahorro Común del Mes)
+            records.append({
+                "Mes": m_name,
+                "Columna": "2. Destino",
                 "Concepto": "Necesidades Comunes",
-                "Importe": float(item.get("needs_spent", 0.0)),
-                "Orden": m_num,
+                "Importe": needs_spent,
+                "Mes_Num": m_num,
+                "Stack_Order": 1,
             })
             records.append({
                 "Mes": m_name,
-                "Concepto": "Aportaciones Recibidas",
-                "Importe": float(item.get("contributed", 0.0)),
-                "Orden": m_num,
+                "Columna": "2. Destino",
+                "Concepto": "Ahorro Común del Mes",
+                "Importe": saved_month,
+                "Mes_Num": m_num,
+                "Stack_Order": 2,
             })
 
         df_chart = pd.DataFrame(records)
@@ -384,20 +402,25 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
             alt.Chart(df_chart)
             .mark_bar()
             .encode(
-                x=alt.X("Mes:N", sort=alt.SortField("Orden"), title=None),
-                y=alt.Y("Importe:Q", title="Euros (€)"),
+                x=alt.X("Mes:N", sort=alt.SortField("Mes_Num"), title=None),
+                xOffset=alt.XOffset("Columna:N", sort=["1. Aportaciones", "2. Destino"], title=None),
+                y=alt.Y("Importe:Q", stack="zero", title="Euros (€)"),
                 color=alt.Color(
                     "Concepto:N",
                     scale=alt.Scale(
-                        domain=["Necesidades Comunes", "Aportaciones Recibidas"],
-                        range=["#1565c0", "#2e7d32"],
+                        domain=["Aportaciones Recibidas", "Necesidades Comunes", "Ahorro Común del Mes"],
+                        range=["#10b981", "#3b82f6", "#06b6d4"],
                     ),
                     legend=alt.Legend(title="Concepto", orient="top"),
                 ),
-                xOffset="Concepto:N",
-                tooltip=["Mes", "Concepto", alt.Tooltip("Importe:Q", format=",.2f")],
+                order=alt.Order("Stack_Order:Q", sort="ascending"),
+                tooltip=[
+                    alt.Tooltip("Mes:N", title="Mes"),
+                    alt.Tooltip("Concepto:N", title="Concepto"),
+                    alt.Tooltip("Importe:Q", format=",.2f", title="Importe (€)"),
+                ],
             )
-            .properties(height=280)
+            .properties(height=300)
         )
         st.altair_chart(chart, use_container_width=True)
     else:
