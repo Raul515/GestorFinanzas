@@ -269,6 +269,11 @@ class IJointRepository(ABC):
         pass
 
     @abstractmethod
+    def get_joint_transaction(self, tx_id: int) -> Optional[Any]:
+        """Obtiene una transacción conjunta por su ID."""
+        pass
+
+    @abstractmethod
     def create_joint_transaction(self, tx: Any) -> Any:
         """Registra una transacción conjunta."""
         pass

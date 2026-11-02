@@ -430,6 +430,20 @@ def create_joint_transaction(
         fund = repo.get_joint_sinking_fund(tx.joint_sinking_fund_id)
         if fund:
             sinking_name = fund.name
+            sync_service.emit_event(
+                entity_type=schemas.SyncEntityType.SINKING_FUND,
+                action=schemas.SyncAction.UPSERT,
+                payload={
+                    "name": fund.name,
+                    "target_amount": float(fund.target_amount),
+                    "current_balance": float(fund.current_balance),
+                    "monthly_target_amount": float(fund.monthly_target_amount),
+                    "allocation_percentage": float(fund.allocation_percentage),
+                    "status": fund.status,
+                    "priority": fund.priority,
+                },
+                origin_device_id=sync_service.local_device_id,
+            )
 
     # Emitir delta para sync
     sync_service.emit_event(
@@ -458,6 +472,11 @@ def delete_joint_transaction(
     sync_service: JointSyncService = Depends(get_sync_service),
 ):
     """Elimina un gasto común y emite el tombstone correspondiente a Syncthing."""
+    existing_tx = repo.get_joint_transaction(transaction_id)
+    if not existing_tx:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transacción no encontrada.")
+
+    fund_id_affected = existing_tx.joint_sinking_fund_id
     tx_uuid = repo.delete_joint_transaction(transaction_id)
     if not tx_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transacción no encontrada.")
@@ -468,6 +487,25 @@ def delete_joint_transaction(
         payload={"uuid": tx_uuid},
         origin_device_id=sync_service.local_device_id,
     )
+
+    if fund_id_affected:
+        fund = repo.get_joint_sinking_fund(fund_id_affected)
+        if fund:
+            sync_service.emit_event(
+                entity_type=schemas.SyncEntityType.SINKING_FUND,
+                action=schemas.SyncAction.UPSERT,
+                payload={
+                    "name": fund.name,
+                    "target_amount": float(fund.target_amount),
+                    "current_balance": float(fund.current_balance),
+                    "monthly_target_amount": float(fund.monthly_target_amount),
+                    "allocation_percentage": float(fund.allocation_percentage),
+                    "status": fund.status,
+                    "priority": fund.priority,
+                },
+                origin_device_id=sync_service.local_device_id,
+            )
+
     return {"deleted": True, "uuid": tx_uuid}
 
 

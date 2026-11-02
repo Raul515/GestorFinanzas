@@ -695,6 +695,17 @@ class SQLiteRepository(IRepository):
 
         return query.order_by(joint_model.JointTransaction.date.desc()).all()
 
+    def get_joint_transaction(self, tx_id: int) -> Optional[joint_model.JointTransaction]:
+        """Obtiene una transacción conjunta por su ID primario."""
+        return (
+            self.db.query(joint_model.JointTransaction)
+            .filter(
+                joint_model.JointTransaction.id == tx_id,
+                joint_model.JointTransaction.joint_account_id == 1,
+            )
+            .first()
+        )
+
     def create_joint_transaction(self, tx: joint_schema.JointTransactionCreate) -> joint_model.JointTransaction:
         """Registra una transacción en el espacio conjunto."""
         data = tx.model_dump()
@@ -712,38 +723,35 @@ class SQLiteRepository(IRepository):
             joint_sinking_fund_id=data.get("joint_sinking_fund_id"),
             created_by_profile=str(profile_val),
         )
-        self.db.add(db_tx)
 
-        # Si el gasto proviene de una hucha de amortización, descontar el saldo
+        # Si el gasto proviene de una hucha de amortización, descontar únicamente el saldo disponible acumulado
+        deducted = 0.0
         if db_tx.joint_sinking_fund_id:
             fund = self.get_joint_sinking_fund(db_tx.joint_sinking_fund_id)
-            if fund:
-                fund.current_balance = max(0.0, fund.current_balance - db_tx.amount)
+            if fund and fund.current_balance > 0:
+                deducted = min(float(fund.current_balance), float(db_tx.amount))
+                fund.current_balance = round(float(fund.current_balance) - deducted, 2)
 
+        db_tx.sinking_fund_deduction = deducted
+        self.db.add(db_tx)
         self.db.commit()
         self.db.refresh(db_tx)
         return db_tx
 
     def delete_joint_transaction(self, tx_id: int) -> Optional[str]:
         """Elimina una transacción y retorna su UUID para emitir el tombstone de sincronización."""
-        tx = (
-            self.db.query(joint_model.JointTransaction)
-            .filter(
-                joint_model.JointTransaction.id == tx_id,
-                joint_model.JointTransaction.joint_account_id == 1,
-            )
-            .first()
-        )
+        tx = self.get_joint_transaction(tx_id)
         if not tx:
             return None
 
         tx_uuid = tx.uuid
 
-        # Si procedía de una hucha de amortización, restaurar el saldo
+        # Si procedía de una hucha de amortización, restaurar únicamente lo que efectivamente se descontó
         if tx.joint_sinking_fund_id:
             fund = self.get_joint_sinking_fund(tx.joint_sinking_fund_id)
             if fund:
-                fund.current_balance += tx.amount
+                deduction_to_restore = getattr(tx, "sinking_fund_deduction", 0.0) or 0.0
+                fund.current_balance = round(float(fund.current_balance) + float(deduction_to_restore), 2)
 
         self.db.delete(tx)
         self.db.commit()

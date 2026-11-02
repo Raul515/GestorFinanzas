@@ -257,11 +257,12 @@ class JointSyncService:
 
         if event.action == SyncAction.DELETE:
             if existing_tx:
-                # Revertir saldo de hucha si estaba vinculada
+                # Revertir saldo de hucha únicamente por el importe efectivamente descontado
                 if existing_tx.joint_sinking_fund_id:
                     fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == existing_tx.joint_sinking_fund_id).first()
                     if fund:
-                        fund.current_balance += existing_tx.amount
+                        deduction_to_restore = getattr(existing_tx, "sinking_fund_deduction", 0.0) or 0.0
+                        fund.current_balance = round(float(fund.current_balance) + float(deduction_to_restore), 2)
                 db.delete(existing_tx)
             return
 
@@ -300,7 +301,8 @@ class JointSyncService:
                 if existing_tx.joint_sinking_fund_id:
                     old_fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == existing_tx.joint_sinking_fund_id).first()
                     if old_fund:
-                        old_fund.current_balance += existing_tx.amount
+                        old_deduction = getattr(existing_tx, "sinking_fund_deduction", 0.0) or 0.0
+                        old_fund.current_balance = round(float(old_fund.current_balance) + float(old_deduction), 2)
 
                 existing_tx.date = tx_date
                 existing_tx.amount = amount
@@ -310,11 +312,21 @@ class JointSyncService:
                 existing_tx.created_by_profile = profile
                 existing_tx.updated_at = event_dt
 
+                deducted = 0.0
                 if sinking_id:
                     new_fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if new_fund:
-                        new_fund.current_balance = max(0.0, new_fund.current_balance - amount)
+                    if new_fund and new_fund.current_balance > 0:
+                        deducted = min(float(new_fund.current_balance), float(amount))
+                        new_fund.current_balance = round(float(new_fund.current_balance) - deducted, 2)
+                existing_tx.sinking_fund_deduction = deducted
             else:
+                deducted = 0.0
+                if sinking_id:
+                    fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
+                    if fund and fund.current_balance > 0:
+                        deducted = min(float(fund.current_balance), float(amount))
+                        fund.current_balance = round(float(fund.current_balance) - deducted, 2)
+
                 new_tx = JointTransaction(
                     uuid=tx_uuid,
                     joint_account_id=1,
@@ -323,16 +335,12 @@ class JointSyncService:
                     description=desc,
                     joint_subcategory_id=subcat_id,
                     joint_sinking_fund_id=sinking_id,
+                    sinking_fund_deduction=deducted,
                     created_by_profile=profile,
                     created_at=event_dt,
                     updated_at=event_dt,
                 )
                 db.add(new_tx)
-
-                if sinking_id:
-                    fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if fund:
-                        fund.current_balance = max(0.0, fund.current_balance - amount)
 
     def _apply_contribution_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica aportación mensual sincronizada."""

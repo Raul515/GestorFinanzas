@@ -199,10 +199,15 @@ def _render_zero_state_wizard() -> None:
 
 def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], status: Dict[str, Any]) -> None:
     """Renderiza la pantalla completa e independiente de la economía del hogar."""
-    # Cabecera con resumen del hogar
+    # Sincronización automática de deltas entrantes si hay archivos en inbox
     sync_status = api_client.get_sync_status()
+    if sync_status.get("inbox_pending_count", 0) > 0:
+        api_client.trigger_process_inbox()
+        sync_status = api_client.get_sync_status()
+
     is_synced = sync_status.get("is_synchronized", True)
-    sync_badge = "🟢 Sincronizado" if is_synced else "🟡 Sincronización Pendiente"
+    inbox_cnt = sync_status.get("inbox_pending_count", 0)
+    sync_badge = "🟢 Sincronizado" if is_synced else f"🟡 {inbox_cnt} Delta(s) Pendiente(s)"
 
     cohab_val = account.get("cohabitation_stage", "PRE_COHABITATION")
     cohab_text = (
@@ -538,6 +543,15 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                             options=list(fund_map.keys()),
                             format_func=lambda k: fund_map[k],
                         )
+                        selected_fund_obj = next((f for f in sinking_funds if f["id"] == chosen_fund_id), None)
+                        fund_balance = float(selected_fund_obj.get("current_balance", 0.0)) if selected_fund_obj else 0.0
+                        st.caption(f"Saldo disponible en esta hucha: **{fund_balance:,.2f} €**")
+                        if fund_balance < float(tx_amount):
+                            diff_treasury = float(tx_amount) - fund_balance
+                            st.caption(
+                                f"ℹ️ *El gasto ({tx_amount:,.2f} €) supera el saldo ({fund_balance:,.2f} €). "
+                                f"La hucha quedará a 0,00 € y los {diff_treasury:,.2f} € restantes se asumirán por la tesorería del hogar.*"
+                            )
                     else:
                         st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Entrada de Piso).")
 

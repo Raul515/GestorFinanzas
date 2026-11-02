@@ -149,6 +149,7 @@ class JointTransaction(Base):
     joint_sinking_fund_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("joint_sinking_funds.id", ondelete="SET NULL"), nullable=True
     )
+    sinking_fund_deduction: Mapped[float] = mapped_column(Float, default=0.0)
     created_by_profile: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)

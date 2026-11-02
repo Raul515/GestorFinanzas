@@ -382,6 +382,25 @@ def test_sqlite_repository_joint_crud_lifecycle(db_session: Session):
     db_session.refresh(fund2)
     assert fund2.current_balance == 1000.0  # 850 + 150 restaurados
 
+    # Caso borde: Gasto imputado a hucha con saldo 0 no crea saldo fantasma al eliminarse
+    fund_zero = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Hucha Cero", target_amount=500.0, current_balance=0.0)
+    )
+    tx_zero = repo.create_joint_transaction(
+        JointTransactionCreate(
+            date=date(2026, 11, 4),
+            amount=100.0,
+            description="Gasto hucha vacía",
+            joint_sinking_fund_id=fund_zero.id,
+            created_by_profile=ProfileIdentifier.MEMBER_A,
+        )
+    )
+    db_session.refresh(fund_zero)
+    assert fund_zero.current_balance == 0.0
+    repo.delete_joint_transaction(tx_zero.id)
+    db_session.refresh(fund_zero)
+    assert fund_zero.current_balance == 0.0  # No genera 100€ de la nada
+
     # 5. Aportación mensual
     contrib_req = JointMonthlyContributionCreate(
         month="2026-11",

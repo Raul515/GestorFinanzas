@@ -33,6 +33,12 @@ def init_db():
             if strat_cols and "split_config" not in strat_cols:
                 conn.exec_driver_sql("ALTER TABLE applied_guideline_strategies ADD COLUMN split_config TEXT")
                 conn.commit()
+
+            cursor_j_tx = conn.exec_driver_sql("PRAGMA table_info(joint_transactions)")
+            j_tx_cols = [row[1] for row in cursor_j_tx.fetchall()]
+            if j_tx_cols and "sinking_fund_deduction" not in j_tx_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN sinking_fund_deduction REAL DEFAULT 0.0")
+                conn.commit()
     except Exception as exc:
         logger.warning("Error comprobando/migrando columnas en SQLite: %s", exc)
 
