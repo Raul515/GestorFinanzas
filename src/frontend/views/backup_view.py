@@ -281,7 +281,7 @@ def render_backup_view() -> None:
     )
 
     if uploaded_file:
-        file_bytes = uploaded_file.read()
+        file_bytes = uploaded_file.getvalue()
         col_up1, col_up2 = st.columns([2, 1])
         with col_up1:
             st.write(f"📁 **Archivo seleccionado**: `{uploaded_file.name}` ({len(file_bytes) / 1024:.2f} KB)")

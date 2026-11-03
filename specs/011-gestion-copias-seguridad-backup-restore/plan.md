@@ -87,13 +87,22 @@ El presente plan establece el desglose técnico y la secuencia de ejecución est
      - En `src/backend/services/backup_service.py: rollback_last_restore`, renombrar la instantánea de seguridad aplicada a `archived_prerestore_<timestamp>.db`. De este modo se preserva el archivo físico histórico para auditoría, pero `list_backups()` deja de identificarla como instantánea pendiente de reversión, ocultando limpiamente el banner amarillo al haber concluido el rollback.
   5. **BUG-5 (Confirmación Protegida en Catálogo Local mediante Popovers)**:
      - En la Tarjeta 5 de `backup_view.py`, reemplazar los botones directos de acción por componentes `st.popover` ("🔄 Restaurar" y "🗑️ Borrar") que exijan una confirmación explícita secundaria con advertencia de impacto antes de ejecutar la sobrescritura de la base o la eliminación definitiva del archivo.
+  6. **BUG-6 (Validación Estricta de Esquema Financiero Completo - all vs any)**:
+     - En `src/backend/services/backup_service.py: validate_backup_file`, comprobar que el archivo contenga la totalidad de las tablas estructurales indispensables (`transactions`, `categories`, `monthly_budgets`), impidiendo que una base de datos ajena que contenga una única tabla coincidente pase falsamente la validación.
+  7. **BUG-7 (Lectura Inmutable y Persistente en Streamlit con getvalue)**:
+     - En `src/frontend/views/backup_view.py`, sustituir `uploaded_file.read()` por `uploaded_file.getvalue()`, garantizando la lectura íntegra del archivo en cualquier ciclo de re-ejecución de Streamlit sin desajuste de punteros de stream.
+  8. **BUG-8 (Aislamiento de Archivos Temporales Concurrente mediante UUID)**:
+     - En `src/backend/api/routers/backup.py`, añadir un token `uuid.uuid4().hex[:8]` en los nombres de archivos temporales en `/validate` y `/restore/upload`, garantizando cero colisiones ante peticiones simultáneas con el mismo nombre.
+  9. **BUG-9 (Rotación Selectiva e Independiente de Instantáneas Archivadas)**:
+     - En `src/backend/services/backup_service.py: rotate_backups`, separar la rotación de copias estándar (`manual_backup_*` y `auto_backup_*`) de los snapshots archivados (`archived_prerestore_*`), limitando estos últimos a una cuota fija (2 copias) sin consumir las ranuras configuradas por el usuario.
 - **Archivos a crear/modificar**:
-  - `src/backend/api/routers/backup.py` [MODIFICADO: Endpoint `POST /backup/validate`].
-  - `src/backend/services/backup_service.py` [MODIFICADO: Corrección de cálculo de hash en deduplicación programada y renombrado a archivo archivado en rollback].
+  - `src/backend/api/routers/backup.py` [MODIFICADO: Endpoint `POST /backup/validate` y nombres temporales con UUID].
+  - `src/backend/services/backup_service.py` [MODIFICADO: Validación estricta con `all()`, deduplicación determinista, archivado en rollback y rotación selectiva].
   - `src/frontend/api_client.py` [MODIFICADO: Método `validate_backup_upload()`].
-  - `src/frontend/views/backup_view.py` [MODIFICADO: Flujo de descarga con `st.session_state`, pre-inspección de archivos subidos y popovers de confirmación en catálogo local].
-  - `tests/unit/test_backup_frontend.py` [MODIFICADO: Pruebas unitarias para `validate_backup_upload` y nuevos flujos].
+  - `src/frontend/views/backup_view.py` [MODIFICADO: Flujo con `st.session_state`, pre-inspección con `getvalue()` y popovers en catálogo].
+  - `tests/unit/test_backup_frontend.py` [MODIFICADO: Pruebas unitarias para `validate_backup_upload` y estrechamiento de tipos].
   - `tests/integration/test_backup_api.py` [MODIFICADO: Pruebas de integración para `POST /backup/validate` y persistencia post-rollback].
+  - `tests/unit/test_backup_service.py` [MODIFICADO: Prueba de rechazo de esquemas incompletos con tabla única y rotación de archivados].
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_backup_* tests/integration/test_backup_*

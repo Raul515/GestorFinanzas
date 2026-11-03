@@ -21,6 +21,7 @@ from backend.services.backup_service import (
     list_backups,
     restore_backup,
     rollback_last_restore,
+    rotate_backups,
     update_schedule_config,
     validate_backup_file,
 )
@@ -145,6 +146,17 @@ def test_backup_rotation(temp_env):
     # Deben quedar exactamente 3 copias manuales
     assert listing.total_count == 3
 
+    # Crear 4 snapshots archivados simulados para probar la rotación independiente de archivos (máx 2)
+    for j in range(4):
+        (b_dir / f"archived_prerestore_{j}.db").write_text("dummy")
+
+    rotate_backups(b_dir=b_dir, keep_max_copies=3)
+    remaining_archives = list(b_dir.glob("archived_prerestore_*.db"))
+    assert len(remaining_archives) == 2
+    # Las copias de usuario deben seguir siendo 3
+    remaining_manuals = [f for f in b_dir.glob("*.db") if f.name.startswith("manual_test_")]
+    assert len(remaining_manuals) == 3
+
 
 def test_validate_backup_file(temp_env, tmp_path: Path):
     db_path = temp_env["db_path"]
@@ -166,6 +178,17 @@ def test_validate_backup_file(temp_env, tmp_path: Path):
     # 3. Archivo inexistente
     missing_res = validate_backup_file(tmp_path / "ghost.db")
     assert missing_res.is_valid is False
+
+    # 4. Archivo SQLite de otra aplicación con esquema incompleto (solo 1 tabla 'categories')
+    foreign_db = tmp_path / "foreign_incomplete.db"
+    f_conn = sqlite3.connect(foreign_db)
+    f_conn.execute("CREATE TABLE categories (id INT, name TEXT)")
+    f_conn.commit()
+    f_conn.close()
+    foreign_res = validate_backup_file(foreign_db)
+    assert foreign_res.is_valid is False
+    assert foreign_res.integrity_status == "missing_schema"
+    assert "tablas financieras obligatorias" in foreign_res.error_message
 
 
 def test_restore_backup_with_safety_snapshot_and_wal_purge(temp_env):

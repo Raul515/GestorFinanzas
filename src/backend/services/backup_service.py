@@ -254,11 +254,11 @@ def create_backup(
 
 def rotate_backups(b_dir: Path, keep_max_copies: int) -> None:
     """Elimina las copias manuales y automáticas más antiguas que superen el límite configurado."""
+    # 1. Rotación de copias estándar de usuario (excluyendo snapshots internos de seguridad y archivo)
     standard_backups = [
         f for f in b_dir.glob("*.db")
-        if f.is_file() and not f.name.startswith("safety_prerestore_")
+        if f.is_file() and not f.name.startswith("safety_prerestore_") and not f.name.startswith("archived_prerestore_")
     ]
-    # Ordenar de más reciente a más antigua
     standard_backups.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     if len(standard_backups) > keep_max_copies:
@@ -269,6 +269,20 @@ def rotate_backups(b_dir: Path, keep_max_copies: int) -> None:
                 logger.info("Rotación: Eliminada copia de seguridad antigua %s", old_file.name)
             except OSError as exc:
                 logger.warning("Error eliminando copia antigua %s: %s", old_file.name, exc)
+
+    # 2. Rotación independiente para copias archivadas de rollback (máximo 2 copias)
+    archived_backups = [
+        f for f in b_dir.glob("archived_prerestore_*.db")
+        if f.is_file()
+    ]
+    archived_backups.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    if len(archived_backups) > 2:
+        for old_archive in archived_backups[2:]:
+            try:
+                old_archive.unlink()
+                logger.info("Rotación: Eliminado snapshot archivado antiguo %s", old_archive.name)
+            except OSError as exc:
+                logger.warning("Error eliminando snapshot archivado %s: %s", old_archive.name, exc)
 
 
 def validate_backup_file(file_path: Path) -> BackupValidationResult:
@@ -300,16 +314,18 @@ def validate_backup_file(file_path: Path) -> BackupValidationResult:
                     error_message=f"La verificación de integridad SQLite falló: {status}",
                 )
 
-            # Comprobar que contiene tablas maestras indispensables
+            # Comprobar que contiene todas las tablas maestras indispensables
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r[0] for r in cursor.fetchall()}
-            if not any(t in tables for t in ("transactions", "categories", "emergency_funds")):
+            required_tables = {"transactions", "categories"}
+            missing_tables = required_tables - tables
+            if missing_tables:
                 return BackupValidationResult(
                     is_valid=False,
                     integrity_status="missing_schema",
                     table_counts={},
                     sha256=sha256_hash,
-                    error_message="El archivo SQLite no contiene las tablas financieras requeridas.",
+                    error_message=f"El archivo SQLite no contiene las tablas financieras obligatorias: {', '.join(sorted(missing_tables))}.",
                 )
 
             counts = count_database_tables(conn)

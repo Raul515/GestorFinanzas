@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import tempfile
 from typing import Optional
+import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -84,8 +85,9 @@ async def validate_backup_upload(file: UploadFile = File(...)):
             detail="El archivo debe tener extensión .db de SQLite válida.",
         )
 
+    token = uuid.uuid4().hex[:8]
     temp_dir = Path(tempfile.gettempdir())
-    temp_path = temp_dir / f"validate_{file.filename}"
+    temp_path = temp_dir / f"validate_{token}_{file.filename}"
 
     try:
         with open(temp_path, "wb") as buffer:
@@ -109,9 +111,10 @@ async def restore_from_upload(file: UploadFile = File(...)):
             detail="El archivo debe tener extensión .db de SQLite válida.",
         )
 
-    # Guardar en archivo temporal para inspección segura
+    # Guardar en archivo temporal con token único para inspección segura
+    token = uuid.uuid4().hex[:8]
     temp_dir = Path(tempfile.gettempdir())
-    temp_path = temp_dir / f"upload_{file.filename}"
+    temp_path = temp_dir / f"upload_{token}_{file.filename}"
 
     try:
         with open(temp_path, "wb") as buffer:
