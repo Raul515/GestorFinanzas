@@ -20,6 +20,7 @@ from backend.api.routers import (
     metrics,
     joint,
     backup,
+    updater,
 )
 from backend.database.componentes.sqlite_db import SessionLocal, init_db
 from backend.services import backup_service
@@ -120,6 +121,7 @@ app.include_router(guidelines.router)
 app.include_router(metrics.router)
 app.include_router(joint.router)
 app.include_router(backup.router)
+app.include_router(updater.router)
 
 
 

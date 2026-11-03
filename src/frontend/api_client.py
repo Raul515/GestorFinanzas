@@ -1365,3 +1365,85 @@ def update_backup_schedule(enabled: bool, frequency_days: int, keep_max_copies: 
 
 
 
+
+
+# ==============================================================================
+# SECCIÓN: ACTUALIZADOR EN 1 CLIC (IN-APP OTA UPDATER)
+# ==============================================================================
+
+def get_app_version() -> Optional[Dict[str, Any]]:
+    """Obtiene la versión del sistema instalada localmente, rama y disponibilidad de rollback."""
+    url = f"{API_URL}/api/updater/version"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al obtener versión (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar versión en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_app_version(): %s", e)
+    return None
+
+
+def check_for_updates(force: bool = False, branch: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Comprueba en GitHub API si existen nuevas versiones disponibles con soporte de caché."""
+    url = f"{API_URL}/api/updater/check"
+    params: Dict[str, Any] = {"force": force}
+    if branch:
+        params["branch"] = branch
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al comprobar actualizaciones (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al comprobar actualizaciones en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en check_for_updates(): %s", e)
+    return None
+
+
+def apply_system_update(branch: Optional[str] = None, remote_commit: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Ejecuta la actualización del sistema en staging, backups y reemplazo atómico."""
+    url = f"{API_URL}/api/updater/apply"
+    payload: Dict[str, Any] = {}
+    if branch:
+        payload["branch"] = branch
+    if remote_commit:
+        payload["remote_commit"] = remote_commit
+    try:
+        response = requests.post(url, json=payload, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al aplicar actualización (%s): %s", response.status_code, response.text)
+        try:
+            return response.json()
+        except Exception:
+            return {"success": False, "message": f"Error del servidor ({response.status_code}): {response.text}"}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al aplicar actualización en %s: %s", url, e)
+        return {"success": False, "message": f"Error de conexión con el servidor backend: {e}"}
+    except Exception as e:
+        logger.error("Error inesperado en apply_system_update(): %s", e)
+        return {"success": False, "message": f"Error inesperado: {e}"}
+
+
+def rollback_system_update() -> Optional[Dict[str, Any]]:
+    """Restaura la versión previa de código y dependencias desde la instantánea comprimida."""
+    url = f"{API_URL}/api/updater/rollback"
+    try:
+        response = requests.post(url, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al revertir código (%s): %s", response.status_code, response.text)
+        try:
+            return response.json()
+        except Exception:
+            return {"success": False, "message": f"Error del servidor ({response.status_code}): {response.text}"}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al revertir código en %s: %s", url, e)
+        return {"success": False, "message": f"Error de conexión con el backend: {e}"}
+    except Exception as e:
+        logger.error("Error inesperado en rollback_system_update(): %s", e)
+        return {"success": False, "message": f"Error inesperado: {e}"}

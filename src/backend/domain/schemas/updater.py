@@ -30,6 +30,14 @@ class UpdateCheckResponse(BaseModel):
     error: Optional[str] = Field(default=None, description="Mensaje de error si la consulta falló")
 
 
+class UpdateApplyRequest(BaseModel):
+    """Parámetros opcionales para solicitar la aplicación de una actualización."""
+    model_config = ConfigDict(from_attributes=True)
+
+    branch: Optional[str] = Field(default=None, description="Rama remota a instalar")
+    remote_commit: Optional[str] = Field(default=None, description="Hash del commit objetivo")
+
+
 class UpdateApplyResponse(BaseModel):
     """Resultado de la ejecución de una actualización del sistema."""
     model_config = ConfigDict(from_attributes=True)
