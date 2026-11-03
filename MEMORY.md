@@ -161,6 +161,12 @@
       - *Exportación Consolidada del Hogar a Excel / CSV*: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
       - *Visor de Sincronización Avanzado en UI*: En el panel de configuración del hogar, visualización de deltas archivados en sync/processed/ e inspección o reintento de eventos fallidos en sync/error/ directamente desde la interfaz gráfica.
      - **Mejoras Futuras de Gestión de Copias de Seguridad (Post-Spec 011)**:
+       - *Descarga Directa de Copias Históricas desde el Catálogo Local*: Endpoint GET /backup/download/local/{filename} y acción de descarga por fila en la Tarjeta 5 para descargar respaldos anteriores sin regenerar una copia nueva.
+       - *Ciclo de Vida y Rotación Preventiva de Snapshots Pre-Restauración Sucesivos*: Conversión a archivados de snapshots safety_prerestore_*.db anteriores al encadenar restauraciones consecutivas sin rollback intermedio.
+       - *Sanitización de Nombres de Archivo Personalizados en Windows*: Filtrado de caracteres no válidos (:, *, ?, ", <, >, |) en custom_name para evitar errores OSError (WinError 123).
+       - *Reset de Estado en Streamlit tras Restauración*: Limpieza de session state del selector de archivos y confirmación tras aplicar una restauración para evitar estados residuales o dobles restauraciones involuntarias.
+       - *Ampliación de Tablas Contables Clave*: Inclusión de applied_guideline_strategies y tablas conjuntas (joint_sinking_funds, joint_monthly_contributions) en ESSENTIAL_TABLES para diagnóstico exhaustivo.
+       - *Gradación del Estado DEGRADED en Salud*: Asignación de estado DEGRADED si la integridad SQLite es ok pero la base de datos carece de tablas estructurales esenciales.
        - *Compresión Automática de Copias (.db.gz / .zip)*: Reducción de almacenamiento y ancho de banda en 70-85%.
        - *Cifrado Simétrico con Contraseña Maestra (AES-256-GCM / SQLCipher)*: Protección de bases exportadas o alojadas en nubes personales.
        - *Sincronización Externa de Respaldos (WebDAV / Nextcloud / S3 / Google Drive)*: Envío automático a nubes privadas del usuario.

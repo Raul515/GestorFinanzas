@@ -218,6 +218,12 @@ El **objetivo** de esta especificación es implementar un sistema completo, robu
 
 ## 6. Registro de Mejoras Futuras (Post-Spec)
 
+- **Descarga Directa de Copias Específicas desde el Catálogo Local (Tarjeta 5)**: Incorporar endpoint `GET /backup/download/local/{filename}` y botón de descarga directa por fila en el catálogo local de Streamlit para que el usuario pueda descargar a su ordenador copias históricas o automáticas sin tener que regenerar un nuevo respaldo.
+- **Ciclo de Vida y Rotación Preventiva de Snapshots `safety_prerestore_*.db` Sucesivos**: Al ejecutar restauraciones consecutivas sin rollback intermedio, archivar los snapshots pre-restauración preexistentes a `archived_prerestore_*.db` para evitar su acumulación indefinida en disco y asegurar que siempre exista un único snapshot activo para reversión.
+- **Sanitización de Nombres de Archivo Personalizados en Windows (`custom_name`)**: Filtrar caracteres reservados (`:`, `*`, `?`, `"`, `<`, `>`, `|`) y controlar nombres vacíos al crear copias manuales para prevenir excepciones `OSError` (WinError 123) no controladas.
+- **Reset de Estado en Streamlit tras Restauración Exitosa**: Limpiar las variables de sesión del uploader (`uploader_backup_db`) e invalidar el checkbox de confirmación tras aplicar una restauración para evitar confusión visual o ejecuciones repetidas involuntarias.
+- **Inclusión de Tablas Maestras Recientes en Diagnóstico de Salud y Pre-Inspección**: Añadir `applied_guideline_strategies` (Spec 008) y tablas conjuntas (`joint_sinking_funds`, `joint_monthly_contributions` - Spec 010) a `ESSENTIAL_TABLES` para que el recuento de filas cubra el 100% del espectro contable y patrimonial del usuario.
+- **Gradación Precisa del Estado `DEGRADED` en Diagnóstico de Salud**: Distinguir entre base físicamente íntegra y base semánticamente incompleta (faltando tablas maestras) asignando el estado `DEGRADED` cuando la integridad SQLite pasa pero el esquema contable está vacío o incompleto.
 - **Compresión Automática de Copias (`.db.gz` / `.zip`)**: Soporte para descargas y almacenamiento comprimido en gzip/zip, optimizando en un 70-85% el espacio en disco y el ancho de banda transferido.
 - **Cifrado Simétrico de Copias con Contraseña Maestra (AES-256-GCM / SQLCipher)**: Posibilidad de cifrar el archivo de respaldo con una clave privada antes de descargarlo o sincronizarlo en nube.
 - **Sincronización Externa de Respaldos (WebDAV / Nextcloud / S3 / Google Drive)**: Conector de subida automática de respaldos periódicos a un almacenamiento remoto del usuario.
