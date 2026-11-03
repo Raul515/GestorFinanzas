@@ -645,14 +645,29 @@ def rollback_code(project_root: Optional[Path] = None) -> CodeRollbackResponse:
     logger.info("Iniciando reversión de código desde %s...", snapshot_path)
 
     # Extraer snapshot sobre root con validación anti-Tar-Slip
+    has_version_in_tar = False
     with tarfile.open(snapshot_path, "r:gz") as tar:
         for member in tar.getmembers():
             if not _is_safe_tar_member(member, root):
                 raise ValueError(f"Ruta maliciosa en instantánea de código: {member.name}")
+            norm_name = member.name.replace("\\", "/")
+            if norm_name.endswith("src/backend/data/version.json") or norm_name == "version.json":
+                has_version_in_tar = True
             tar.extract(member, path=root)
+
+    # Si la versión previa no tenía version.json (estado inicial), remover el creado por la actualización
+    v_file = get_version_file(root)
+    if not has_version_in_tar and v_file.is_file():
+        v_file.unlink(missing_ok=True)
 
     # Purgar bytecode
     purge_bytecode(root / "src")
+
+    # Eliminar la instantánea consumida
+    try:
+        snapshot_path.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("No se pudo eliminar la instantánea consumida: %s", exc)
 
     # Obtener versión restaurada
     current_ver = get_current_version(root)

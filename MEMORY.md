@@ -172,3 +172,28 @@
        - *Sincronización Externa de Respaldos (WebDAV / Nextcloud / S3 / Google Drive)*: Envío automático a nubes privadas del usuario.
        - *Alertas Proactivas de Integridad y Respaldo Vencido*: Notificaciones emergentes si transcurren más de 30 días sin backup o ante anomalías estructurales.
        - *Visor de Instantáneas en Modo Solo Lectura*: Inspección temporal de copias antiguas sin sobrescribir la base activa.
+    - **Spec 012: Actualizaciones del Sistema en 1 Clic (In-App OTA Updater) [COMPLETADA]**:
+      - *Arquitectura y Filosofía*: Sistema de actualización Over-The-Air (OTA) desacoplado ejecutado desde la interfaz web sin depender de herramientas de desarrollo locales (Git, Xcode, Make) ni reinicios de compilación complejos.
+      - *Doble Red de Seguridad*:
+        1. Copia de seguridad automática preventiva de la base de datos contable (`sqlite3.backup()` vía `create_backup(backup_type="MANUAL")`).
+        2. Instantánea comprimida del código y requerimientos previos (`backups/code_snapshot_prev.tar.gz`).
+        3. Reversión garantizada en 1 clic (`POST /api/updater/rollback`) que restaura el código y purga bytecode sin tocar las tablas ni transacciones contables.
+      - *Ciclo Staging y Normalización*:
+        - Descarga de tarball de GitHub API (`archive/refs/heads/{branch}.tar.gz`) con cabecera `User-Agent`.
+        - Normalización automática de la subcarpeta raíz de GitHub (`GestorFinanzas-{branch}/` aplanar a `tmp/update_staging`).
+        - Validación sintáctica en staging (`validate_staging_syntax` con `compileall.compile_dir` y verificación de `src/backend/api/main.py` y `src/frontend/app.py`).
+      - *Blindaje y Pruning*:
+        - Lista negra incondicional (`PROTECTED_PATHS` y `PROTECTED_PREFIXES`): `finanzas.db*`, `device_id.txt`, `version.json`, `.env*`, `backups/`, `sync/`, `.git/`, `venv/`.
+        - Pruning seguro de archivos obsoletos utilizando `src/backend/data/installed_manifest.json`.
+        - Detección determinista de dependencias por diff de SHA-256 en `requirements/backend.txt` y `requirements/frontend.txt` (`requires_rebuild=True`).
+      - *Hook Introspectivo de Migraciones SQLite*:
+        - `run_defensive_database_migrations()` añade automáticamente columnas declaradas en modelos SQLAlchemy que falten en las tablas SQLite de producción con valor por defecto nulo, evitando excepciones `no such column`.
+      - *Contratos y Endpoints*:
+        - `GET /api/updater/version`: Metadatos de la versión instalada (`VersionInfo`).
+        - `GET /api/updater/check`: Consulta a GitHub API con caché en RAM de 15 minutos y debounce de 60 segundos (`UpdateCheckResponse`).
+        - `POST /api/updater/apply`: Aplicación del paquete (`UpdateApplyResponse`).
+        - `POST /api/updater/rollback`: Reversión atómica de código (`CodeRollbackResponse`).
+      - *Frontend en Streamlit*:
+        - Pestaña `🚀 Actualizaciones del Sistema` (tab 20) con badge de versión, banner de reversión en 1 clic, botón de comprobación con debounce, notas del commit remoto, checkbox de confirmación previa, barra de progreso interactiva y aviso destacado ante nuevas dependencias (`requires_rebuild`).
+      - *Docker y Sincronización*:
+        - Montaje bidireccional `- ../src/frontend:/app/src/frontend` y `- ../requirements:/app/requirements` en `docker_local/docker-compose.yml` para propagación inmediata al host y contenedor frontend.

@@ -452,3 +452,8 @@ backups/
 *.db.bak
 
 
+
+# ACTUALIZACIONES EN INTERFAZ OTA UPDATER (SPEC 012)
+tmp/
+tmp/**
+backups/code_snapshot_prev.tar.gz

@@ -11,6 +11,8 @@ services:
     volumes:
       - ../src/backend:/app/src/backend
       - ../src/backend/data:/app/src/backend/data
+      - ../src/frontend:/app/src/frontend
+      - ../requirements:/app/requirements
       - ../sync:/app/sync
       - ../backups:/app/backups
     environment:
@@ -34,8 +36,6 @@ services:
     environment:
       - PYTHONPATH=/app/src:/app
       - API_URL=http://backend_gestor:8000
-
-
 
 networks: 
   app-network:
