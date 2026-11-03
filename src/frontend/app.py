@@ -145,6 +145,7 @@ st.title("Gestor de Finanzas Personales")
 try:
     joint_status = api_client.get_joint_status()
     if joint_status.get("is_configured"):
+        api_client.trigger_process_inbox()
         _render_personal_assisted_contribution_banner(year_selected)
 except Exception as e:
     logger.warning("Error al comprobar el estado de la cuenta conjunta: %s", e)

@@ -129,6 +129,7 @@ class JointSyncService:
             # Renombrado atómico en el mismo sistema de ficheros
             os.replace(tmp_path, final_path)
             logger.info("Evento delta emitido con éxito a outbox: %s", final_path.name)
+            self._rotate_outbox()
         except Exception as exc:
             logger.error("Error emitiendo evento delta a outbox (%s): %s", eff_event_id, exc)
             if tmp_path.exists():
@@ -139,6 +140,27 @@ class JointSyncService:
             raise
 
         return event_payload
+
+    def _rotate_outbox(self, max_files: int = 50) -> None:
+        """
+        Mantiene un límite máximo de archivos en sync/outbox/ eliminando los más
+        antiguos para evitar saturación indefinida del disco.
+        """
+        try:
+            outbox_files = [
+                f for f in self.outbox_dir.iterdir()
+                if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+            ]
+            if len(outbox_files) > max_files:
+                outbox_files.sort(key=lambda f: f.stat().st_mtime)
+                excess = len(outbox_files) - max_files
+                for old_f in outbox_files[:excess]:
+                    try:
+                        old_f.unlink()
+                    except OSError:
+                        pass
+        except Exception as exc:
+            logger.warning("Error en rotación de outbox: %s", exc)
 
     def process_inbox(self, db: Session) -> Dict[str, Any]:
         """
@@ -242,8 +264,20 @@ class JointSyncService:
             self._apply_contribution_event(db, event)
         elif event.entity_type == SyncEntityType.SINKING_FUND:
             self._apply_sinking_fund_event(db, event)
+        elif event.entity_type == SyncEntityType.ACCOUNT:
+            self._apply_account_event(db, event)
         else:
             logger.warning("Tipo de entidad no manejada en sincronización: %s", event.entity_type)
+
+    def _apply_account_event(self, db: Session, event: SyncEventPayload) -> None:
+        """Aplica eventos sobre la cuenta del hogar (ej. DELETE para reset remoto a Estado Cero)."""
+        if event.action == SyncAction.DELETE:
+            from backend.database.componentes.sqlite_crud import SQLiteRepository
+            repo = SQLiteRepository(db)
+            repo.reset_joint_account()
+            logger.info("Cuenta conjunta reseteada al Estado Cero mediante evento remoto ACCOUNT (DELETE).")
+        elif event.action == SyncAction.UPSERT:
+            logger.info("Evento ACCOUNT (UPSERT) procesado en inbox.")
 
     def _apply_transaction_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica mutación sobre transacciones del hogar con resolución determinista LWW por timestamp_utc."""
@@ -483,17 +517,20 @@ class JointSyncService:
             if last_event:
                 last_applied_dt = last_event.applied_at
 
+        is_synced = (inbox_pending == 0 and error_count == 0)
+
         return {
             "outbox_pending_count": outbox_pending,
             "inbox_pending_count": inbox_pending,
             "error_count": error_count,
             "last_applied_at": last_applied_dt.isoformat() if last_applied_dt else None,
-            "is_synchronized": outbox_pending == 0 and inbox_pending == 0,
+            "is_synchronized": is_synced,
         }
 
-    def clear_sync_folders(self) -> None:
+    def clear_sync_folders(self, keep_outbox: bool = False) -> None:
         """Elimina todos los archivos delta de las carpetas de sincronización para volver al Estado Cero."""
-        for folder in (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir):
+        target_folders = (self.inbox_dir, self.processed_dir, self.error_dir) if keep_outbox else (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir)
+        for folder in target_folders:
             if folder.exists():
                 for file_path in folder.glob("*"):
                     if file_path.is_file():
@@ -532,6 +569,8 @@ class JointSyncService:
                             "contribution_strategy": payload.get("contribution_strategy", "NOMINAL_TEMPLATE"),
                             "member_a_reference_income": payload.get("member_a_reference_income", 0.0),
                             "member_b_reference_income": payload.get("member_b_reference_income", 0.0),
+                            "member_a_contribution_pct": payload.get("member_a_contribution_pct", 50.0),
+                            "member_b_contribution_pct": payload.get("member_b_contribution_pct", 50.0),
                             "member_a_name": payload.get("member_a_name", "Miembro A"),
                             "member_b_name": payload.get("member_b_name", "Miembro B"),
                         }

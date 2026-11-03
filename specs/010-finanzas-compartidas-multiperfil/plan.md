@@ -225,15 +225,15 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 6. [x] **R-6 (Reversión y Eliminación de Aportaciones)**:
    - Creado endpoint `DELETE /joint/contributions/{contribution_id}` en FastAPI con botón/expander de reversión en Streamlit, reversión automática de saldos de huchas asociadas y eliminación en cascada bidireccional desde la transacción personal en `/transactions/{id}` con emisión de tombstones `CONTRIBUTION (DELETE)`.
 
-#### Paso 3: Resiliencia de Transporte y Ciclo de Vida (R-7, R-8, R-9, R-10)
-7. **R-7 (Gestión de Outbox y Estado de Sincronización)**:
-   - Ajustar el cálculo de `is_synchronized` para evaluar la frescura y ausencia de errores en `inbox`, e implementar un archivado/rotación limpia de deltas de outbox.
-8. **R-8 (Preservación de Porcentajes de Aportación en Invitación)**:
-   - Extraer `member_a_contribution_pct` y `member_b_contribution_pct` de la invitación en `accept_joint_invitation()`.
-9. **R-9 (Propagación Remota de Reset de Hogar)**:
-   - Emitir evento `ACCOUNT (DELETE)` antes de vaciar las carpetas locales en `reset_joint_account()`.
-10. **R-10 (Sincronización en Inicio de Aplicación)**:
-    - Ejecutar `trigger_process_inbox()` al inicializar `app.py` en cualquier contexto de perfil.
+#### Paso 3: Resiliencia de Transporte y Ciclo de Vida (R-7, R-8, R-9, R-10) [COMPLETADO]
+7. [x] **R-7 (Gestión de Outbox y Estado de Sincronización)**:
+   - Ajustado el cálculo de `is_synchronized` para evaluar la frescura y ausencia de errores en `inbox` (`inbox_pending == 0 and error_count == 0`), e implementada la rotación automática de deltas viejos en `sync/outbox/` mediante `_rotate_outbox()`.
+8. [x] **R-8 (Preservación de Porcentajes de Aportación en Invitación)**:
+   - Extraídos `member_a_contribution_pct` y `member_b_contribution_pct` de la invitación en `get_pending_invitation()` y asignados en `accept_joint_invitation()`.
+9. [x] **R-9 (Propagación Remota de Reset de Hogar)**:
+   - Emisión de evento delta `ACCOUNT (DELETE)` a `sync/outbox/` en `reset_joint_account()` antes de purgar las tablas, y soporte en `_apply_account_event()` para que el dispositivo receptor restablezca su estado local a Estado Cero.
+10. [x] **R-10 (Sincronización en Inicio de Aplicación)**:
+    - Ejecución reactiva de `trigger_process_inbox()` al inicializar o refrescar `app.py` en cualquier contexto de perfil para mantener los banners e indicadores al día.
 
 #### Paso 4: Robustez de Catálogo (R-11)
 11. **R-11 (Sincronización de Subcategorías)**:

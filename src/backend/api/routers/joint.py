@@ -226,8 +226,8 @@ def accept_joint_invitation(
         split_mode=schemas.SplitMode(split_val) if hasattr(schemas.SplitMode, split_val) else schemas.SplitMode.EQUAL_50_50,
         member_a_reference_income=float(invitation.get("member_a_reference_income", 0.0)),
         member_b_reference_income=float(invitation.get("member_b_reference_income", 0.0)),
-        member_a_contribution_pct=50.0,
-        member_b_contribution_pct=50.0,
+        member_a_contribution_pct=float(invitation.get("member_a_contribution_pct", 50.0)),
+        member_b_contribution_pct=float(invitation.get("member_b_contribution_pct", 50.0)),
         local_profile=schemas.ProfileIdentifier.MEMBER_B,
         remote_profile=schemas.ProfileIdentifier.MEMBER_A,
     )
@@ -258,9 +258,22 @@ def reset_joint_account(
     """
     Purga la cuenta conjunta completa y limpia las carpetas de sincronización,
     devolviendo el sistema al Estado Cero de monousuario.
+    Emite un evento ACCOUNT (DELETE) para propagar el reset a la pareja.
     """
+    account = repo.get_joint_account()
+    if account:
+        try:
+            sync_service.emit_event(
+                entity_type=schemas.SyncEntityType.ACCOUNT,
+                action=schemas.SyncAction.DELETE,
+                payload={"household_name": account.household_name},
+                origin_device_id=sync_service.local_device_id,
+            )
+        except Exception as exc:
+            logger.warning("No se pudo emitir evento ACCOUNT DELETE en reset: %s", exc)
+
     repo.reset_joint_account()
-    sync_service.clear_sync_folders()
+    sync_service.clear_sync_folders(keep_outbox=True)
     logger.info("Cuenta conjunta reseteada al Estado Cero exitosamente.")
     return {"status": "success", "message": "Cuenta conjunta purgada y restablecida al Estado Cero."}
 

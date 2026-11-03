@@ -4,6 +4,7 @@ Verifica los contratos HTTP, códigos de estado (200, 201, 400, 404, 409) y obse
 """
 
 from pathlib import Path
+import json
 import shutil
 import tempfile
 import pytest
@@ -346,8 +347,8 @@ def test_joint_sync_endpoints(client: TestClient, api_sync_dir: str):
     assert process_resp.json()["status"] == "ok"
 
 
-def test_joint_reset_lifecycle(client: TestClient):
-    """Verifica el restablecimiento completo de la cuenta conjunta a Estado Cero (/joint/reset)."""
+def test_joint_reset_lifecycle(client: TestClient, api_sync_dir: str):
+    """Verifica el restablecimiento completo de la cuenta conjunta a Estado Cero (/joint/reset) y emisión de delta ACCOUNT (DELETE)."""
     # 1. Configurar cuenta y datos
     client.post(
         "/joint/setup",
@@ -379,6 +380,14 @@ def test_joint_reset_lifecycle(client: TestClient):
     assert client.get("/joint/sinking-funds").json() == []
     assert client.get("/joint/transactions").json() == []
 
+    # 4. Verificar que se emitió el delta ACCOUNT (DELETE) a outbox para la pareja
+    outbox_files = [f for f in (Path(api_sync_dir) / "outbox").glob("*.json") if not f.name.endswith(".tmp")]
+    assert len(outbox_files) > 0
+    all_events = [json.loads(f.read_text(encoding="utf-8")) for f in outbox_files]
+    delete_account_events = [e for e in all_events if e.get("entity_type") == "ACCOUNT" and e.get("action") == "DELETE"]
+    assert len(delete_account_events) == 1
+    assert delete_account_events[0]["payload"]["household_name"] == "Hogar a Purgar"
+
 
 def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_dir: str):
     """Verifica la detección automática de invitación y adopción en 1 clic (Opción A)."""
@@ -404,6 +413,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
             "split_mode": "EQUAL_50_50",
             "member_a_reference_income": 2500.0,
             "member_b_reference_income": 2100.0,
+            "member_a_contribution_pct": 65.0,
+            "member_b_contribution_pct": 35.0,
             "member_a_name": "David",
             "member_b_name": "Raquel",
         },
@@ -418,6 +429,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert res_inv["has_invitation"] is True
     assert res_inv["invitation"]["household_name"] == "Hogar Compartido D&R"
     assert res_inv["invitation"]["member_a_name"] == "David"
+    assert res_inv["invitation"]["member_a_contribution_pct"] == 65.0
+    assert res_inv["invitation"]["member_b_contribution_pct"] == 35.0
 
     # 4. Aceptar la invitación en 1 clic
     accept_resp = client.post("/joint/accept-invitation")
@@ -426,6 +439,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert acc["household_name"] == "Hogar Compartido D&R"
     assert acc["member_a_name"] == "David"
     assert acc["member_b_name"] == "Raquel"
+    assert acc["member_a_contribution_pct"] == 65.0
+    assert acc["member_b_contribution_pct"] == 35.0
     assert acc["local_profile"] == "MEMBER_B"
     assert acc["remote_profile"] == "MEMBER_A"
 

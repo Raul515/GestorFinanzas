@@ -313,15 +313,22 @@ def test_get_sync_status(temp_sync_dir: str, db_session: Session):
     assert status["outbox_pending_count"] == 0
     assert status["inbox_pending_count"] == 0
 
-    # Emitir evento a outbox
+    # Emitir evento a outbox (el nodo sigue sincronizado porque inbox está vacío y no hay errores)
     service.emit_event(
         entity_type=SyncEntityType.CONTRIBUTION,
         action=SyncAction.UPSERT,
         payload={"month": "2026-11", "amount": 500.0},
     )
     status_pending = service.get_sync_status(db_session)
-    assert status_pending["is_synchronized"] is False
+    assert status_pending["is_synchronized"] is True
     assert status_pending["outbox_pending_count"] == 1
+
+    # Colocar evento pendiente en inbox: el nodo deja de estar sincronizado hasta procesarlo
+    inbox_file = Path(temp_sync_dir) / "inbox" / "evt_pending.json"
+    inbox_file.write_text("{}", encoding="utf-8")
+    status_inbox = service.get_sync_status(db_session)
+    assert status_inbox["is_synchronized"] is False
+    assert status_inbox["inbox_pending_count"] == 1
 
 
 def test_device_id_persistence_and_invitation_detection(temp_sync_dir: str):
@@ -543,6 +550,62 @@ def test_contribution_uuid_and_multi_contribution_same_month(temp_sync_dir: str,
     assert res_del["processed_count"] == 1
     assert db_session.query(JointMonthlyContribution).filter_by(uuid=c1_uuid).first() is None
     assert db_session.query(JointMonthlyContribution).filter_by(uuid=c2_uuid).first() is not None
+
+
+def test_outbox_rotation(temp_sync_dir: str):
+    """Verifica la rotación de outbox limitando el número de deltas viejos acumulados."""
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_ROTATION")
+    
+    # Emitir 6 eventos con rotación forzada a un máximo de 3
+    for i in range(6):
+        service.emit_event(
+            entity_type=SyncEntityType.CONTRIBUTION,
+            action=SyncAction.UPSERT,
+            payload={"month": f"2026-0{i+1}", "amount": 100.0 * (i + 1)},
+        )
+        service._rotate_outbox(max_files=3)
+
+    remaining_outbox = [f for f in service.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")]
+    assert len(remaining_outbox) == 3
+
+
+def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
+    """Verifica que un evento remoto ACCOUNT (DELETE) restablezca la base local a Estado Cero."""
+    from backend.database.componentes.sqlite_crud import SQLiteRepository
+    from backend.domain.schemas.joint import JointAccountSetupRequest, CohabitationStage, ContributionStrategy, SplitMode, ProfileIdentifier
+    repo = SQLiteRepository(db_session)
+
+    # Configurar cuenta local previa
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Test Reset Remoto",
+        cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2000.0,
+        member_b_reference_income=2000.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+    assert repo.get_joint_account() is not None
+
+    # Simular recepción de ACCOUNT (DELETE) desde el dispositivo de la pareja
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    reset_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"household_name": "Casa Test Reset Remoto"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
+        json.dump(reset_evt, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+    # La cuenta ha sido reseteada al Estado Cero
+    assert repo.get_joint_account() is None
 
 
 
