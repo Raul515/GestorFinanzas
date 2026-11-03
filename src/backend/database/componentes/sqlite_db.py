@@ -1,6 +1,7 @@
 import logging
 import os
-from sqlalchemy import create_engine
+from sqlite3 import Connection as SQLite3Connection
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from backend.domain.models.base import Base
 
@@ -15,6 +16,17 @@ SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
+
+
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """Activa el soporte de claves foráneas y restricciones referenciales en SQLite."""
+    if isinstance(dbapi_connection, SQLite3Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():

@@ -670,6 +670,11 @@ class SQLiteRepository(IRepository):
             if target_fund:
                 target_fund.current_balance += fund.current_balance
 
+        # Desvincular explícitamente cualquier transacción para que joint_sinking_fund_id quede en None
+        self.db.query(joint_model.JointTransaction).filter(
+            joint_model.JointTransaction.joint_sinking_fund_id == fund_id
+        ).update({"joint_sinking_fund_id": None})
+
         self.db.delete(fund)
         self.db.commit()
         return True

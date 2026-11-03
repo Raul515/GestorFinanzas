@@ -267,20 +267,28 @@ class JointSyncService:
             return
 
         if event.action == SyncAction.UPSERT:
-            # Resolver subcategoría por nombre si viene en el payload, para evitar colisión de IDs locales
-            subcat_id = payload.get("joint_subcategory_id")
+            # Resolver subcategoría con prioridad estricta por nombre para evitar colisión de IDs locales
+            subcat_id = None
             subcat_name = payload.get("subcategory_name")
-            if subcat_name and not subcat_id:
+            if subcat_name:
                 subcat = db.query(JointSubcategory).filter(JointSubcategory.name == subcat_name).first()
                 if subcat:
                     subcat_id = subcat.id
+            if subcat_id is None and payload.get("joint_subcategory_id"):
+                subcat_id = payload.get("joint_subcategory_id")
 
-            sinking_id = payload.get("joint_sinking_fund_id")
+            # Resolver hucha con prioridad estricta por nombre para evitar colisión de IDs locales
+            sinking_id = None
             sinking_name = payload.get("sinking_fund_name")
-            if sinking_name and not sinking_id:
-                fund = db.query(JointSinkingFund).filter(JointSinkingFund.name == sinking_name).first()
+            if sinking_name:
+                fund = db.query(JointSinkingFund).filter(
+                    JointSinkingFund.joint_account_id == 1,
+                    JointSinkingFund.name == sinking_name,
+                ).first()
                 if fund:
                     sinking_id = fund.id
+            if sinking_id is None and payload.get("joint_sinking_fund_id"):
+                sinking_id = payload.get("joint_sinking_fund_id")
 
             tx_date = datetime.strptime(payload["date"], "%Y-%m-%d").date() if isinstance(payload["date"], str) else payload["date"]
             amount = float(payload["amount"])
@@ -315,17 +323,27 @@ class JointSyncService:
                 deducted = 0.0
                 if sinking_id:
                     new_fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if new_fund and new_fund.current_balance > 0:
+                    payload_deduction = payload.get("sinking_fund_deduction")
+                    if payload_deduction is not None:
+                        deducted = float(payload_deduction)
+                    elif new_fund and new_fund.current_balance > 0:
                         deducted = min(float(new_fund.current_balance), float(amount))
-                        new_fund.current_balance = round(float(new_fund.current_balance) - deducted, 2)
+
+                    if new_fund and new_fund.current_balance > 0 and deducted > 0:
+                        new_fund.current_balance = round(max(0.0, float(new_fund.current_balance) - deducted), 2)
                 existing_tx.sinking_fund_deduction = deducted
             else:
                 deducted = 0.0
                 if sinking_id:
                     fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if fund and fund.current_balance > 0:
+                    payload_deduction = payload.get("sinking_fund_deduction")
+                    if payload_deduction is not None:
+                        deducted = float(payload_deduction)
+                    elif fund and fund.current_balance > 0:
                         deducted = min(float(fund.current_balance), float(amount))
-                        fund.current_balance = round(float(fund.current_balance) - deducted, 2)
+
+                    if fund and fund.current_balance > 0 and deducted > 0:
+                        fund.current_balance = round(max(0.0, float(fund.current_balance) - deducted), 2)
 
                 new_tx = JointTransaction(
                     uuid=tx_uuid,

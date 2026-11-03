@@ -362,3 +362,110 @@ def test_device_id_persistence_and_invitation_detection(temp_sync_dir: str):
     assert inv["household_name"] == "Vidita con Evita"
     assert inv["member_a_name"] == "Raúl"
 
+
+def test_cross_id_collision_name_resolution(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """
+    R-2: Certifica que la ingesta de transacciones resuelva prioritariamente por nombre
+    descartando IDs autoincrementales discordantes entre dispositivos.
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_USUARIO_B")
+
+    # En este dispositivo B existen dos huchas:
+    # ID 1: "Coche" (saldo 500 €)
+    # ID 2: "Vacaciones" (saldo 1000 €)
+    fund_coche = JointSinkingFund(
+        joint_account_id=1,
+        name="Coche",
+        target_amount=3000.0,
+        current_balance=500.0,
+    )
+    fund_vacaciones = JointSinkingFund(
+        joint_account_id=1,
+        name="Vacaciones",
+        target_amount=2000.0,
+        current_balance=1000.0,
+    )
+    db_session.add(fund_coche)
+    db_session.add(fund_vacaciones)
+    db_session.commit()
+    db_session.refresh(fund_coche)
+    db_session.refresh(fund_vacaciones)
+
+    # Llega una transacción desde Dispositivo A imputada a "Vacaciones".
+    # En Dispositivo A, "Vacaciones" tenía ID = 1 (el ID de Coche en B).
+    tx_uuid = str(uuid.uuid4())
+    evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "TRANSACTION",
+        "action": "UPSERT",
+        "origin_device_id": "PC_USUARIO_A",
+        "timestamp_utc": "2026-11-03T18:00:00Z",
+        "payload": {
+            "uuid": tx_uuid,
+            "date": "2026-11-03",
+            "amount": 200.0,
+            "description": "Hotel Playa",
+            "joint_sinking_fund_id": fund_coche.id,  # ID 1 en A
+            "sinking_fund_name": "Vacaciones",       # Pero nombre es Vacaciones (ID 2 en B)
+            "sinking_fund_deduction": 200.0,
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_cross_id.json", "w", encoding="utf-8") as f:
+        json.dump(evt, f)
+
+    service.process_inbox(db_session)
+
+    # La transacción debe haberse asignado a fund_vacaciones (ID 2), NO a fund_coche (ID 1)
+    tx = db_session.query(JointTransaction).filter_by(uuid=tx_uuid).first()
+    assert tx is not None
+    assert tx.joint_sinking_fund_id == fund_vacaciones.id
+
+    # El saldo de Vacaciones se redujo a 800 €, mientras que Coche permanece intacto en 500 €
+    db_session.refresh(fund_vacaciones)
+    db_session.refresh(fund_coche)
+    assert fund_vacaciones.current_balance == 800.0
+    assert fund_coche.current_balance == 500.0
+
+
+def test_foreign_keys_pragma_and_sinking_fund_deletion(db_session: Session, setup_household_db: dict):
+    """
+    R-3: Certifica que al eliminar una hucha, las transacciones asociadas queden
+    limpiamente desvinculadas (joint_sinking_fund_id = None) evitando huérfanos.
+    """
+    from backend.database.componentes.sqlite_crud import SQLiteRepository
+
+    repo = SQLiteRepository(db_session)
+    fund = JointSinkingFund(
+        joint_account_id=1,
+        name="Fondo Prueba Borrado",
+        target_amount=1000.0,
+        current_balance=200.0,
+    )
+    db_session.add(fund)
+    db_session.commit()
+    db_session.refresh(fund)
+
+    tx = JointTransaction(
+        uuid=str(uuid.uuid4()),
+        joint_account_id=1,
+        date=datetime.now(timezone.utc).date(),
+        amount=50.0,
+        description="Gasto prueba hucha",
+        joint_sinking_fund_id=fund.id,
+        created_by_profile="MEMBER_A",
+    )
+    db_session.add(tx)
+    db_session.commit()
+    db_session.refresh(tx)
+
+    assert tx.joint_sinking_fund_id == fund.id
+
+    # Eliminar hucha
+    ok = repo.delete_joint_sinking_fund(fund.id)
+    assert ok is True
+
+    # La transacción debe seguir existiendo pero con joint_sinking_fund_id = None
+    db_session.refresh(tx)
+    assert tx.joint_sinking_fund_id is None
+
+
