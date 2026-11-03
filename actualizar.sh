@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 echo "=========================================="
@@ -6,7 +6,7 @@ echo "  🚀 Actualizando Gestor de Finanzas"
 echo "=========================================="
 
 REPO_URL="https://github.com/Raul515/GestorFinanzas"
-BRANCH="feat/spec-010-multiperfil-parejas"
+BRANCH="${1:-develop}"
 
 # Comprobar si existe Git y el directorio .git
 if command -v git >/dev/null 2>&1 && [ -d .git ]; then
