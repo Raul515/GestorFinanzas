@@ -13,6 +13,7 @@ import uuid
 import pytest
 from sqlalchemy.orm import Session
 
+from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.domain.models.joint import (
     JointAccount,
     JointAppliedSyncEvent,
@@ -23,6 +24,11 @@ from backend.domain.models.joint import (
     JointTransaction,
 )
 from backend.domain.schemas.joint import (
+    CohabitationStage,
+    ContributionStrategy,
+    JointAccountSetupRequest,
+    ProfileIdentifier,
+    SplitMode,
     SyncAction,
     SyncEntityType,
     SyncEventPayload,
@@ -555,7 +561,7 @@ def test_contribution_uuid_and_multi_contribution_same_month(temp_sync_dir: str,
 def test_outbox_rotation(temp_sync_dir: str):
     """Verifica la rotación de outbox limitando el número de deltas viejos acumulados."""
     service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_ROTATION")
-    
+
     # Emitir 6 eventos con rotación forzada a un máximo de 3
     for i in range(6):
         service.emit_event(
@@ -563,7 +569,7 @@ def test_outbox_rotation(temp_sync_dir: str):
             action=SyncAction.UPSERT,
             payload={"month": f"2026-0{i+1}", "amount": 100.0 * (i + 1)},
         )
-        service._rotate_outbox(max_files=3)
+        service.rotate_outbox(max_files=3)
 
     remaining_outbox = [f for f in service.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")]
     assert len(remaining_outbox) == 3
@@ -571,8 +577,6 @@ def test_outbox_rotation(temp_sync_dir: str):
 
 def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
     """Verifica que un evento remoto ACCOUNT (DELETE) restablezca la base local a Estado Cero."""
-    from backend.database.componentes.sqlite_crud import SQLiteRepository
-    from backend.domain.schemas.joint import JointAccountSetupRequest, CohabitationStage, ContributionStrategy, SplitMode, ProfileIdentifier
     repo = SQLiteRepository(db_session)
 
     # Configurar cuenta local previa
@@ -604,8 +608,9 @@ def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
 
     res = service.process_inbox(db_session)
     assert res["processed_count"] == 1
-    # La cuenta ha sido reseteada al Estado Cero
+    # La cuenta ha sido reseteada al Estado Cero y no quedan eventos aplicados huérfanos
     assert repo.get_joint_account() is None
+    assert db_session.query(JointAppliedSyncEvent).count() == 0
 
 
 

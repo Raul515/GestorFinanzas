@@ -129,7 +129,7 @@ class JointSyncService:
             # Renombrado atómico en el mismo sistema de ficheros
             os.replace(tmp_path, final_path)
             logger.info("Evento delta emitido con éxito a outbox: %s", final_path.name)
-            self._rotate_outbox()
+            self.rotate_outbox()
         except Exception as exc:
             logger.error("Error emitiendo evento delta a outbox (%s): %s", eff_event_id, exc)
             if tmp_path.exists():
@@ -141,7 +141,7 @@ class JointSyncService:
 
         return event_payload
 
-    def _rotate_outbox(self, max_files: int = 50) -> None:
+    def rotate_outbox(self, max_files: int = 50) -> None:
         """
         Mantiene un límite máximo de archivos en sync/outbox/ eliminando los más
         antiguos para evitar saturación indefinida del disco.
@@ -161,6 +161,8 @@ class JointSyncService:
                         pass
         except Exception as exc:
             logger.warning("Error en rotación de outbox: %s", exc)
+
+    _rotate_outbox = rotate_outbox
 
     def process_inbox(self, db: Session) -> Dict[str, Any]:
         """
@@ -225,14 +227,15 @@ class JointSyncService:
             try:
                 self._apply_event(db, event)
 
-                # Registrar evento en la tabla de aplicados para idempotencia futura
-                applied_record = JointAppliedSyncEvent(
-                    event_id=event.event_id,
-                    entity_type=event.entity_type.value,
-                    action=event.action.value,
-                )
-                db.add(applied_record)
-                db.commit()
+                # Registrar evento en la tabla de aplicados para idempotencia futura (salvo reset total a Estado Cero)
+                if not (event.entity_type == SyncEntityType.ACCOUNT and event.action == SyncAction.DELETE):
+                    applied_record = JointAppliedSyncEvent(
+                        event_id=event.event_id,
+                        entity_type=event.entity_type.value,
+                        action=event.action.value,
+                    )
+                    db.add(applied_record)
+                    db.commit()
 
                 self._archive_file(file_path)
                 processed_count += 1
@@ -256,8 +259,6 @@ class JointSyncService:
 
     def _apply_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica la mutación en SQLite bajo reglas de Last-Write-Wins (LWW)."""
-        payload = event.payload
-
         if event.entity_type == SyncEntityType.TRANSACTION:
             self._apply_transaction_event(db, event)
         elif event.entity_type == SyncEntityType.CONTRIBUTION:
@@ -556,7 +557,8 @@ class JointSyncService:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 entity = data.get("entity_type")
-                if entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT":
+                action = data.get("action")
+                if (entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT") and (action in (SyncAction.UPSERT.value, "UPSERT")):
                     origin = data.get("origin_device_id")
                     if origin != self.local_device_id or origin == "LOCAL_DEVICE":
                         payload = data.get("payload", {})
