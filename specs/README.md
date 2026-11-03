@@ -16,7 +16,7 @@
 | **008** | [Pautas de Gestión Determinista](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/008-pautas-gestion-determinista/spec.md) | **Completada** | Pautas de actuación, compensación presupuestaria, ejecución atómica, colchón prudencial y barrido de fin de mes bajo la regla 50/30/20. |
 | **009** | [Profiling de Latencia en APIs Externas](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/009-metricas-latencia-apis/spec.md) | **Completada** | Monitorización en milisegundos para Yahoo Finance, BCE y Gemini con búfer en RAM, percentiles y alertas. |
 | **010** | [Finanzas Compartidas y Multiperfil](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/010-finanzas-compartidas-multiperfil/spec.md) | **Completada** | Arquitectura multiperfil para parejas con privacidad real, fondo común del hogar, huchas de amortización y sincronización asíncrona P2P con Syncthing. |
-
+| **011** | [Gestión y Copias de Seguridad (Backup & Restore)](file:///c:/Users/Raul_515/Desktop/ProyectosAntigravity/GestorFinanzas/specs/011-gestion-copias-seguridad-backup-restore/spec.md) | **En Definición** | Gestión y copias de seguridad de la base de datos en interfaz: copias en caliente atómicas (`sqlite3.backup`), descarga `.db`, validación con `PRAGMA integrity_check`, snapshot previo de protección y catálogo de 5 instantáneas locales. |
 
 ---
 
