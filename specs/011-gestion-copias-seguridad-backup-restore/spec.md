@@ -68,6 +68,9 @@ El **objetivo** de esta especificación es implementar un sistema completo, robu
     - `last_modified`: Timestamp ISO-8601 de última escritura.
     - `integrity_check_passed`: Booleano resultante de ejecutar `PRAGMA integrity_check`.
     - `table_counts`: Diccionario con el conteo de filas de tablas clave (`transactions`, `categories`, `subcategories`, `monthly_budgets`, `emergency_fund`, `joint_accounts`, `joint_transactions`, `watchlist`).
+    - `days_since_last_backup`: Entero opcional (días transcurridos desde el respaldo más reciente en `backups/`, o `None` si no existe ninguno).
+    - `last_backup_at`: Timestamp ISO-8601 opcional del último respaldo encontrado.
+    - `backup_warning_needed`: Booleano (`True` si han transcurrido más de 14 días sin respaldo o si no existe ninguna copia histórica).
   - Esquema `BackupMetadata`:
     - `filename`: Nombre del archivo de respaldo (ej. `manual_backup_20261103_093000.db`).
     - `created_at`: Fecha y hora de creación ISO-8601.
@@ -151,6 +154,7 @@ El **objetivo** de esta especificación es implementar un sistema completo, robu
   1. **Tarjeta 1: Diagnóstico de Salud de la Base de Datos**:
      - Badges de estado: `🟢 Base de Datos Saludable` o `🔴 Requiere Atención`.
      - Métricas en columnas: Tamaño del fichero en MB, fecha de última modificación, estado de integridad de SQLite (`PRAGMA integrity_check`) y Hash SHA-256 corto.
+     - **Aviso Preventivo de Ausencia de Respaldos**: Si `backup_warning_needed == True` (han transcurrido más de 14 días sin respaldo o no existe copia previa), muestra un banner destacado `st.warning("⚠️ Han transcurrido más de N días sin realizar una copia de seguridad. Te recomendamos descargar o crear una instantánea ahora.")` con botón de acción directa.
      - Desplegable con el conteo de registros por tabla (Transacciones, Presupuestos, Categorías, Metas de Ahorro, etc.).
   2. **Tarjeta 2: Descargar y Crear Copias de Seguridad**:
      - Botón destacado `📥 Descargar Copia de Seguridad (.db)` que descarga directamente el archivo SQLite consistente en el navegador del usuario.

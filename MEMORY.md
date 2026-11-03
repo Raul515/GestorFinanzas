@@ -148,16 +148,14 @@
         - Permitir al usuario dar de alta nuevas subcategorías personalizadas directamente desde la ventana de configuración, asociándolas a su categoría correspondiente (Necesidades Básicas, Deseos o Ahorro e Inversión).
         - Gestión y mantenimiento del catálogo de subcategorías con validaciones de integridad referencial para proteger presupuestos y transacciones históricas.
         - Alcance y detalles definitivos a formalizar en su correspondiente especificación formal previa (specs/).
-     - **Mejoras Futuras de Finanzas Compartidas (Post-Spec 010)**:
-       - *Alerta de Sobregasto en Huchas de Amortización*: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
-       - *Exportación Consolidada del Hogar a Excel / CSV*: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
-       - *Visor de Sincronización Avanzado en UI*: En el panel de configuración del hogar, visualización de deltas archivados en `sync/processed/` e inspección o reintento de eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
-     - **Gestión y Copias de Seguridad de Base de Datos en Interfaz (Backup & Restore)**:
-       - *Objetivo y Alcance*: Dotar a la aplicación de un módulo de copias de seguridad accesible desde la interfaz gráfica para proteger el patrimonio y el histórico financiero ante fallos de disco o errores operativos, sin requerir manipulación manual de archivos SQLite.
-       - *Funcionalidades Clave previstas*:
-         - **Generación y Descarga en 1-Clic**: Creación de instantánea atómica y consistente de `finanzas.db` en caliente (usando `VACUUM INTO` o `sqlite3.backup` de SQLite), descargable al vuelo desde Streamlit o almacenada en una carpeta rotativa local `backups/`.
-         - **Monitorización e Información del Último Backup**: Tarjeta visual en ajustes mostrando fecha y hora del último respaldo realizado, tamaño del fichero y aviso preventivo si han transcurrido más de N días sin respaldo.
-         - **Respaldos Automáticos Periódicos**: Opción configurable de copia automática silenciosa en segundo plano (ej. semanal o mensual) con política de retención rotativa (ej. conservar los 5 backups más recientes).
-         - **Restauración Asistida con Comprobación de Integridad**: Posibilidad de subir o seleccionar un archivo de copia con verificación estructural previa (`PRAGMA integrity_check`) y confirmación protegida.
-
-
+      - *Análisis Crítico de Persistencia y Convivencia con Actualizaciones de Código (OTA Updates)*:
+        1. **Blindaje de Datos Locales en Actualizaciones**: Gracias a la Spec 012 (OTA Updater), el archivo src/backend/data/finanzas.db está blindado en la lista negra y jamás se sobrescribe ni se borra. Por tanto, las subcategorías personalizadas que el usuario cree en su base de datos local nunca se perderán al actualizar el código de la aplicación.
+        2. **Idempotencia Obligatoria en el Sembrado (init_db_data.py)**: Si futuras versiones del código introducen nuevas subcategorías oficiales por defecto, el sembrado debe ser estrictamente no destructivo e idempotente (get_or_create por nombre/slug normalizado). **Queda prohibido usar IDs primarios fijos/hardcodeados** para evitar colisiones con los IDs autoincrementales asignados por SQLite a las subcategorías personales del usuario.
+        3. **Desacoplamiento de Lógica de Negocio**: Ninguna regla contable o de visualización debe quemar IDs de subcategorías en código; toda agregación 50/30/20 debe realizarse mediante la relación de clave foránea hacia la categoría padre.
+        4. **Compatibilidad con Sincronización Multiperfil (Spec 010)**: Si un usuario crea una subcategoría personalizada en el PC (ej. *'Pádel'*) y registra un gasto conjunto, cuando ese evento viaje vía Syncthing al Mac de la pareja, el nodo receptor no tendrá esa subcategoría si no se sincroniza. Por tanto, la futura spec debe incorporar:
+           - O bien la emisión de eventos de sincronización para el catálogo de subcategorías (JointSubcategorySyncEvent).
+           - O bien resolución tolerante en el receptor: si el evento delta trae una subcategoría desconocida, crearla automáticamente en la base local bajo la misma categoría padre antes de insertar la transacción, evitando errores de clave foránea (FOREIGN KEY constraint failed).
+    - **Mejoras Futuras de Finanzas Compartidas (Post-Spec 010)**:
+      - *Alerta de Sobregasto en Huchas de Amortización*: Emisión de aviso informativo (st.warning) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
+      - *Exportación Consolidada del Hogar a Excel / CSV*: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
+      - *Visor de Sincronización Avanzado en UI*: En el panel de configuración del hogar, visualización de deltas archivados en sync/processed/ e inspección o reintento de eventos fallidos en sync/error/ directamente desde la interfaz gráfica.
