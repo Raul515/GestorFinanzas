@@ -324,11 +324,14 @@ class JointMonthlyContributionBase(BaseModel):
     contributor_profile: ProfileIdentifier
     amount: float = Field(gt=0.0)
     contribution_date: date
+    uuid: Optional[str] = None
 
 
 class JointMonthlyContributionCreate(JointMonthlyContributionBase):
     """Esquema para creación de aportación."""
     joint_account_id: Optional[int] = None
+    personal_transaction_id: Optional[int] = None
+    sinking_fund_allocations: Optional[str] = None
 
 
 class JointMonthlyContributionResponse(JointMonthlyContributionBase):
@@ -336,7 +339,10 @@ class JointMonthlyContributionResponse(JointMonthlyContributionBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    uuid: str
     joint_account_id: int
+    personal_transaction_id: Optional[int] = None
+    sinking_fund_allocations: Optional[str] = None
     created_at: datetime
 
 

@@ -5,8 +5,10 @@ y control de transacciones para onboarding, configuración, huchas, aportaciones
 """
 
 from datetime import date, datetime, timezone
+import json
 import logging
 from typing import Any, Dict, List, Optional
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -44,6 +46,7 @@ class AssistedContributionRequest(BaseModel):
     contributor_profile: schemas.ProfileIdentifier
     personal_subcategory_id: Optional[int] = None
     contribution_date: Optional[date] = None
+    target_sinking_fund_id: Optional[int] = None
 
 
 # ==========================================
@@ -602,6 +605,53 @@ def record_assisted_contribution(
                 eff_subcat_id = created_subcat.id
             else:
                 eff_subcat_id = subcats[0].id if subcats else 1
+    c_uuid = str(uuid.uuid4())
+    allocations_dict: Dict[str, float] = {}
+    target_fund_name: Optional[str] = None
+
+    if req.target_sinking_fund_id:
+        target_fund = repo.get_joint_sinking_fund(req.target_sinking_fund_id)
+        if target_fund:
+            target_fund_name = target_fund.name
+            target_fund.current_balance = round(float(target_fund.current_balance) + float(req.amount), 2)
+            allocations_dict[str(target_fund.id)] = round(float(req.amount), 2)
+    else:
+        # Reparto ordinario de ahorro entre huchas activas según sus ponderaciones
+        subcats = repo.get_joint_subcategories()
+        needs_budget = sum(float(s.monthly_budget) for s in subcats) if subcats else 0.0
+        funds = repo.get_joint_sinking_funds()
+        funds_dicts = [
+            {
+                "id": f.id,
+                "status": f.status,
+                "monthly_target_amount": float(f.monthly_target_amount),
+                "allocation_percentage": float(f.allocation_percentage),
+            }
+            for f in funds
+        ]
+        calc = calculate_monthly_contributions(
+            cohabitation_stage=stage,
+            contribution_strategy=schemas.ContributionStrategy(account.contribution_strategy),
+            split_mode=schemas.SplitMode(account.split_mode),
+            needs_budget=needs_budget,
+            sinking_funds=funds_dicts,
+            member_a_income=float(account.member_a_reference_income),
+            member_b_income=float(account.member_b_reference_income),
+            member_a_contribution_pct=float(account.member_a_contribution_pct),
+            member_b_contribution_pct=float(account.member_b_contribution_pct),
+        )
+        total_budget = float(calc.get("total_household_budget", 0.0))
+        fund_allocs = calc.get("fund_allocations", {})
+        if total_budget > 0 and fund_allocs:
+            ratio = min(1.0, float(req.amount) / total_budget)
+            for fid, target_amount in fund_allocs.items():
+                part = round(float(target_amount) * ratio, 2)
+                if part > 0:
+                    f_obj = repo.get_joint_sinking_fund(fid)
+                    if f_obj:
+                        f_obj.current_balance = round(float(f_obj.current_balance) + part, 2)
+                        allocations_dict[str(fid)] = part
+
     res_plan = prepare_assisted_contribution(
         month=req.month,
         contributor_profile=req.contributor_profile,
@@ -610,6 +660,8 @@ def record_assisted_contribution(
         personal_subcategory_id=eff_subcat_id,
         contribution_date=req.contribution_date,
         device_id=sync_service.local_device_id,
+        contribution_uuid=c_uuid,
+        target_sinking_fund_name=target_fund_name,
     )
 
     try:
@@ -620,26 +672,50 @@ def record_assisted_contribution(
             amount=p_tx["amount"],
             description=p_tx["description"],
             subcategory_id=p_tx["subcategory_id"],
+            joint_contribution_uuid=c_uuid,
         )
         db.add(personal_tx)
+        db.flush()
 
-        # 2. Asentar aportación en la cuenta conjunta
+        # 2. Asentar aportación en la cuenta conjunta con UUID y enlace a transacción personal
         j_cb = res_plan["joint_contribution"]
         joint_contrib = schemas.JointMonthlyContributionCreate(
+            uuid=c_uuid,
             month=j_cb["month"],
             contributor_profile=j_cb["contributor_profile"],
             amount=j_cb["amount"],
             contribution_date=j_cb["contribution_date"],
+            personal_transaction_id=personal_tx.id,
+            sinking_fund_allocations=json.dumps(allocations_dict) if allocations_dict else None,
         )
         repo.create_joint_contribution(joint_contrib)
 
-        # 3. Emitir evento delta en outbox
+        # 3. Emitir evento delta de aportación en outbox
         sync_service.emit_event(
             entity_type=schemas.SyncEntityType.CONTRIBUTION,
             action=schemas.SyncAction.UPSERT,
             payload=res_plan["sync_event"]["payload"],
             origin_device_id=sync_service.local_device_id,
         )
+
+        # 4. Emitir deltas SINKING_FUND (UPSERT) para huchas cuyo saldo creció
+        for fid_str in allocations_dict:
+            f_obj = repo.get_joint_sinking_fund(int(fid_str))
+            if f_obj:
+                sync_service.emit_event(
+                    entity_type=schemas.SyncEntityType.SINKING_FUND,
+                    action=schemas.SyncAction.UPSERT,
+                    payload={
+                        "name": f_obj.name,
+                        "target_amount": float(f_obj.target_amount),
+                        "current_balance": float(f_obj.current_balance),
+                        "monthly_target_amount": float(f_obj.monthly_target_amount),
+                        "allocation_percentage": float(f_obj.allocation_percentage),
+                        "status": f_obj.status,
+                        "priority": int(f_obj.priority),
+                    },
+                    origin_device_id=sync_service.local_device_id,
+                )
 
         return {
             "success": True,
@@ -655,6 +731,47 @@ def record_assisted_contribution(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error asentando aportación mensual: {exc}",
         )
+
+
+@router.delete("/contributions/{contribution_id}")
+def delete_joint_contribution(
+    contribution_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+):
+    """
+    Elimina físicamente una aportación conjunta, revierte el saldo incrementado en huchas,
+    elimina en cascada la transacción personal y emite tombstone de sincronización a la pareja.
+    """
+    del_info = repo.delete_joint_contribution(contribution_id)
+    if not del_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aportación conjunta no encontrada.",
+        )
+
+    # Emitir tombstone CONTRIBUTION (DELETE)
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.CONTRIBUTION,
+        action=schemas.SyncAction.DELETE,
+        payload={
+            "uuid": del_info["uuid"],
+            "month": del_info["month"],
+            "contributor_profile": del_info["contributor_profile"],
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+
+    # Emitir SINKING_FUND (UPSERT) para huchas revertidas
+    for fund_data in del_info.get("reverted_funds", {}).values():
+        sync_service.emit_event(
+            entity_type=schemas.SyncEntityType.SINKING_FUND,
+            action=schemas.SyncAction.UPSERT,
+            payload=fund_data,
+            origin_device_id=sync_service.local_device_id,
+        )
+
+    return {"success": True, "deleted_uuid": del_info["uuid"]}
 
 
 # ==========================================

@@ -177,6 +177,7 @@ class JointMonthlyContribution(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     joint_account_id: Mapped[int] = mapped_column(
         ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False
     )
@@ -184,6 +185,8 @@ class JointMonthlyContribution(Base):
     contributor_profile: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     contribution_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    personal_transaction_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    sinking_fund_allocations: Mapped[Optional[str]] = mapped_column(String, nullable=True, default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )

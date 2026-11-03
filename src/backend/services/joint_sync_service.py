@@ -4,7 +4,7 @@ Opera mediante lectura y escritura exclusiva de ficheros JSON atómicos en disco
 garantizando resiliencia ante desconexiones, idempotencia por UUIDv4 y resolución determinista LWW.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import logging
 import os
@@ -361,33 +361,56 @@ class JointSyncService:
                 db.add(new_tx)
 
     def _apply_contribution_event(self, db: Session, event: SyncEventPayload) -> None:
-        """Aplica aportación mensual sincronizada."""
+        """Aplica aportación mensual sincronizada con resolución por UUID único."""
         payload = event.payload
-        month = payload["month"]
-        profile = payload["contributor_profile"]
-        amount = float(payload["amount"])
-        c_date = datetime.strptime(payload["contribution_date"], "%Y-%m-%d").date() if isinstance(payload["contribution_date"], str) else payload["contribution_date"]
+        month = payload.get("month")
+        profile = payload.get("contributor_profile")
+        amount = float(payload.get("amount", 0.0))
+        c_uuid = payload.get("uuid")
 
-        existing_c = (
-            db.query(JointMonthlyContribution)
-            .filter(
-                JointMonthlyContribution.joint_account_id == 1,
-                JointMonthlyContribution.month == month,
-                JointMonthlyContribution.contributor_profile == profile,
+        existing_c = None
+        if c_uuid:
+            existing_c = (
+                db.query(JointMonthlyContribution)
+                .filter(
+                    JointMonthlyContribution.joint_account_id == 1,
+                    JointMonthlyContribution.uuid == c_uuid,
+                )
+                .first()
             )
-            .first()
-        )
+        elif month and profile:
+            # Fallback por compatibilidad con deltas legacy sin UUID
+            existing_c = (
+                db.query(JointMonthlyContribution)
+                .filter(
+                    JointMonthlyContribution.joint_account_id == 1,
+                    JointMonthlyContribution.month == month,
+                    JointMonthlyContribution.contributor_profile == profile,
+                )
+                .first()
+            )
 
         if event.action == SyncAction.DELETE:
             if existing_c:
                 db.delete(existing_c)
             return
 
+        raw_date = payload.get("contribution_date")
+        if isinstance(raw_date, str):
+            c_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+        elif raw_date:
+            c_date = raw_date
+        else:
+            c_date = date.today()
+
         if existing_c:
             existing_c.amount = amount
             existing_c.contribution_date = c_date
+            if c_uuid:
+                existing_c.uuid = c_uuid
         else:
             new_c = JointMonthlyContribution(
+                uuid=c_uuid or str(uuid.uuid4()),
                 joint_account_id=1,
                 month=month,
                 contributor_profile=profile,

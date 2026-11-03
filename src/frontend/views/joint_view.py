@@ -489,6 +489,66 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
     st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
 
+    # Formulario para asentar aportación (ordinaria mensual o extraordinaria a hucha concreta)
+    with st.expander(f"📥 Realizar Aportación en {selected_month_name}", expanded=False):
+        contrib_type = st.radio(
+            "Modalidad de Aportación",
+            options=["Aportación Ordinaria (Presupuesto Común)", "Aportación Extraordinaria (Hucha Concreta)"],
+            horizontal=True,
+            key=f"contrib_type_{selected_month_name}",
+        )
+        sinking_funds_avail = api_client.get_joint_sinking_funds(status="ACTIVE")
+        fund_choice_map = {f["id"]: f["name"] for f in sinking_funds_avail} if sinking_funds_avail else {}
+
+        with st.form(f"new_joint_contrib_form_{selected_month_name}"):
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                target_fund_choice = None
+                if contrib_type == "Aportación Extraordinaria (Hucha Concreta)":
+                    if fund_choice_map:
+                        target_fund_choice = st.selectbox(
+                            "Hucha de Destino",
+                            options=list(fund_choice_map.keys()),
+                            format_func=lambda k: fund_choice_map[k],
+                        )
+                    else:
+                        st.warning("No hay huchas activas. La aportación se ingresará en la tesorería general.")
+
+                cb_amount = st.number_input("Importe a Aportar (€)", min_value=1.0, value=100.0, step=25.0)
+                cb_date = st.date_input("Fecha de Aportación", value=date.today(), key=f"cb_date_{selected_month_name}")
+
+            with col_c2:
+                local_prof = account.get("local_profile", "MEMBER_A")
+                local_name = account.get("member_a_name" if local_prof == "MEMBER_A" else "member_b_name", "Miembro Local")
+                remote_name = account.get("member_b_name" if local_prof == "MEMBER_A" else "member_a_name", "Miembro Pareja")
+                contributor_opts = [local_prof, "MEMBER_B" if local_prof == "MEMBER_A" else "MEMBER_A"]
+                contributor_labels = {
+                    local_prof: f"👤 {local_name} (Tú)",
+                    contributor_opts[1]: f"👤 {remote_name} (Pareja)",
+                }
+                cb_profile = st.selectbox(
+                    "Miembro Aportante",
+                    options=contributor_opts,
+                    format_func=lambda p: contributor_labels.get(p, p),
+                )
+                st.caption(f"Mes imputado: **{selected_month_str}**")
+
+            cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", use_container_width=True)
+            if cb_submitted:
+                payload_cb = {
+                    "month": selected_month_str,
+                    "amount": float(cb_amount),
+                    "contributor_profile": cb_profile,
+                    "contribution_date": cb_date.isoformat(),
+                    "target_sinking_fund_id": target_fund_choice,
+                }
+                res_cb = api_client.asentar_aportacion_asistida(payload_cb)
+                if res_cb:
+                    st.success("✅ Aportación asentada correctamente y sincronizada.")
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo asentar la aportación.")
+
     # Formulario para registrar nuevo gasto común
     is_pre_cohabitation = account.get("cohabitation_stage") in ("PRE_COHABITATION", "DATING_COHABITATION")
 
@@ -608,6 +668,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 else account.get("member_b_name", "Miembro B")
             )
             contrib_rows.append({
+                "ID": cb.get("id"),
                 "Fecha": cb.get("contribution_date"),
                 "Aportante": p_name,
                 "Mes Aplicado": cb.get("month"),
@@ -615,6 +676,24 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
             })
         df_cb = pd.DataFrame(contrib_rows)
         st.dataframe(df_cb[["Fecha", "Aportante", "Mes Aplicado", "Importe (€)"]], use_container_width=True)
+
+        with st.expander("🗑️ Revertir una Aportación"):
+            cb_to_delete = st.selectbox(
+                "Selecciona la aportación a revertir",
+                options=[r["ID"] for r in contrib_rows],
+                format_func=lambda id_val: next(
+                    (f"ID {r['ID']} - {r['Fecha']} | {r['Aportante']} ({r['Importe (€)']})" for r in contrib_rows if r["ID"] == id_val),
+                    str(id_val),
+                ),
+                key=f"sel_revert_cb_{selected_month_name}",
+            )
+            if st.button("Confirmar Reversión", key=f"btn_revert_cb_{selected_month_name}"):
+                ok = api_client.delete_joint_contribution(cb_to_delete)
+                if ok:
+                    st.success("Aportación revertida con éxito y sincronizada con tu pareja.")
+                    st.rerun()
+                else:
+                    st.error("No se pudo revertir la aportación.")
 
     st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px dashed #334155;'>", unsafe_allow_html=True)
 

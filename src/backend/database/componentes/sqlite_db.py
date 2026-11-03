@@ -39,6 +39,9 @@ def init_db():
             if cols and "applied_strategy_id" not in cols:
                 conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN applied_strategy_id INTEGER REFERENCES applied_guideline_strategies(id) ON DELETE CASCADE")
                 conn.commit()
+            if cols and "joint_contribution_uuid" not in cols:
+                conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN joint_contribution_uuid TEXT")
+                conn.commit()
 
             cursor_strat = conn.exec_driver_sql("PRAGMA table_info(applied_guideline_strategies)")
             strat_cols = [row[1] for row in cursor_strat.fetchall()]
@@ -50,6 +53,18 @@ def init_db():
             j_tx_cols = [row[1] for row in cursor_j_tx.fetchall()]
             if j_tx_cols and "sinking_fund_deduction" not in j_tx_cols:
                 conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN sinking_fund_deduction REAL DEFAULT 0.0")
+                conn.commit()
+
+            cursor_j_cb = conn.exec_driver_sql("PRAGMA table_info(joint_monthly_contributions)")
+            j_cb_cols = [row[1] for row in cursor_j_cb.fetchall()]
+            if j_cb_cols and "uuid" not in j_cb_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_monthly_contributions ADD COLUMN uuid TEXT")
+                conn.commit()
+            if j_cb_cols and "personal_transaction_id" not in j_cb_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_monthly_contributions ADD COLUMN personal_transaction_id INTEGER")
+                conn.commit()
+            if j_cb_cols and "sinking_fund_allocations" not in j_cb_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_monthly_contributions ADD COLUMN sinking_fund_allocations TEXT")
                 conn.commit()
     except Exception as exc:
         logger.warning("Error comprobando/migrando columnas en SQLite: %s", exc)

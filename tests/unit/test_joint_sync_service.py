@@ -469,3 +469,80 @@ def test_foreign_keys_pragma_and_sinking_fund_deletion(db_session: Session, setu
     assert tx.joint_sinking_fund_id is None
 
 
+def test_contribution_uuid_and_multi_contribution_same_month(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """
+    R-5: Certifica que cada aportación tiene su UUID propio y que dos aportaciones en el
+    mismo mes (ej. aportación regular + extraordinaria) coexisten sin sobreescribirse.
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    c1_uuid = str(uuid.uuid4())
+    c2_uuid = str(uuid.uuid4())
+
+    evt1 = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "UPSERT",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-01T10:00:00Z",
+        "payload": {
+            "uuid": c1_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+            "amount": 500.0,
+            "contribution_date": "2026-11-01",
+        },
+    }
+    evt2 = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "UPSERT",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-15T12:00:00Z",
+        "payload": {
+            "uuid": c2_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+            "amount": 250.0,
+            "contribution_date": "2026-11-15",
+        },
+    }
+
+    with open(Path(temp_sync_dir) / "inbox" / "evt_c1.json", "w", encoding="utf-8") as f:
+        json.dump(evt1, f)
+    with open(Path(temp_sync_dir) / "inbox" / "evt_c2.json", "w", encoding="utf-8") as f:
+        json.dump(evt2, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 2
+
+    # Ambas aportaciones deben coexistir en la base de datos
+    c1 = db_session.query(JointMonthlyContribution).filter_by(uuid=c1_uuid).first()
+    c2 = db_session.query(JointMonthlyContribution).filter_by(uuid=c2_uuid).first()
+    assert c1 is not None
+    assert c1.amount == 500.0
+    assert c2 is not None
+    assert c2.amount == 250.0
+
+    # Si se envía un tombstone de c1, solo se borra c1, manteniendo c2 intacto
+    evt_del = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "DELETE",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-20T10:00:00Z",
+        "payload": {
+            "uuid": c1_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_del_c1.json", "w", encoding="utf-8") as f:
+        json.dump(evt_del, f)
+
+    res_del = service.process_inbox(db_session)
+    assert res_del["processed_count"] == 1
+    assert db_session.query(JointMonthlyContribution).filter_by(uuid=c1_uuid).first() is None
+    assert db_session.query(JointMonthlyContribution).filter_by(uuid=c2_uuid).first() is not None
+
+
+

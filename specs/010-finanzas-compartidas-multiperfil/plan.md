@@ -209,21 +209,21 @@ A raíz de la auditoría técnica exhaustiva del motor de sincronización asínc
 
 El presente plan correctivo se ejecutará estrictamente por fases de severidad tras la clarificación de decisiones de diseño con el usuario:
 
-#### Paso 1: Erradicación de Fallos Críticos (R-1, R-2, R-3)
-1. **R-1 (Doble Deducción de Huchas)**:
-   - Desacoplar la mutación de saldo en transacciones sincronizadas: en `_apply_transaction_event`, no deducir del saldo de la hucha si el estado del saldo se sincroniza autoritativamente mediante el evento `SINKING_FUND`, o adoptar un modelo determinista libre de carreras.
-2. **R-2 (Resolución Prioritaria por Nombre de Huchas y Subcategorías)**:
-   - Modificar `_apply_transaction_event` en `joint_sync_service.py` para resolver **siempre y prioritariamente por nombre** (`sinking_fund_name` y `subcategory_name`), descartando el ID numérico local del emisor para inmunidad total ante autoincrementales desfasados.
-3. **R-3 (Activación de Foreign Keys en SQLite)**:
-   - Añadir en `src/backend/database/componentes/sqlite_db.py` el listener `@event.listens_for(engine, "connect")` ejecutando `PRAGMA foreign_keys = ON;` para garantizar que `ON DELETE SET NULL` y `CASCADE` se cumplan estrictamente a nivel de motor.
+#### Paso 1: Erradicación de Fallos Críticos (R-1, R-2, R-3) [COMPLETADO]
+1. [x] **R-1 (Doble Deducción de Huchas)**:
+   - Eliminada la emisión redundante de `SINKING_FUND` en `create_joint_transaction` y `delete_joint_transaction`. Las deducciones de huchas quedan gobernadas con precisión de céntimo exclusivamente a través de los deltas de `TRANSACTION (UPSERT/DELETE)`.
+2. [x] **R-2 (Resolución Prioritaria por Nombre de Huchas y Subcategorías)**:
+   - Modificado `_apply_transaction_event` en `joint_sync_service.py` para resolver **siempre y prioritariamente por nombre** (`sinking_fund_name` y `subcategory_name`), descartando el ID numérico local del emisor para inmunidad total ante autoincrementales desfasados.
+3. [x] **R-3 (Activación de Foreign Keys en SQLite)**:
+   - Añadido en `src/backend/database/componentes/sqlite_db.py` el listener `@event.listens_for(engine, "connect")` ejecutando `PRAGMA foreign_keys = ON;` y desvinculación preventiva en `delete_joint_sinking_fund` para garantizar que `ON DELETE SET NULL` se cumpla estrictamente a nivel de motor.
 
-#### Paso 2: Integridad Contable y Aportaciones (R-4, R-5, R-6)
-4. **R-4 (Incremento Automático de Huchas por Aportaciones)**:
-   - En `record_assisted_contribution()`, aplicar las cuotas de `fund_allocations` a las huchas activas incrementando su `current_balance` y emitiendo los deltas correspondientes a outbox.
-5. **R-5 (UUID en Aportaciones y Múltiples Aportaciones por Mes)**:
-   - Añadir campo `uuid` (UUIDv4) a `JointMonthlyContribution` y actualizar `_apply_contribution_event` para gestionar idempotencia y mutaciones por UUID en vez de por tupla `(month, profile)`.
-6. **R-6 (Reversión y Eliminación de Aportaciones)**:
-   - Crear endpoint `DELETE /joint/contributions/{contribution_id}` en FastAPI con botón en Streamlit y reversión bidireccional coherente con el apunte del perfil personal y emisión de tombstone.
+#### Paso 2: Integridad Contable y Aportaciones (R-4, R-5, R-6) [COMPLETADO]
+4. [x] **R-4 (Incremento Automático de Huchas por Aportaciones)**:
+   - En `record_assisted_contribution()`, aplicar las cuotas de `fund_allocations` a las huchas activas incrementando su `current_balance` y emitiendo los deltas correspondientes a outbox. Se habilitó selector de hucha de destino para aportaciones extraordinarias en la vista y API.
+5. [x] **R-5 (UUID en Aportaciones y Múltiples Aportaciones por Mes)**:
+   - Añadido campo `uuid` (UUIDv4) a `JointMonthlyContribution` y actualizado `_apply_contribution_event` para resolver mutaciones y borrados por UUID único, permitiendo múltiples aportaciones en el mismo mes sin sobreescrituras.
+6. [x] **R-6 (Reversión y Eliminación de Aportaciones)**:
+   - Creado endpoint `DELETE /joint/contributions/{contribution_id}` en FastAPI con botón/expander de reversión en Streamlit, reversión automática de saldos de huchas asociadas y eliminación en cascada bidireccional desde la transacción personal en `/transactions/{id}` con emisión de tombstones `CONTRIBUTION (DELETE)`.
 
 #### Paso 3: Resiliencia de Transporte y Ciclo de Vida (R-7, R-8, R-9, R-10)
 7. **R-7 (Gestión de Outbox y Estado de Sincronización)**:

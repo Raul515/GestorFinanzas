@@ -336,27 +336,36 @@ def prepare_assisted_contribution(
     personal_subcategory_id: int,
     contribution_date: Optional[date] = None,
     device_id: str = "LOCAL-DEVICE",
+    contribution_uuid: Optional[str] = None,
+    target_sinking_fund_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Prepara las estructuras de datos requeridas para ejecutar el asiento asistido en 1 clic:
     1. Transacción de salida en el perfil personal (Necesidades o Ahorro según la etapa).
-    2. Registro de aportación mensual en la cuenta conjunta.
+    2. Registro de aportación mensual en la cuenta conjunta con UUID idempotente.
     3. Evento delta para la carpeta sync/outbox/.
     """
     eff_date = contribution_date or date.today()
+    c_uuid = contribution_uuid or str(uuid.uuid4())
     event_id = str(uuid.uuid4())
     now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    desc = f"Aportación pactada a Cuenta Conjunta ({month})"
+    if target_sinking_fund_name:
+        desc = f"Aportación a Hucha '{target_sinking_fund_name}' ({month})"
 
     # 1. Movimiento personal
     personal_tx_payload = {
         "date": eff_date,
         "amount": round(contribution_amount, 2),
-        "description": f"Aportación pactada a Cuenta Conjunta ({month})",
+        "description": desc,
         "subcategory_id": personal_subcategory_id,
+        "joint_contribution_uuid": c_uuid,
     }
 
     # 2. Aportación conjunta
     joint_contribution_payload = {
+        "uuid": c_uuid,
         "month": month,
         "contributor_profile": contributor_profile,
         "amount": round(contribution_amount, 2),
@@ -371,6 +380,7 @@ def prepare_assisted_contribution(
         origin_device_id=device_id,
         timestamp_utc=now_utc,
         payload={
+            "uuid": c_uuid,
             "month": month,
             "contributor_profile": contributor_profile.value if hasattr(contributor_profile, "value") else str(contributor_profile),
             "amount": round(contribution_amount, 2),

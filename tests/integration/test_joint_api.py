@@ -195,7 +195,11 @@ def test_joint_transactions_endpoints(client: TestClient):
 
 
 def test_assisted_contribution_flow(client: TestClient):
-    """Verifica el endpoint de aportación asistida en 1 clic (/joint/contributions/asentar-asistida)."""
+    """
+    Verifica el endpoint de aportación asistida en 1 clic (/joint/contributions/asentar-asistida),
+    crecimiento real de huchas (R-4), reversión por DELETE /joint/contributions/{id} (R-6)
+    y eliminación en cascada desde la transacción personal (R-6).
+    """
     client.post(
         "/joint/setup",
         json={
@@ -206,6 +210,23 @@ def test_assisted_contribution_flow(client: TestClient):
         },
     )
 
+    # Crear una hucha activa para probar asignación y crecimiento (R-4)
+    fund_resp = client.post(
+        "/joint/sinking-funds",
+        json={
+            "name": "Hucha Vacaciones 2027",
+            "target_amount": 1200.0,
+            "current_balance": 100.0,
+            "monthly_target_amount": 100.0,
+            "allocation_percentage": 100.0,
+            "status": "ACTIVE",
+            "priority": 1,
+        },
+    )
+    assert fund_resp.status_code == 201
+    fund_id = fund_resp.json()["id"]
+
+    # 1. Aportación ordinaria mensual
     asentar_payload = {
         "month": "2026-11",
         "amount": 750.0,
@@ -217,11 +238,53 @@ def test_assisted_contribution_flow(client: TestClient):
     assert res_data["success"] is True
     assert res_data["amount"] == 750.0
 
-    # Comprobar que la aportación figura en /joint/contributions
+    # Comprobar que la aportación figura en /joint/contributions con UUID (R-5)
     contribs_resp = client.get("/joint/contributions?month=2026-11")
     assert contribs_resp.status_code == 200
-    assert len(contribs_resp.json()) == 1
-    assert contribs_resp.json()[0]["amount"] == 750.0
+    contribs = contribs_resp.json()
+    assert len(contribs) == 1
+    assert contribs[0]["amount"] == 750.0
+    assert "uuid" in contribs[0]
+    first_contrib_id = contribs[0]["id"]
+    first_tx_id = contribs[0]["personal_transaction_id"]
+
+    # 2. Aportación extraordinaria directa a la hucha (R-4)
+    extra_payload = {
+        "month": "2026-11",
+        "amount": 200.0,
+        "contributor_profile": "MEMBER_A",
+        "target_sinking_fund_id": fund_id,
+    }
+    resp_extra = client.post("/joint/contributions/asentar-asistida", json=extra_payload)
+    assert resp_extra.status_code == 201
+
+    # Verificar que el saldo de la hucha creció en 200 € directos (R-4)
+    funds_list = client.get("/joint/sinking-funds").json()
+    fund_check = next(f for f in funds_list if f["id"] == fund_id)
+    assert fund_check["current_balance"] >= 300.0
+
+    # 3. Eliminar aportación extraordinaria vía DELETE /joint/contributions/{id} (R-6)
+    extra_contribs = client.get("/joint/contributions?month=2026-11").json()
+    assert len(extra_contribs) == 2
+    extra_contrib_id = next(c["id"] for c in extra_contribs if c["id"] != first_contrib_id)
+
+    del_resp = client.delete(f"/joint/contributions/{extra_contrib_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["success"] is True
+
+    # Comprobar que el saldo de la hucha se revirtió (R-6)
+    funds_list_after = client.get("/joint/sinking-funds").json()
+    fund_after_del = next(f for f in funds_list_after if f["id"] == fund_id)
+    assert fund_after_del["current_balance"] < fund_check["current_balance"]
+
+    # 4. Eliminación en cascada: borrar la transacción personal en /transactions/{id} (R-6)
+    assert first_tx_id is not None
+    tx_del_resp = client.delete(f"/transactions/{first_tx_id}")
+    assert tx_del_resp.status_code == 200
+
+    # Verificar que la aportación conjunta vinculada fue eliminada en cascada
+    contribs_final = client.get("/joint/contributions?month=2026-11").json()
+    assert len(contribs_final) == 0
 
     # Comprobar endpoint de cálculo dinámico de cuotas (Mejora 1)
     calc_resp = client.get("/joint/contributions/calculation")

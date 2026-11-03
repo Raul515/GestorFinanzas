@@ -25,6 +25,12 @@ class Transaction(Base):
         default=None,
         index=True,
     )
+    joint_contribution_uuid: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        nullable=True,
+        default=None,
+        index=True,
+    )
 
     subcategory: Mapped["Subcategory"] = relationship("Subcategory", back_populates="transactions")
     applied_strategy: Mapped[Optional["AppliedGuidelineStrategy"]] = relationship(
