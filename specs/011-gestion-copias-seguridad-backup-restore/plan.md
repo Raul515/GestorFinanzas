@@ -6,13 +6,15 @@ El presente plan establece el desglose técnico y la secuencia de ejecución est
 
 ## Desglose Secuencial de Fases
 
-### Fase 1: Contratos Fuertemente Tipados Pydantic v2 y Servicio Desacoplado de Backup (`backup_service.py`)
+### Fase 1: Contratos Fuertemente Tipados, Entidad ORM y Servicio Desacoplado con Purga WAL y SHA-256 (`backup_service.py`)
 
-- **Objetivo**: Desarrollar los modelos de datos tipados Pydantic v2 para diagnóstico y gestión de copias, y el servicio desacoplado en Python con la lógica pura de copia caliente atómica (`sqlite3.backup`), validación de integridad de archivos SQLite, rotación de las 5 instantáneas locales más recientes y restauración segura con snapshot previo de protección.
+- **Objetivo**: Desarrollar la entidad ORM `BackupScheduleConfig`, los contratos Pydantic v2 (incluyendo hashes SHA-256 y rollback), y el servicio desacoplado en Python con copia caliente atómica (`sqlite3.backup`), validación defensiva de archivos SQLite, purga obligatoria de archivos `-wal` y `-shm` en restauración, deduplicación de copias automáticas sin cambios por SHA-256, auto-migración con `init_db()` y función de reversión atómica `rollback_last_restore()`.
 - **Archivos a crear/modificar**:
-  - `src/backend/domain/schemas/backup.py` [NUEVO: Contratos Pydantic v2 `DatabaseHealthResponse`, `BackupMetadata`, `BackupListResponse`, `BackupValidationResult`, `RestoreResponse`].
-  - `src/backend/services/backup_service.py` [NUEVO: Lógica desacoplada de copia caliente con `sqlite3.Connection.backup()`, validación defensiva con `PRAGMA integrity_check`, comprobación de tablas maestras, rotación de las 5 copias en `backups/`, snapshot automático previo pre-restauración y sustitución atómica con liberación de conexiones SQLAlchemy].
-  - `tests/unit/test_backup_service.py` [NUEVO: Suite unitaria cubriendo creación de copias en caliente, rotación a 5 archivos, detección de archivos corruptos o texto plano, validación de esquemas discordantes y ciclo completo de restauración con verificación de snapshot previo].
+  - `src/backend/domain/models/backup.py` [NUEVO: Entidad ORM SQLAlchemy `BackupScheduleConfig` para persistir estado, frecuencia en días, límite de retención, fecha de última ejecución y último hash SHA-256].
+  - `src/backend/domain/models/__init__.py` [MODIFICADO: Exportar `BackupScheduleConfig`].
+  - `src/backend/domain/schemas/backup.py` [NUEVO: Contratos Pydantic v2 `DatabaseHealthResponse`, `BackupMetadata`, `BackupListResponse`, `BackupValidationResult`, `RestoreResponse`, `BackupScheduleResponse`, `BackupScheduleUpdate`].
+  - `src/backend/services/backup_service.py` [NUEVO: Lógica desacoplada de copia caliente con `sqlite3.Connection.backup()`, cálculo de hash SHA-256, validación defensiva con `PRAGMA integrity_check`, comprobación de tablas maestras, rotación configurable en `backups/`, snapshot previo `safety_prerestore_*.db`, purga de residuales WAL (`-wal`, `-shm`), sustitución atómica con liberación de conexiones SQLAlchemy (`engine.dispose()`), auto-migración inmediata mediante `init_db()`, función de rollback `rollback_last_restore()` y verificación de copias programadas con detección de duplicados].
+  - `tests/unit/test_backup_service.py` [NUEVO: Suite unitaria cubriendo creación de copias en caliente, cálculo SHA-256, rotación de archivos, detección de archivos corruptos o texto plano, validación de esquemas discordantes, purga verificada de WAL, ciclo completo de restauración con snapshot previo, reversión atómica de rollback y omisión de duplicados sin cambios].
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_backup_service.py
@@ -21,34 +23,35 @@ El presente plan establece el desglose técnico y la secuencia de ejecución est
 
 ---
 
-### Fase 2: Router REST en FastAPI y Endpoints de Descarga y Restauración
+### Fase 2: Router REST en FastAPI, Endpoints de Rollback, Programación y Persistencia Docker
 
-- **Objetivo**: Exponer las capacidades del servicio de copias mediante un router REST fuertemente tipado en FastAPI bajo `/backup`, soportando descarga directa como fichero binario stream (`.db`), subida con multipart `UploadFile`, restauración local y listado de instantáneas.
+- **Objetivo**: Exponer las capacidades del servicio de copias mediante un router REST fuertemente tipado en FastAPI bajo `/backup` (salud, creación, descarga binaria stream, restauración, endpoint `POST /backup/restore/rollback` para reversión en 1-clic y `GET/PUT /backup/schedule`), junto con el worker horario en segundo plano no bloqueante y la declaración del volumen persistente `backups/` en Docker Compose.
 - **Archivos a crear/modificar**:
-  - `src/backend/api/routers/backup.py` [NUEVO: Endpoints `GET /backup/health`, `POST /backup/create`, `GET /backup/download`, `GET /backup/list`, `POST /backup/restore/upload`, `POST /backup/restore/local/{filename}`, `DELETE /backup/local/{filename}`].
-  - `src/backend/api/main.py` [MODIFICADO: Registro del router `backup.router`].
-  - `tests/integration/test_backup_api.py` [NUEVO: Pruebas de integración con `TestClient` validando códigos HTTP 200, 400 (archivos corruptos), 404 (backup no encontrado), headers de descarga `application/x-sqlite3` y respuesta de restauración].
+  - `src/backend/api/routers/backup.py` [NUEVO: Endpoints `GET /backup/health`, `POST /backup/create`, `GET /backup/download`, `GET /backup/list`, `POST /backup/restore/upload`, `POST /backup/restore/local/{filename}`, `POST /backup/restore/rollback`, `DELETE /backup/local/{filename}`, `GET /backup/schedule`, `PUT /backup/schedule`].
+  - `src/backend/api/main.py` [MODIFICADO: Registro del router `backup.router`, verificación al inicio en `lifespan` y tarea periódica en segundo plano no bloqueante].
+  - `docker_local/docker-compose.yml` [MODIFICADO: Mapeo de volumen persistente `- ../backups:/app/backups` para el servicio backend].
+  - `tests/integration/test_backup_api.py` [NUEVO: Pruebas de integración con `TestClient` validando códigos HTTP 200, 400 (archivos corruptos), 404 (backup no encontrado), headers de descarga `application/x-sqlite3`, actualización de programación, respuesta de restauración y endpoint de rollback].
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/integration/test_backup_api.py
   ```
-- **Criterio de Aceptación**: 100% de las pruebas de integración pasando y gestión de errores defensiva sin caída del servidor ante ficheros malformados.
+- **Criterio de Aceptación**: 100% de las pruebas de integración pasando y gestión de errores defensiva sin caída del servidor ante ficheros malformados o peticiones concurrentes.
 
 ---
 
-### Fase 3: Métodos de Cliente y Pestaña Interactiva en Streamlit (`💾 Base de Datos y Copias de Seguridad`)
+### Fase 3: Métodos de Cliente y Pestaña Interactiva en Streamlit con Rollback en 1-Clic (`💾 Base de Datos y Copias de Seguridad`)
 
-- **Objetivo**: Implementar la capa de cliente en `api_client.py` con observabilidad estructurada y desarrollar la nueva pestaña principal en Streamlit con un diseño visual premium compuesto por 4 tarjetas: Diagnóstico de Salud, Descarga Directa, Restauración Guiada con Inspección Previa y Catálogo de Instantáneas Locales.
+- **Objetivo**: Implementar la capa de cliente en `api_client.py` con observabilidad estructurada y desarrollar la nueva pestaña principal en Streamlit estructurada en 5 tarjetas con diseño visual premium: Diagnóstico de Salud con hash SHA-256, Descarga Directa, Programación Periódica, Restauración Guiada con Inspección Previa y Banner de Rollback en 1-Clic, y Catálogo de Instantáneas Locales.
 - **Archivos a crear/modificar**:
-  - `src/frontend/api_client.py` [MODIFICADO: Métodos `get_database_health()`, `create_backup()`, `download_backup_bytes()`, `list_backups()`, `restore_backup_upload()`, `restore_backup_local()`, `delete_backup_local()` con logging descriptivo].
-  - `src/frontend/views/backup_view.py` [NUEVO: Vista interactiva desacoplada para la pestaña de copias: tarjetas métricas de salud con badges `🟢`/`🔴`, botón de descarga directa `.db`, componente `st.file_uploader` con inspección previa de contenido y popover de confirmación protegida, y tabla interactiva de instantáneas locales con botones de restauración/borrado en 1-clic].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos `get_database_health()`, `create_backup()`, `download_backup_bytes()`, `list_backups()`, `restore_backup_upload()`, `restore_backup_local()`, `rollback_restore()`, `delete_backup_local()`, `get_backup_schedule()`, `update_backup_schedule()` con logging descriptivo].
+  - `src/frontend/views/backup_view.py` [NUEVO: Vista interactiva desacoplada para la pestaña de copias: tarjetas métricas de salud con badges `🟢`/`🔴` y SHA-256 corto, botón de descarga directa `.db`, panel interactivo de programación periódica con selector de frecuencia (semanal, quincenal, mensual o personalizada) y retención, componente `st.file_uploader` con inspección previa de contenido y popover de confirmación protegida, banner de Rollback para deshacer la última restauración en 1 clic si no era la deseada, y tabla interactiva de instantáneas locales con botones de restauración/borrado en 1-clic].
   - `src/frontend/app.py` [MODIFICADO: Inclusión de la pestaña `💾 Base de Datos y Copias de Seguridad` en el selector principal].
   - `tests/unit/test_backup_frontend.py` [NUEVO: Pruebas unitarias de los métodos cliente y verificación de renderizado defensivo].
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_backup_frontend.py
   ```
-- **Criterio de Aceptación**: 100% de pruebas pasando, confirmación obligatoria antes de restaurar y recarga inmediata de la interfaz tras cualquier cambio.
+- **Criterio de Aceptación**: 100% de pruebas pasando, confirmación obligatoria antes de restaurar, botón de rollback operativo y recarga inmediata de la interfaz tras cualquier cambio.
 
 ---
 
@@ -57,9 +60,9 @@ El presente plan establece el desglose técnico y la secuencia de ejecución est
 - **Objetivo**: Asegurar que ningún archivo de backup ni la carpeta `backups/` se registren en el repositorio Git, verificar la suite completa de la especificación, registrar las decisiones en `MEMORY.md`, actualizar el índice en `specs/README.md` y preparar la fusión limpia a `develop`.
 - **Archivos a crear/modificar**:
   - `.gitignore` [MODIFICADO: Registro de `backups/`, `*.backup`, `*.db.bak`].
-  - `tests/integration/test_backup_e2e_flow.py` [NUEVO: Prueba end-to-end simulando ciclo completo: creación de datos contables -> copia caliente -> simulación de alteración/error contable -> restauración desde archivo -> verificación de datos idénticos recuperados y preservación del snapshot de seguridad previo].
+  - `tests/integration/test_backup_e2e_flow.py` [NUEVO: Prueba end-to-end simulando ciclo completo: creación de datos contables -> programación periódica -> copia caliente automática -> simulación de alteración contable -> restauración desde archivo con purga WAL -> verificación de datos idénticos -> ejecución de rollback a estado original -> verificación de recuperación íntegra].
   - `MEMORY.md` [MODIFICADO: Registro del cierre de la Spec 011 y decisiones arquitectónicas].
-  - `specs/README.md` [MODIFICADO: Inclusión de la Spec 011 en el catálogo oficial].
+  - `specs/README.md` [MODIFICADO: Actualización de estado de la Spec 011 en el catálogo oficial].
 - **Puerta de Verificación**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_backup_* tests/integration/test_backup_*
