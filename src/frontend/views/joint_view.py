@@ -531,12 +531,12 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                     options=contributor_opts,
                     format_func=lambda p: contributor_labels.get(p, p),
                 )
-                st.caption(f"Mes imputado: **{selected_month_str}**")
+                st.caption(f"Mes imputado: **{month_str}**")
 
             cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", use_container_width=True)
             if cb_submitted:
                 payload_cb = {
-                    "month": selected_month_str,
+                    "month": month_str,
                     "amount": float(cb_amount),
                     "contributor_profile": cb_profile,
                     "contribution_date": cb_date.isoformat(),

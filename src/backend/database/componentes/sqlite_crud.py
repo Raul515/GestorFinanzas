@@ -22,6 +22,7 @@ from backend.domain.schemas import (
 from typing import Optional, Any, List, Dict
 import json
 import datetime
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -144,12 +145,11 @@ class SQLiteRepository(IRepository):
                 del_info = self.delete_joint_contribution(j_contrib.id)
                 try:
                     from backend.services.joint_sync_service import JointSyncService
-                    from backend.domain.schemas.joint import SyncEntityType, SyncAction
                     sync_svc = JointSyncService()
                     if del_info and del_info.get("uuid"):
                         sync_svc.emit_event(
-                            entity_type=SyncEntityType.CONTRIBUTION,
-                            action=SyncAction.DELETE,
+                            entity_type=joint_schema.SyncEntityType.CONTRIBUTION,
+                            action=joint_schema.SyncAction.DELETE,
                             payload={
                                 "uuid": del_info["uuid"],
                                 "month": del_info["month"],
@@ -157,10 +157,10 @@ class SQLiteRepository(IRepository):
                             },
                             origin_device_id=sync_svc.local_device_id,
                         )
-                        for f_data in del_info.get("reverted_funds", {}).values():
+                        for f_data in (del_info.get("reverted_funds") or {}).values():
                             sync_svc.emit_event(
-                                entity_type=SyncEntityType.SINKING_FUND,
-                                action=SyncAction.UPSERT,
+                                entity_type=joint_schema.SyncEntityType.SINKING_FUND,
+                                action=joint_schema.SyncAction.UPSERT,
                                 payload=f_data,
                                 origin_device_id=sync_svc.local_device_id,
                             )
@@ -767,7 +767,7 @@ class SQLiteRepository(IRepository):
             profile_val = profile_val.value
 
         db_tx = joint_model.JointTransaction(
-            uuid=data.get("uuid") or str(joint_model.uuid.uuid4()),
+            uuid=data.get("uuid") or str(uuid.uuid4()),
             joint_account_id=1,
             date=data["date"],
             amount=data["amount"],
@@ -841,7 +841,7 @@ class SQLiteRepository(IRepository):
         if hasattr(profile_val, "value"):
             profile_val = profile_val.value
 
-        c_uuid = data.get("uuid") or str(joint_model.uuid.uuid4())
+        c_uuid = data.get("uuid") or str(uuid.uuid4())
         db_contrib = joint_model.JointMonthlyContribution(
             uuid=c_uuid,
             joint_account_id=1,
@@ -885,7 +885,7 @@ class SQLiteRepository(IRepository):
                             "monthly_target_amount": float(fund.monthly_target_amount),
                             "allocation_percentage": float(fund.allocation_percentage),
                             "status": fund.status,
-                            "priority": int(fund.priority),
+                            "priority": fund.priority,
                         }
             except Exception as exc:
                 logger.error("Error al revertir asignaciones de huchas en aportación %s: %s", contrib_id, exc)

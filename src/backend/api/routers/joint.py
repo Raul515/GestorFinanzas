@@ -551,7 +551,7 @@ def record_assisted_contribution(
     db: Session = Depends(get_db),
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """
     Ejecuta el asiento en 1 clic de inicio de mes:
     1. Inserta el gasto en el perfil personal (en Necesidades Básicas o Ahorro).
@@ -647,7 +647,7 @@ def record_assisted_contribution(
             for fid, target_amount in fund_allocs.items():
                 part = round(float(target_amount) * ratio, 2)
                 if part > 0:
-                    f_obj = repo.get_joint_sinking_fund(fid)
+                    f_obj = repo.get_joint_sinking_fund(int(fid))
                     if f_obj:
                         f_obj.current_balance = round(float(f_obj.current_balance) + part, 2)
                         allocations_dict[str(fid)] = part
@@ -712,7 +712,7 @@ def record_assisted_contribution(
                         "monthly_target_amount": float(f_obj.monthly_target_amount),
                         "allocation_percentage": float(f_obj.allocation_percentage),
                         "status": f_obj.status,
-                        "priority": int(f_obj.priority),
+                        "priority": f_obj.priority,
                     },
                     origin_device_id=sync_service.local_device_id,
                 )
@@ -738,7 +738,7 @@ def delete_joint_contribution(
     contribution_id: int,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """
     Elimina físicamente una aportación conjunta, revierte el saldo incrementado en huchas,
     elimina en cascada la transacción personal y emite tombstone de sincronización a la pareja.
@@ -763,7 +763,7 @@ def delete_joint_contribution(
     )
 
     # Emitir SINKING_FUND (UPSERT) para huchas revertidas
-    for fund_data in del_info.get("reverted_funds", {}).values():
+    for fund_data in (del_info.get("reverted_funds") or {}).values():
         sync_service.emit_event(
             entity_type=schemas.SyncEntityType.SINKING_FUND,
             action=schemas.SyncAction.UPSERT,
