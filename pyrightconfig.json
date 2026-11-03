@@ -7,5 +7,6 @@
     "src/backend",
     "src/frontend"
   ],
-  "reportRedeclaration": false
+  "reportRedeclaration": false,
+  "reportMissingTypeStubs": false
 }

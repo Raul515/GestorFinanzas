@@ -420,7 +420,7 @@ def test_sqlite_repository_joint_crud_lifecycle(db_session: Session):
 def test_generate_household_excel_export(db_session: Session):
     """Verifica que la exportacion Excel binaria genere las 3 pestanas requeridas."""
     import io
-    import openpyxl
+    import openpyxl  # type: ignore
     from backend.services.joint_accounting_service import generate_household_excel_export
 
     repo = SQLiteRepository(db_session)
