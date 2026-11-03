@@ -15,6 +15,7 @@ from backend.domain.models import watchlist as watchlist_models
 from backend.domain.models import copilot as copilot_models
 from backend.domain.models import guidelines as guideline_models
 from backend.domain.models import joint as joint_models
+from backend.domain.models import backup as backup_models
 from backend.database.componentes.sqlite_db import get_db
 from backend.api.main import app
 

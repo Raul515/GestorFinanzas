@@ -140,6 +140,7 @@ El **objetivo** de esta especificación es implementar un sistema completo, robu
   - `POST /backup/create`: Genera una nueva instantánea local en `backups/` y retorna sus metadatos.
   - `GET /backup/download`: Genera una copia atómica caliente al vuelo y la devuelve como stream binario (`FileResponse` con `Content-Disposition: attachment; filename="finanzas_backup_YYYYMMDD_HHMMSS.db"` y media-type `application/x-sqlite3`).
   - `GET /backup/list`: Retorna `BackupListResponse` con las instantáneas locales existentes y el nombre del snapshot disponible para rollback.
+  - `POST /backup/validate`: Acepta un `UploadFile` (.db) y valida su integridad y estructura retornando `BackupValidationResult` sin modificar la base activa.
   - `POST /backup/restore/upload`: Acepta un `UploadFile` (.db), valida su integridad, purga WAL, crea el snapshot previo, ejecuta la restauración, aplica `init_db()` y retorna `RestoreResponse`.
   - `POST /backup/restore/local/{filename}`: Restaura una de las instantáneas locales guardadas en `backups/`.
   - `POST /backup/restore/rollback`: Deshace la última restauración aplicando el snapshot previo de seguridad en 1 clic.
@@ -212,3 +213,13 @@ El **objetivo** de esta especificación es implementar un sistema completo, robu
    - CUANDO el usuario pulse `[↩️ Deshacer Restauración]`, EL SISTEMA DEBE restaurar de forma atómica el snapshot previo `safety_prerestore_*.db`, devolviendo la base de datos con éxito al estado previo a la restauración.
 9. **Rotación de Instantáneas Locales**:
    - EL SISTEMA DEBE limitar el catálogo de instantáneas locales en `backups/` a la cantidad configurada en `keep_max_copies`, eliminando las más antiguas ordenadas por timestamp.
+
+---
+
+## 6. Registro de Mejoras Futuras (Post-Spec)
+
+- **Compresión Automática de Copias (`.db.gz` / `.zip`)**: Soporte para descargas y almacenamiento comprimido en gzip/zip, optimizando en un 70-85% el espacio en disco y el ancho de banda transferido.
+- **Cifrado Simétrico de Copias con Contraseña Maestra (AES-256-GCM / SQLCipher)**: Posibilidad de cifrar el archivo de respaldo con una clave privada antes de descargarlo o sincronizarlo en nube.
+- **Sincronización Externa de Respaldos (WebDAV / Nextcloud / S3 / Google Drive)**: Conector de subida automática de respaldos periódicos a un almacenamiento remoto del usuario.
+- **Alertas Proactivas de Integridad y Backup Vencido**: Notificaciones emergentes o toasts en la interfaz de Streamlit si la base de datos supera los 30 días sin copia de seguridad o si `PRAGMA integrity_check` detecta anomalías.
+- **Visor de Instantáneas Históricas en Modo Solo Lectura**: Capacidad de inspeccionar transacciones y saldos de copias antiguas en una vista auxiliar sin sobrescribir la base activa.

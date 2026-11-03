@@ -23,6 +23,7 @@ try:
         render_annual_guidelines_expander,
     )
     from frontend.views.joint_view import render_joint_view
+    from frontend.views.backup_view import render_backup_view
 except ImportError:
     from services.financial_calculator import (  # type: ignore
         calculate_category_totals,
@@ -34,6 +35,7 @@ except ImportError:
         render_annual_guidelines_expander,
     )
     from views.joint_view import render_joint_view  # type: ignore
+    from views.backup_view import render_backup_view  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +163,7 @@ tabs_list = (
         "🔬 Análisis Fundamental (Deep Dive)",
         "💬 Copiloto Patrimonial",
         "🏛️ Comité Asesor Multiagente",
+        "💾 Base de Datos y Copias de Seguridad",
     ]
 )
 tabs = st.tabs(tabs_list)
@@ -172,6 +175,7 @@ tab_screener = tabs[15]
 tab_deepdive = tabs[16]
 tab_copilot = tabs[17]
 tab_committee = tabs[18]
+tab_backup = tabs[19]
 
 # Datos globales de categorías y subcategorías
 categorias = api_client.get_categorias()
@@ -2358,6 +2362,14 @@ with tab_committee:
         "tienen propósito exclusivamente pedagógico e informativo. No constituyen recomendación de inversión personalizada ni asesoramiento financiero "
         "regulado (MiFID II). La asignación de activos de riesgo debe realizarse bajo el estricto criterio y responsabilidad del usuario."
     )
+
+
+# ==========================================
+# PESTAÑA 19: BASE DE DATOS Y COPIAS DE SEGURIDAD
+# ==========================================
+with tab_backup:
+    render_backup_view()
+
 
 
 

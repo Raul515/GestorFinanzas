@@ -1167,6 +1167,197 @@ def resend_joint_invitation() -> bool:
     return False
 
 
+# ==============================================================================
+# MÉTODOS DE COPIAS DE SEGURIDAD Y RESTAURACIÓN (SPEC 011 - BACKUP & RESTORE)
+# ==============================================================================
+
+def get_database_health() -> Optional[Dict[str, Any]]:
+    """Consulta el diagnóstico de salud, integridad y advertencia de respaldos."""
+    url = f"{API_URL}/backup/health"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_database_health (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de conexión al consultar salud de base de datos en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_database_health(): %s", e)
+    return None
+
+
+def create_backup(custom_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Genera una copia de seguridad caliente en el servidor."""
+    url = f"{API_URL}/backup/create"
+    params = {"custom_name": custom_name} if custom_name else {}
+    try:
+        response = requests.post(url, params=params, timeout=30)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en create_backup (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de conexión al crear backup en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_backup(): %s", e)
+    return None
+
+
+def download_backup_bytes() -> Optional[tuple[bytes, str]]:
+    """Descarga los bytes binarios de la base de datos consistente y retorna (bytes, filename)."""
+    url = f"{API_URL}/backup/download"
+    try:
+        response = requests.get(url, timeout=45)
+        if response.status_code == 200:
+            # Obtener nombre del header Content-Disposition si existe
+            filename = "finanzas_backup.db"
+            cd = response.headers.get("content-disposition", "")
+            if "filename=" in cd:
+                filename = cd.split("filename=")[-1].strip('"')
+            return response.content, filename
+        logger.warning("Fallo al descargar copia de seguridad (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al descargar backup en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en download_backup_bytes(): %s", e)
+    return None
+
+
+def list_backups() -> Dict[str, Any]:
+    """Obtiene el catálogo de copias de seguridad locales disponibles."""
+    url = f"{API_URL}/backup/list"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en list_backups (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en list_backups en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en list_backups(): %s", e)
+    return {"backups": [], "total_count": 0, "latest_safety_snapshot": None}
+
+
+def validate_backup_upload(file_bytes: bytes, filename: str) -> Optional[Dict[str, Any]]:
+    """Inspecciona y valida un archivo de copia subido sin aplicarlo a la base activa."""
+    url = f"{API_URL}/backup/validate"
+    files = {"file": (filename, file_bytes, "application/x-sqlite3")}
+    try:
+        response = requests.post(url, files=files, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en validate_backup_upload (%s): %s", response.status_code, response.text)
+        return {"is_valid": False, "error_message": response.json().get("detail", response.text)}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en validate_backup_upload en %s: %s", url, e)
+        return {"is_valid": False, "error_message": f"Error de conexión: {str(e)}"}
+    except Exception as e:
+        logger.error("Error inesperado en validate_backup_upload(): %s", e)
+        return {"is_valid": False, "error_message": f"Error inesperado: {str(e)}"}
+
+
+def restore_backup_upload(file_bytes: bytes, filename: str) -> Optional[Dict[str, Any]]:
+    """Sube y aplica un archivo .db de restauración validando previamente su integridad."""
+    url = f"{API_URL}/backup/restore/upload"
+    files = {"file": (filename, file_bytes, "application/x-sqlite3")}
+    try:
+        response = requests.post(url, files=files, timeout=45)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en restore_backup_upload (%s): %s", response.status_code, response.text)
+        return {"success": False, "message": response.json().get("detail", response.text)}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en restore_backup_upload en %s: %s", url, e)
+        return {"success": False, "message": f"Error de conexión: {str(e)}"}
+    except Exception as e:
+        logger.error("Error inesperado en restore_backup_upload(): %s", e)
+        return {"success": False, "message": f"Error inesperado: {str(e)}"}
+
+
+def restore_backup_local(filename: str) -> Optional[Dict[str, Any]]:
+    """Restaura una instantánea del catálogo local en backups/."""
+    url = f"{API_URL}/backup/restore/local/{filename}"
+    try:
+        response = requests.post(url, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en restore_backup_local (%s): %s", response.status_code, response.text)
+        return {"success": False, "message": response.json().get("detail", response.text)}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en restore_backup_local en %s: %s", url, e)
+        return {"success": False, "message": f"Error de conexión: {str(e)}"}
+    except Exception as e:
+        logger.error("Error inesperado en restore_backup_local(): %s", e)
+        return {"success": False, "message": f"Error inesperado: {str(e)}"}
+
+
+def rollback_restore() -> Optional[Dict[str, Any]]:
+    """Deshace en 1 clic la última restauración aplicando el snapshot previo de seguridad."""
+    url = f"{API_URL}/backup/restore/rollback"
+    try:
+        response = requests.post(url, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en rollback_restore (%s): %s", response.status_code, response.text)
+        return {"success": False, "message": response.json().get("detail", response.text)}
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en rollback_restore en %s: %s", url, e)
+        return {"success": False, "message": f"Error de conexión: {str(e)}"}
+    except Exception as e:
+        logger.error("Error inesperado en rollback_restore(): %s", e)
+        return {"success": False, "message": f"Error inesperado: {str(e)}"}
+
+
+def delete_backup_local(filename: str) -> bool:
+    """Elimina permanentemente una copia de seguridad local del servidor."""
+    url = f"{API_URL}/backup/local/{filename}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en delete_backup_local (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_backup_local en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_backup_local(): %s", e)
+    return False
+
+
+def get_backup_schedule() -> Optional[Dict[str, Any]]:
+    """Consulta la configuración de programación de copias automáticas."""
+    url = f"{API_URL}/backup/schedule"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_backup_schedule (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_backup_schedule en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_backup_schedule(): %s", e)
+    return None
+
+
+def update_backup_schedule(enabled: bool, frequency_days: int, keep_max_copies: int) -> Optional[Dict[str, Any]]:
+    """Actualiza la programación de copias periódicas automáticas."""
+    url = f"{API_URL}/backup/schedule"
+    payload = {
+        "enabled": enabled,
+        "frequency_days": frequency_days,
+        "keep_max_copies": keep_max_copies,
+    }
+    try:
+        response = requests.put(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en update_backup_schedule (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en update_backup_schedule en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_backup_schedule(): %s", e)
+    return None
+
+
+
 
 
 

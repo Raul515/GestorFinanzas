@@ -446,3 +446,9 @@ logs/
 .DS_Store
 Thumbs.db
 
+# GESTIÓN Y COPIAS DE SEGURIDAD (SPEC 011)
+backups/
+*.backup
+*.db.bak
+
+

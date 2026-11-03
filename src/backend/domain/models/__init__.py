@@ -7,6 +7,7 @@ from .market_cache import MarketCache
 from .watchlist import WatchlistItem
 from .copilot import CopilotSession, CopilotMessage
 from .guidelines import AppliedGuidelineStrategy
+from .backup import BackupScheduleConfig
 from .joint import (
     JointAccount,
     JointCategory,
@@ -29,6 +30,7 @@ __all__ = [
     "CopilotSession",
     "CopilotMessage",
     "AppliedGuidelineStrategy",
+    "BackupScheduleConfig",
     "JointAccount",
     "JointCategory",
     "JointSubcategory",
@@ -37,3 +39,4 @@ __all__ = [
     "JointMonthlyContribution",
     "JointAppliedSyncEvent",
 ]
+

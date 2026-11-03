@@ -18,7 +18,7 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    from backend.domain.models import categories, budgets, transactions, emergency_fund, market_cache, watchlist, copilot, guidelines, joint
+    from backend.domain.models import categories, budgets, transactions, emergency_fund, market_cache, watchlist, copilot, guidelines, joint, backup
     Base.metadata.create_all(bind=engine)
     try:
         with engine.connect() as conn:

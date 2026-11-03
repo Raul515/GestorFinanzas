@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 import logging
 import os
 import time
@@ -17,8 +19,10 @@ from backend.api.routers import (
     guidelines,
     metrics,
     joint,
+    backup,
 )
-from backend.database.componentes.sqlite_db import init_db
+from backend.database.componentes.sqlite_db import SessionLocal, init_db
+from backend.services import backup_service
 
 # Configurar logging persistente rotativo con filtro de privacidad
 backend_log_file = os.getenv("BACKEND_LOG_FILE", "logs/backend.log")
@@ -26,10 +30,49 @@ setup_logging(backend_log_file)
 logger = logging.getLogger("backend.api.main")
 logger.info("Inicializando servicio Backend FastAPI y base de datos")
 
-app = FastAPI(title="Gestor Finanzas API")
-
 # Inicializar la base de datos
 init_db()
+
+
+async def run_periodic_backup_checker():
+    """Worker no bloqueante que evalúa periódicamente (cada 1h) respaldos programados."""
+    while True:
+        try:
+            await asyncio.sleep(3600)
+            db = SessionLocal()
+            try:
+                backup_service.check_and_run_scheduled_backup(db)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("Error en verificación periódica de copias de seguridad: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ciclo de vida de la aplicación con comprobación inicial y worker de copias en background."""
+    try:
+        db = SessionLocal()
+        try:
+            backup_service.check_and_run_scheduled_backup(db)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("Fallo al comprobar copias programadas en arranque: %s", exc)
+
+    worker_task = asyncio.create_task(run_periodic_backup_checker())
+    yield
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="Gestor Finanzas API", lifespan=lifespan)
+
 
 
 @app.middleware("http")
@@ -76,6 +119,7 @@ app.include_router(committee.router)
 app.include_router(guidelines.router)
 app.include_router(metrics.router)
 app.include_router(joint.router)
+app.include_router(backup.router)
 
 
 
