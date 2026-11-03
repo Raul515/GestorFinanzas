@@ -188,6 +188,7 @@ def test_validate_backup_file(temp_env, tmp_path: Path):
     foreign_res = validate_backup_file(foreign_db)
     assert foreign_res.is_valid is False
     assert foreign_res.integrity_status == "missing_schema"
+    assert foreign_res.error_message is not None
     assert "tablas financieras obligatorias" in foreign_res.error_message
 
 
