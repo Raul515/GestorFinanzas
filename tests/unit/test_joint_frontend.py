@@ -135,6 +135,15 @@ def test_api_client_transactions_and_contributions():
         assert res_asistida is not None
         assert res_asistida["month"] == "2026-11"
 
+    # Delete Contribution
+    with patch("requests.delete") as mock_del:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_del.return_value = mock_resp
+
+        ok_cb = api_client.delete_joint_contribution(1)
+        assert ok_cb is True
+
 
 def test_api_client_get_joint_contribution_calculation():
     """Valida la consulta del cálculo dinámico de cuotas mensuales (Mejora 1)."""

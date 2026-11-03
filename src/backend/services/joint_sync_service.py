@@ -4,7 +4,7 @@ Opera mediante lectura y escritura exclusiva de ficheros JSON atómicos en disco
 garantizando resiliencia ante desconexiones, idempotencia por UUIDv4 y resolución determinista LWW.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import logging
 import os
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.domain.models.joint import (
     JointAppliedSyncEvent,
+    JointCategory,
     JointMonthlyContribution,
     JointSinkingFund,
     JointSubcategory,
@@ -129,6 +130,7 @@ class JointSyncService:
             # Renombrado atómico en el mismo sistema de ficheros
             os.replace(tmp_path, final_path)
             logger.info("Evento delta emitido con éxito a outbox: %s", final_path.name)
+            self.rotate_outbox()
         except Exception as exc:
             logger.error("Error emitiendo evento delta a outbox (%s): %s", eff_event_id, exc)
             if tmp_path.exists():
@@ -139,6 +141,29 @@ class JointSyncService:
             raise
 
         return event_payload
+
+    def rotate_outbox(self, max_files: int = 50) -> None:
+        """
+        Mantiene un límite máximo de archivos en sync/outbox/ eliminando los más
+        antiguos para evitar saturación indefinida del disco.
+        """
+        try:
+            outbox_files = [
+                f for f in self.outbox_dir.iterdir()
+                if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+            ]
+            if len(outbox_files) > max_files:
+                outbox_files.sort(key=lambda f: f.stat().st_mtime)
+                excess = len(outbox_files) - max_files
+                for old_f in outbox_files[:excess]:
+                    try:
+                        old_f.unlink()
+                    except OSError:
+                        pass
+        except Exception as exc:
+            logger.warning("Error en rotación de outbox: %s", exc)
+
+    _rotate_outbox = rotate_outbox
 
     def process_inbox(self, db: Session) -> Dict[str, Any]:
         """
@@ -203,14 +228,15 @@ class JointSyncService:
             try:
                 self._apply_event(db, event)
 
-                # Registrar evento en la tabla de aplicados para idempotencia futura
-                applied_record = JointAppliedSyncEvent(
-                    event_id=event.event_id,
-                    entity_type=event.entity_type.value,
-                    action=event.action.value,
-                )
-                db.add(applied_record)
-                db.commit()
+                # Registrar evento en la tabla de aplicados para idempotencia futura (salvo reset total a Estado Cero)
+                if not (event.entity_type == SyncEntityType.ACCOUNT and event.action == SyncAction.DELETE):
+                    applied_record = JointAppliedSyncEvent(
+                        event_id=event.event_id,
+                        entity_type=event.entity_type.value,
+                        action=event.action.value,
+                    )
+                    db.add(applied_record)
+                    db.commit()
 
                 self._archive_file(file_path)
                 processed_count += 1
@@ -234,16 +260,74 @@ class JointSyncService:
 
     def _apply_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica la mutación en SQLite bajo reglas de Last-Write-Wins (LWW)."""
-        payload = event.payload
-
         if event.entity_type == SyncEntityType.TRANSACTION:
             self._apply_transaction_event(db, event)
         elif event.entity_type == SyncEntityType.CONTRIBUTION:
             self._apply_contribution_event(db, event)
         elif event.entity_type == SyncEntityType.SINKING_FUND:
             self._apply_sinking_fund_event(db, event)
+        elif event.entity_type == SyncEntityType.ACCOUNT:
+            self._apply_account_event(db, event)
+        elif event.entity_type == SyncEntityType.SUBCATEGORY:
+            self._apply_subcategory_event(db, event)
         else:
             logger.warning("Tipo de entidad no manejada en sincronización: %s", event.entity_type)
+
+    def _apply_subcategory_event(self, db: Session, event: SyncEventPayload) -> None:
+        """Aplica mutación sobre subcategorías de necesidades comunes sincronizadas."""
+        payload = event.payload
+        name = payload.get("name")
+        if not name:
+            logger.warning("Evento SUBCATEGORY ignorado por falta de 'name' en payload.")
+            return
+
+        subcat = db.query(JointSubcategory).filter(JointSubcategory.name == name).first()
+
+        if event.action == SyncAction.DELETE:
+            if subcat:
+                db.delete(subcat)
+                logger.info("Subcategoría conjunta '%s' eliminada por evento remoto.", name)
+            return
+
+        cat_name = payload.get("category_name")
+        target_cat = None
+        if cat_name:
+            target_cat = db.query(JointCategory).filter(
+                JointCategory.joint_account_id == 1, JointCategory.name == cat_name
+            ).first()
+        if not target_cat:
+            target_cat = db.query(JointCategory).filter(JointCategory.joint_account_id == 1).first()
+
+        if not target_cat:
+            logger.warning("No se encontró categoría para asociar la subcategoría conjunta: %s", name)
+            return
+
+        monthly_budget = float(payload.get("monthly_budget", 0.0))
+
+        if not subcat:
+            subcat = JointSubcategory(
+                joint_category_id=target_cat.id,
+                name=name,
+                monthly_budget=monthly_budget,
+            )
+            db.add(subcat)
+            logger.info("Subcategoría conjunta '%s' creada con éxito por evento remoto.", name)
+        else:
+            if "monthly_budget" in payload:
+                subcat.monthly_budget = monthly_budget
+            if target_cat and subcat.joint_category_id != target_cat.id:
+                subcat.joint_category_id = target_cat.id
+            logger.info("Subcategoría conjunta '%s' actualizada por evento remoto.", name)
+
+    def _apply_account_event(self, db: Session, event: SyncEventPayload) -> None:
+        """Aplica eventos sobre la cuenta del hogar (ej. DELETE para reset remoto a Estado Cero)."""
+        if event.action == SyncAction.DELETE:
+            from backend.database.componentes.sqlite_crud import SQLiteRepository
+            repo = SQLiteRepository(db)
+            repo.reset_joint_account()
+            logger.info("Cuenta conjunta reseteada al Estado Cero mediante evento remoto ACCOUNT (DELETE).")
+        elif event.action == SyncAction.UPSERT:
+            logger.info("Evento ACCOUNT (UPSERT) procesado en inbox.")
 
     def _apply_transaction_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica mutación sobre transacciones del hogar con resolución determinista LWW por timestamp_utc."""
@@ -267,20 +351,28 @@ class JointSyncService:
             return
 
         if event.action == SyncAction.UPSERT:
-            # Resolver subcategoría por nombre si viene en el payload, para evitar colisión de IDs locales
-            subcat_id = payload.get("joint_subcategory_id")
+            # Resolver subcategoría con prioridad estricta por nombre para evitar colisión de IDs locales
+            subcat_id = None
             subcat_name = payload.get("subcategory_name")
-            if subcat_name and not subcat_id:
+            if subcat_name:
                 subcat = db.query(JointSubcategory).filter(JointSubcategory.name == subcat_name).first()
                 if subcat:
                     subcat_id = subcat.id
+            if subcat_id is None and payload.get("joint_subcategory_id"):
+                subcat_id = payload.get("joint_subcategory_id")
 
-            sinking_id = payload.get("joint_sinking_fund_id")
+            # Resolver hucha con prioridad estricta por nombre para evitar colisión de IDs locales
+            sinking_id = None
             sinking_name = payload.get("sinking_fund_name")
-            if sinking_name and not sinking_id:
-                fund = db.query(JointSinkingFund).filter(JointSinkingFund.name == sinking_name).first()
+            if sinking_name:
+                fund = db.query(JointSinkingFund).filter(
+                    JointSinkingFund.joint_account_id == 1,
+                    JointSinkingFund.name == sinking_name,
+                ).first()
                 if fund:
                     sinking_id = fund.id
+            if sinking_id is None and payload.get("joint_sinking_fund_id"):
+                sinking_id = payload.get("joint_sinking_fund_id")
 
             tx_date = datetime.strptime(payload["date"], "%Y-%m-%d").date() if isinstance(payload["date"], str) else payload["date"]
             amount = float(payload["amount"])
@@ -315,17 +407,27 @@ class JointSyncService:
                 deducted = 0.0
                 if sinking_id:
                     new_fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if new_fund and new_fund.current_balance > 0:
+                    payload_deduction = payload.get("sinking_fund_deduction")
+                    if payload_deduction is not None:
+                        deducted = float(payload_deduction)
+                    elif new_fund and new_fund.current_balance > 0:
                         deducted = min(float(new_fund.current_balance), float(amount))
-                        new_fund.current_balance = round(float(new_fund.current_balance) - deducted, 2)
+
+                    if new_fund and new_fund.current_balance > 0 and deducted > 0:
+                        new_fund.current_balance = round(max(0.0, float(new_fund.current_balance) - deducted), 2)
                 existing_tx.sinking_fund_deduction = deducted
             else:
                 deducted = 0.0
                 if sinking_id:
                     fund = db.query(JointSinkingFund).filter(JointSinkingFund.id == sinking_id).first()
-                    if fund and fund.current_balance > 0:
+                    payload_deduction = payload.get("sinking_fund_deduction")
+                    if payload_deduction is not None:
+                        deducted = float(payload_deduction)
+                    elif fund and fund.current_balance > 0:
                         deducted = min(float(fund.current_balance), float(amount))
-                        fund.current_balance = round(float(fund.current_balance) - deducted, 2)
+
+                    if fund and fund.current_balance > 0 and deducted > 0:
+                        fund.current_balance = round(max(0.0, float(fund.current_balance) - deducted), 2)
 
                 new_tx = JointTransaction(
                     uuid=tx_uuid,
@@ -343,33 +445,56 @@ class JointSyncService:
                 db.add(new_tx)
 
     def _apply_contribution_event(self, db: Session, event: SyncEventPayload) -> None:
-        """Aplica aportación mensual sincronizada."""
+        """Aplica aportación mensual sincronizada con resolución por UUID único."""
         payload = event.payload
-        month = payload["month"]
-        profile = payload["contributor_profile"]
-        amount = float(payload["amount"])
-        c_date = datetime.strptime(payload["contribution_date"], "%Y-%m-%d").date() if isinstance(payload["contribution_date"], str) else payload["contribution_date"]
+        month = payload.get("month")
+        profile = payload.get("contributor_profile")
+        amount = float(payload.get("amount", 0.0))
+        c_uuid = payload.get("uuid")
 
-        existing_c = (
-            db.query(JointMonthlyContribution)
-            .filter(
-                JointMonthlyContribution.joint_account_id == 1,
-                JointMonthlyContribution.month == month,
-                JointMonthlyContribution.contributor_profile == profile,
+        existing_c = None
+        if c_uuid:
+            existing_c = (
+                db.query(JointMonthlyContribution)
+                .filter(
+                    JointMonthlyContribution.joint_account_id == 1,
+                    JointMonthlyContribution.uuid == c_uuid,
+                )
+                .first()
             )
-            .first()
-        )
+        elif month and profile:
+            # Fallback por compatibilidad con deltas legacy sin UUID
+            existing_c = (
+                db.query(JointMonthlyContribution)
+                .filter(
+                    JointMonthlyContribution.joint_account_id == 1,
+                    JointMonthlyContribution.month == month,
+                    JointMonthlyContribution.contributor_profile == profile,
+                )
+                .first()
+            )
 
         if event.action == SyncAction.DELETE:
             if existing_c:
                 db.delete(existing_c)
             return
 
+        raw_date = payload.get("contribution_date")
+        if isinstance(raw_date, str):
+            c_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+        elif raw_date:
+            c_date = raw_date
+        else:
+            c_date = date.today()
+
         if existing_c:
             existing_c.amount = amount
             existing_c.contribution_date = c_date
+            if c_uuid:
+                existing_c.uuid = c_uuid
         else:
             new_c = JointMonthlyContribution(
+                uuid=c_uuid or str(uuid.uuid4()),
                 joint_account_id=1,
                 month=month,
                 contributor_profile=profile,
@@ -442,17 +567,20 @@ class JointSyncService:
             if last_event:
                 last_applied_dt = last_event.applied_at
 
+        is_synced = (inbox_pending == 0 and error_count == 0)
+
         return {
             "outbox_pending_count": outbox_pending,
             "inbox_pending_count": inbox_pending,
             "error_count": error_count,
             "last_applied_at": last_applied_dt.isoformat() if last_applied_dt else None,
-            "is_synchronized": outbox_pending == 0 and inbox_pending == 0,
+            "is_synchronized": is_synced,
         }
 
-    def clear_sync_folders(self) -> None:
+    def clear_sync_folders(self, keep_outbox: bool = False) -> None:
         """Elimina todos los archivos delta de las carpetas de sincronización para volver al Estado Cero."""
-        for folder in (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir):
+        target_folders = (self.inbox_dir, self.processed_dir, self.error_dir) if keep_outbox else (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir)
+        for folder in target_folders:
             if folder.exists():
                 for file_path in folder.glob("*"):
                     if file_path.is_file():
@@ -478,7 +606,8 @@ class JointSyncService:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 entity = data.get("entity_type")
-                if entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT":
+                action = data.get("action")
+                if (entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT") and (action in (SyncAction.UPSERT.value, "UPSERT")):
                     origin = data.get("origin_device_id")
                     if origin != self.local_device_id or origin == "LOCAL_DEVICE":
                         payload = data.get("payload", {})
@@ -491,6 +620,8 @@ class JointSyncService:
                             "contribution_strategy": payload.get("contribution_strategy", "NOMINAL_TEMPLATE"),
                             "member_a_reference_income": payload.get("member_a_reference_income", 0.0),
                             "member_b_reference_income": payload.get("member_b_reference_income", 0.0),
+                            "member_a_contribution_pct": payload.get("member_a_contribution_pct", 50.0),
+                            "member_b_contribution_pct": payload.get("member_b_contribution_pct", 50.0),
                             "member_a_name": payload.get("member_a_name", "Miembro A"),
                             "member_b_name": payload.get("member_b_name", "Miembro B"),
                         }

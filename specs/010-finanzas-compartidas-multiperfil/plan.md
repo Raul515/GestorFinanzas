@@ -133,7 +133,7 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
 
 ---
 
-### Fase 7: Mejoras, Auditoría de Resiliencia y Corrección de Bugs [COMPLETADA]
+### Fase 7: Mejoras, Auditoría de Resiliencia y Corrección de Bugs [EN PROCESO DE CORRECCIÓN DE AUDITORÍA]
 
 - **Objetivo**: Implementar capacidades clave de usabilidad, corregir los 4 bugs identificados en la auditoría previa al cierre de la especificación e incorporar la Mejora 1 para el cálculo dinámico de cuotas:
   1. **Restablecimiento y Regreso al Estado Cero en 1 Clic**: Endpoint `POST /joint/reset` y botón en la interfaz Streamlit para desactivar/purgar la cuenta conjunta y volver al estado inicial sin cuenta configurada (cero intrusión) de forma inmediata y segura sin tocar la consola.
@@ -160,6 +160,89 @@ Este plan técnico desglosa la implementación de la **Especificación 010** en 
   .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
   ```
 - **Criterio de Aceptación**: 100% de las 48 pruebas de la especificación pasando, reversibilidad garantizada a Estado Cero y tolerancia cross-device sin discrepancias.
+
+---
+
+### Fase 7.1: Auditoría Técnica Exhaustiva de Sincronización, Integridad y Despliegue Multi-SO (Docker / Syncthing)
+
+A raíz de la auditoría técnica exhaustiva del motor de sincronización asíncrona, concurrencia en Docker y coherencia contable cross-device, se identificaron los siguientes 11 hallazgos estructurados por severidad:
+
+#### 🔴 Bloque Crítico: Riesgos de Pérdida y Descuadre Contable Silencioso
+1. **Hallazgo 1 (CRÍTICO): Bug de Doble Deducción en Huchas de Amortización (*Double Deduction Bug*)**
+   - **Diagnóstico**: Al registrar un gasto vinculado a una hucha en el Dispositivo A, `joint.py` emite dos deltas: `SINKING_FUND (UPSERT)` con el `current_balance` ya descontado, y `TRANSACTION (UPSERT)` con el gasto. Al procesar en el Dispositivo B en orden cronológico, primero se asigna el saldo ya descontado de A y luego `_apply_transaction_event` vuelve a restar el importe (`fund.current_balance -= deducted`).
+   - **Impacto**: Un gasto de 200 € resta 400 € en el receptor; los saldos de las huchas divergen de forma permanente entre ambos ordenadores.
+2. **Hallazgo 2 (CRÍTICO): Inversión y Colisión de IDs Autoincrementales por Fallo en Resolución por Nombre**
+   - **Diagnóstico**: En `joint_sync_service.py`, la condición `if sinking_name and not sinking_id:` (y para `subcat_id`) nunca se cumple porque el emisor siempre incluye el ID numérico local en el payload. Como resultado, la resolución tolerante por nombre nunca se ejecuta y se aplica directamente el ID del emisor.
+   - **Impacto**: Si la hucha 1 en A es *'Vacaciones'* y la hucha 1 en B es *'Coche'*, un gasto de Vacaciones en A se imputa y descuenta de Coche en B.
+3. **Hallazgo 3 (CRÍTICO): Ausencia de `PRAGMA foreign_keys = ON` en SQLite y Corrupción Relacional**
+   - **Diagnóstico**: `sqlite_db.py` crea el motor SQLite sin el listener `@event.listens_for(Engine, "connect")` que active `PRAGMA foreign_keys = ON`. En SQLite vienen desactivadas por defecto.
+   - **Impacto**: Al borrar una hucha, las transacciones que la referencian no reciben `ON DELETE SET NULL`. Si posteriormente se crea una nueva hucha y SQLite le asigna el mismo ID autoincremental, todas las transacciones históricas de la hucha eliminada se reasignan erróneamente a la nueva.
+
+#### 🟠 Bloque Alto: Inconsistencias de Lógica Contable y Aportaciones
+4. **Hallazgo 4 (ALTO): Desconexión entre Aportaciones Mensuales y Saldo de Huchas (*Zero Growth Bug*)**
+   - **Diagnóstico**: `calculate_monthly_contributions()` calcula la cuota que debe distribuirse a cada hucha (`fund_allocations`), pero el endpoint `POST /joint/contributions/asentar-asistida` solo guarda la fila en `JointMonthlyContribution`, ignorando `fund_allocations`.
+   - **Impacto**: El saldo de las huchas jamás aumenta con las aportaciones; permanecen a 0,00 € indefinidamente salvo edición manual en la UI.
+5. **Hallazgo 5 (ALTO): Falta de UUID en Aportaciones y Sobrescritura de Extras (*Lost Extraordinary Contributions*)**
+   - **Diagnóstico**: `JointMonthlyContribution` carece de UUID y de clave única. Localmente permite insertar varias aportaciones en un mes (ej. cuota regular de 500 € + extra de 200 € = 700 €), pero `_apply_contribution_event` busca por `(month, profile)` y sobrescribe el importe (`existing_c.amount = amount`).
+   - **Impacto**: En el receptor la segunda aportación machaca a la primera, reduciendo el total a 200 € y perdiendo 500 € en el camino.
+6. **Hallazgo 6 (ALTO): Imposibilidad de Reversión de Aportaciones en UI y Desconexión con el Perfil Personal**
+   - **Diagnóstico**: No existe endpoint ni botón en la interfaz para eliminar o deshacer una aportación común (`DELETE /joint/contributions/{id}`). Si el usuario borra la transacción de aportación en su perfil personal, la aportación en la cuenta conjunta queda intacta y jamás se notifica a la pareja.
+
+#### 🟡 Bloque Medio: Resiliencia de Transporte y Ciclo de Vida
+7. **Hallazgo 7 (MEDIO): Acumulación Indefinida en `sync/outbox/` y Falso Estado "No Sincronizado"**
+   - **Diagnóstico**: Los deltas emitidos en `sync/outbox/` nunca se archivan ni eliminan por la app. Como `is_synchronized` requiere `outbox_pending_count == 0`, la aplicación muestra permanentemente `🟡 Sin conexión / Pendiente` o `🟡 0 Delta(s) Pendiente(s)`.
+8. **Hallazgo 8 (MEDIO): Pérdida de Repartos Personalizados al Aceptar Invitación (Opción A)**
+   - **Diagnóstico**: `accept_joint_invitation` hardcodea `member_a_contribution_pct=50.0` y `member_b_contribution_pct=50.0` en vez de extraer los porcentajes del payload de la invitación.
+   - **Impacto**: Si la pareja pactó 60/40, el segundo equipo adopta 50/50, calculando cuotas distintas en cada máquina.
+9. **Hallazgo 9 (MEDIO): Falta de Propagación Remota de `reset_joint_account`**
+   - **Diagnóstico**: Al desactivar la cuenta conjunta en un dispositivo, solo se purga la base y carpetas locales. No se emite ningún evento `ACCOUNT DELETE` a Syncthing, permitiendo que el otro equipo siga enviando eventos huérfanos.
+10. **Hallazgo 10 (MEDIO): Ausencia de Sincronización Reactiva en el Perfil Personal**
+    - **Diagnóstico**: `process_inbox()` solo se dispara al navegar a "Economía del Hogar". Si el usuario permanece en su "Perfil Personal", la app no procesa el buzón de entrada y el banner de inicio de mes no detecta si la pareja ya aportó.
+
+#### 🔵 Bloque Bajo: Extensibilidad de Catálogo
+11. **Hallazgo 11 (BAJO): Ausencia de Entidad Sincronizable para Subcategorías del Hogar**
+    - **Diagnóstico**: `SyncEntityType` no contempla subcategorías. Modificaciones o altas de conceptos comunes en una máquina no se propagan a la otra, dejando transacciones sin clasificar (`subcategory_id = None`).
+
+---
+
+### Plan de Trabajo Correctivo (Secuencia de Mayor a Menor Criticidad)
+
+El presente plan correctivo se ejecutará estrictamente por fases de severidad tras la clarificación de decisiones de diseño con el usuario:
+
+#### Paso 1: Erradicación de Fallos Críticos (R-1, R-2, R-3) [COMPLETADO]
+1. [x] **R-1 (Doble Deducción de Huchas)**:
+   - Eliminada la emisión redundante de `SINKING_FUND` en `create_joint_transaction` y `delete_joint_transaction`. Las deducciones de huchas quedan gobernadas con precisión de céntimo exclusivamente a través de los deltas de `TRANSACTION (UPSERT/DELETE)`.
+2. [x] **R-2 (Resolución Prioritaria por Nombre de Huchas y Subcategorías)**:
+   - Modificado `_apply_transaction_event` en `joint_sync_service.py` para resolver **siempre y prioritariamente por nombre** (`sinking_fund_name` y `subcategory_name`), descartando el ID numérico local del emisor para inmunidad total ante autoincrementales desfasados.
+3. [x] **R-3 (Activación de Foreign Keys en SQLite)**:
+   - Añadido en `src/backend/database/componentes/sqlite_db.py` el listener `@event.listens_for(engine, "connect")` ejecutando `PRAGMA foreign_keys = ON;` y desvinculación preventiva en `delete_joint_sinking_fund` para garantizar que `ON DELETE SET NULL` se cumpla estrictamente a nivel de motor.
+
+#### Paso 2: Integridad Contable y Aportaciones (R-4, R-5, R-6) [COMPLETADO]
+4. [x] **R-4 (Incremento Automático de Huchas por Aportaciones)**:
+   - En `record_assisted_contribution()`, aplicar las cuotas de `fund_allocations` a las huchas activas incrementando su `current_balance` y emitiendo los deltas correspondientes a outbox. Se habilitó selector de hucha de destino para aportaciones extraordinarias en la vista y API.
+5. [x] **R-5 (UUID en Aportaciones y Múltiples Aportaciones por Mes)**:
+   - Añadido campo `uuid` (UUIDv4) a `JointMonthlyContribution` y actualizado `_apply_contribution_event` para resolver mutaciones y borrados por UUID único, permitiendo múltiples aportaciones en el mismo mes sin sobreescrituras.
+6. [x] **R-6 (Reversión y Eliminación de Aportaciones)**:
+   - Creado endpoint `DELETE /joint/contributions/{contribution_id}` en FastAPI con botón/expander de reversión en Streamlit, reversión automática de saldos de huchas asociadas y eliminación en cascada bidireccional desde la transacción personal en `/transactions/{id}` con emisión de tombstones `CONTRIBUTION (DELETE)`.
+
+#### Paso 3: Resiliencia de Transporte y Ciclo de Vida (R-7, R-8, R-9, R-10) [COMPLETADO]
+7. [x] **R-7 (Gestión de Outbox y Estado de Sincronización)**:
+   - Ajustado el cálculo de `is_synchronized` para evaluar la frescura y ausencia de errores en `inbox` (`inbox_pending == 0 and error_count == 0`), e implementada la rotación automática de deltas viejos en `sync/outbox/` mediante `_rotate_outbox()`.
+8. [x] **R-8 (Preservación de Porcentajes de Aportación en Invitación)**:
+   - Extraídos `member_a_contribution_pct` y `member_b_contribution_pct` de la invitación en `get_pending_invitation()` y asignados en `accept_joint_invitation()`.
+9. [x] **R-9 (Propagación Remota de Reset de Hogar)**:
+   - Emisión de evento delta `ACCOUNT (DELETE)` a `sync/outbox/` en `reset_joint_account()` antes de purgar las tablas, y soporte en `_apply_account_event()` para que el dispositivo receptor restablezca su estado local a Estado Cero.
+10. [x] **R-10 (Sincronización en Inicio de Aplicación)**:
+    - Ejecución reactiva de `trigger_process_inbox()` al inicializar o refrescar `app.py` en cualquier contexto de perfil para mantener los banners e indicadores al día.
+
+#### Paso 4: Robustez de Catálogo (R-11)
+11. [x] **R-11 (Sincronización de Subcategorías)**:
+    - Añadido `SUBCATEGORY` a `SyncEntityType` en `schemas/joint.py`.
+    - Implementados endpoints `POST`, `PUT` y `DELETE` para `/joint/subcategories` con emisión de deltas `SUBCATEGORY (UPSERT / DELETE)`.
+    - Añadidos métodos `get_joint_category()`, `update_joint_subcategory()` y `delete_joint_subcategory()` en `SQLiteRepository`.
+    - Añadido manejador `_apply_subcategory_event()` en `JointSyncService` para replicar altas, modificaciones y borrados en el dispositivo receptor con resolución por nombre.
+    - Añadidas pruebas unitarias y de integración pasando al 100%.
+
 
 ---
 

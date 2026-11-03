@@ -22,6 +22,7 @@ from backend.domain.schemas import (
 from typing import Optional, Any, List, Dict
 import json
 import datetime
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,53 @@ class SQLiteRepository(IRepository):
             if not db_item:
                 logger.info("Intento de eliminar transacción inexistente con ID %s", transaction_id)
                 return False
+
+            # Si la transacción personal corresponde a una aportación conjunta, eliminar la aportación en cascada y sincronizar
+            j_contrib = None
+            if getattr(db_item, "joint_contribution_uuid", None):
+                j_contrib = (
+                    self.db.query(joint_model.JointMonthlyContribution)
+                    .filter(joint_model.JointMonthlyContribution.uuid == db_item.joint_contribution_uuid)
+                    .first()
+                )
+            elif "cuenta conjunta" in getattr(db_item, "description", "").lower():
+                j_contrib = (
+                    self.db.query(joint_model.JointMonthlyContribution)
+                    .filter(joint_model.JointMonthlyContribution.personal_transaction_id == db_item.id)
+                    .first()
+                )
+
+            if j_contrib:
+                logger.info(
+                    "Eliminación en cascada de aportación conjunta %s por eliminación de transacción personal %s",
+                    j_contrib.id,
+                    transaction_id,
+                )
+                del_info = self.delete_joint_contribution(j_contrib.id)
+                try:
+                    from backend.services.joint_sync_service import JointSyncService
+                    sync_svc = JointSyncService()
+                    if del_info and del_info.get("uuid"):
+                        sync_svc.emit_event(
+                            entity_type=joint_schema.SyncEntityType.CONTRIBUTION,
+                            action=joint_schema.SyncAction.DELETE,
+                            payload={
+                                "uuid": del_info["uuid"],
+                                "month": del_info["month"],
+                                "contributor_profile": del_info["contributor_profile"],
+                            },
+                            origin_device_id=sync_svc.local_device_id,
+                        )
+                        for f_data in (del_info.get("reverted_funds") or {}).values():
+                            sync_svc.emit_event(
+                                entity_type=joint_schema.SyncEntityType.SINKING_FUND,
+                                action=joint_schema.SyncAction.UPSERT,
+                                payload=f_data,
+                                origin_device_id=sync_svc.local_device_id,
+                            )
+                except Exception as sync_exc:
+                    logger.warning("No se pudo emitir tombstone desde delete_transaction: %s", sync_exc)
+                return True
 
             # Si la transacción está vinculada a una estrategia de pautas, revertir la estrategia completa en cascada
             strat_id = getattr(db_item, "applied_strategy_id", None)
@@ -563,6 +611,14 @@ class SQLiteRepository(IRepository):
         """Obtiene las categorías del hogar junto a sus subcategorías."""
         return self.db.query(joint_model.JointCategory).filter(joint_model.JointCategory.joint_account_id == 1).all()
 
+    def get_joint_category(self, category_id: int) -> Optional[joint_model.JointCategory]:
+        """Obtiene una categoría de necesidades del hogar por su ID."""
+        return (
+            self.db.query(joint_model.JointCategory)
+            .filter(joint_model.JointCategory.id == category_id, joint_model.JointCategory.joint_account_id == 1)
+            .first()
+        )
+
     def create_joint_category(self, category: joint_schema.JointCategoryCreate) -> joint_model.JointCategory:
         """Crea una categoría de necesidades del hogar."""
         data = category.model_dump()
@@ -587,7 +643,6 @@ class SQLiteRepository(IRepository):
         """Obtiene una subcategoría de necesidades comunes por ID."""
         return self.db.query(joint_model.JointSubcategory).filter(joint_model.JointSubcategory.id == subcategory_id).first()
 
-
     def create_joint_subcategory(self, subcategory: joint_schema.JointSubcategoryCreate) -> joint_model.JointSubcategory:
         """Crea una nueva subcategoría de necesidades comunes."""
         data = subcategory.model_dump()
@@ -600,6 +655,29 @@ class SQLiteRepository(IRepository):
         self.db.commit()
         self.db.refresh(db_item)
         return db_item
+
+    def update_joint_subcategory(
+        self, subcategory_id: int, update_data: joint_schema.JointSubcategoryUpdate
+    ) -> Optional[joint_model.JointSubcategory]:
+        """Actualiza el nombre o presupuesto mensual de una subcategoría común."""
+        item = self.get_joint_subcategory(subcategory_id)
+        if not item:
+            return None
+        data = update_data.model_dump(exclude_unset=True)
+        for key, value in data.items():
+            setattr(item, key, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete_joint_subcategory(self, subcategory_id: int) -> bool:
+        """Elimina una subcategoría de necesidades comunes."""
+        item = self.get_joint_subcategory(subcategory_id)
+        if not item:
+            return False
+        self.db.delete(item)
+        self.db.commit()
+        return True
 
     def get_joint_sinking_funds(self, status: Optional[str] = None) -> List[joint_model.JointSinkingFund]:
         """Obtiene las huchas de amortización, filtrando opcionalmente por estado."""
@@ -670,6 +748,11 @@ class SQLiteRepository(IRepository):
             if target_fund:
                 target_fund.current_balance += fund.current_balance
 
+        # Desvincular explícitamente cualquier transacción para que joint_sinking_fund_id quede en None
+        self.db.query(joint_model.JointTransaction).filter(
+            joint_model.JointTransaction.joint_sinking_fund_id == fund_id
+        ).update({"joint_sinking_fund_id": None})
+
         self.db.delete(fund)
         self.db.commit()
         return True
@@ -714,7 +797,7 @@ class SQLiteRepository(IRepository):
             profile_val = profile_val.value
 
         db_tx = joint_model.JointTransaction(
-            uuid=data.get("uuid") or str(joint_model.uuid.uuid4()),
+            uuid=data.get("uuid") or str(uuid.uuid4()),
             joint_account_id=1,
             date=data["date"],
             amount=data["amount"],
@@ -768,6 +851,17 @@ class SQLiteRepository(IRepository):
             query = query.filter(joint_model.JointMonthlyContribution.month == month)
         return query.order_by(joint_model.JointMonthlyContribution.contribution_date.desc()).all()
 
+    def get_joint_contribution(self, contrib_id: int) -> Optional[joint_model.JointMonthlyContribution]:
+        """Obtiene una aportación mensual por su ID primario."""
+        return (
+            self.db.query(joint_model.JointMonthlyContribution)
+            .filter(
+                joint_model.JointMonthlyContribution.id == contrib_id,
+                joint_model.JointMonthlyContribution.joint_account_id == 1,
+            )
+            .first()
+        )
+
     def create_joint_contribution(
         self, contrib: joint_schema.JointMonthlyContributionCreate
     ) -> joint_model.JointMonthlyContribution:
@@ -777,17 +871,70 @@ class SQLiteRepository(IRepository):
         if hasattr(profile_val, "value"):
             profile_val = profile_val.value
 
+        c_uuid = data.get("uuid") or str(uuid.uuid4())
         db_contrib = joint_model.JointMonthlyContribution(
+            uuid=c_uuid,
             joint_account_id=1,
             month=data["month"],
             contributor_profile=str(profile_val),
             amount=data["amount"],
             contribution_date=data["contribution_date"],
+            personal_transaction_id=data.get("personal_transaction_id"),
+            sinking_fund_allocations=data.get("sinking_fund_allocations"),
         )
         self.db.add(db_contrib)
         self.db.commit()
         self.db.refresh(db_contrib)
         return db_contrib
+
+    def delete_joint_contribution(self, contrib_id: int) -> Optional[Dict[str, Any]]:
+        """Elimina una aportación conjunta, revierte el saldo de huchas asignadas y borra la transacción personal asociada."""
+        contrib = self.get_joint_contribution(contrib_id)
+        if not contrib:
+            return None
+
+        c_uuid = contrib.uuid
+        c_month = contrib.month
+        c_profile = contrib.contributor_profile
+        p_tx_id = contrib.personal_transaction_id
+        alloc_str = contrib.sinking_fund_allocations
+
+        reverted_funds = {}
+        if alloc_str:
+            try:
+                allocs = json.loads(alloc_str)
+                for fid_str, amount in allocs.items():
+                    f_id = int(fid_str)
+                    fund = self.get_joint_sinking_fund(f_id)
+                    if fund:
+                        fund.current_balance = round(max(0.0, float(fund.current_balance) - float(amount)), 2)
+                        reverted_funds[fund.name] = {
+                            "name": fund.name,
+                            "target_amount": float(fund.target_amount),
+                            "current_balance": float(fund.current_balance),
+                            "monthly_target_amount": float(fund.monthly_target_amount),
+                            "allocation_percentage": float(fund.allocation_percentage),
+                            "status": fund.status,
+                            "priority": fund.priority,
+                        }
+            except Exception as exc:
+                logger.error("Error al revertir asignaciones de huchas en aportación %s: %s", contrib_id, exc)
+
+        # Eliminar transacción personal vinculada si existe
+        if p_tx_id:
+            p_tx = self.db.query(trans_model.Transaction).filter(trans_model.Transaction.id == p_tx_id).first()
+            if p_tx:
+                self.db.delete(p_tx)
+
+        self.db.delete(contrib)
+        self.db.commit()
+
+        return {
+            "uuid": c_uuid,
+            "month": c_month,
+            "contributor_profile": c_profile,
+            "reverted_funds": reverted_funds,
+        }
 
     def reset_joint_account(self) -> bool:
         """Purga todas las entidades del espacio conjunto, devolviendo la base de datos al Estado Cero."""

@@ -1045,6 +1045,21 @@ def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
     return None
 
 
+def delete_joint_contribution(contribution_id: int) -> bool:
+    """Elimina físicamente una aportación a la cuenta común."""
+    url = f"{API_URL}/joint/contributions/{contribution_id}"
+    try:
+        response = requests.delete(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en delete_joint_contribution (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_joint_contribution en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en delete_joint_contribution(): %s", e)
+    return False
+
+
 def get_joint_health() -> Optional[Dict[str, Any]]:
     """Consulta la Tasa de Esfuerzo Familiar y el semáforo determinista."""
     url = f"{API_URL}/joint/health"

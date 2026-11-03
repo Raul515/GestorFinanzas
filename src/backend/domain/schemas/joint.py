@@ -49,6 +49,7 @@ class SyncEntityType(str, Enum):
     CONTRIBUTION = "CONTRIBUTION"
     SINKING_FUND = "SINKING_FUND"
     ACCOUNT = "ACCOUNT"
+    SUBCATEGORY = "SUBCATEGORY"
 
 
 class HealthStatus(str, Enum):
@@ -328,7 +329,10 @@ class JointMonthlyContributionBase(BaseModel):
 
 class JointMonthlyContributionCreate(JointMonthlyContributionBase):
     """Esquema para creación de aportación."""
+    uuid: Optional[str] = None
     joint_account_id: Optional[int] = None
+    personal_transaction_id: Optional[int] = None
+    sinking_fund_allocations: Optional[str] = None
 
 
 class JointMonthlyContributionResponse(JointMonthlyContributionBase):
@@ -336,8 +340,11 @@ class JointMonthlyContributionResponse(JointMonthlyContributionBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    uuid: str
     joint_account_id: int
     created_at: datetime
+    personal_transaction_id: Optional[int] = None
+    sinking_fund_allocations: Optional[str] = None
 
 
 # ==========================================

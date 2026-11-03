@@ -13,6 +13,7 @@ import uuid
 import pytest
 from sqlalchemy.orm import Session
 
+from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.domain.models.joint import (
     JointAccount,
     JointAppliedSyncEvent,
@@ -23,6 +24,11 @@ from backend.domain.models.joint import (
     JointTransaction,
 )
 from backend.domain.schemas.joint import (
+    CohabitationStage,
+    ContributionStrategy,
+    JointAccountSetupRequest,
+    ProfileIdentifier,
+    SplitMode,
     SyncAction,
     SyncEntityType,
     SyncEventPayload,
@@ -313,15 +319,22 @@ def test_get_sync_status(temp_sync_dir: str, db_session: Session):
     assert status["outbox_pending_count"] == 0
     assert status["inbox_pending_count"] == 0
 
-    # Emitir evento a outbox
+    # Emitir evento a outbox (el nodo sigue sincronizado porque inbox está vacío y no hay errores)
     service.emit_event(
         entity_type=SyncEntityType.CONTRIBUTION,
         action=SyncAction.UPSERT,
         payload={"month": "2026-11", "amount": 500.0},
     )
     status_pending = service.get_sync_status(db_session)
-    assert status_pending["is_synchronized"] is False
+    assert status_pending["is_synchronized"] is True
     assert status_pending["outbox_pending_count"] == 1
+
+    # Colocar evento pendiente en inbox: el nodo deja de estar sincronizado hasta procesarlo
+    inbox_file = Path(temp_sync_dir) / "inbox" / "evt_pending.json"
+    inbox_file.write_text("{}", encoding="utf-8")
+    status_inbox = service.get_sync_status(db_session)
+    assert status_inbox["is_synchronized"] is False
+    assert status_inbox["inbox_pending_count"] == 1
 
 
 def test_device_id_persistence_and_invitation_detection(temp_sync_dir: str):
@@ -361,4 +374,327 @@ def test_device_id_persistence_and_invitation_detection(temp_sync_dir: str):
     assert inv is not None
     assert inv["household_name"] == "Vidita con Evita"
     assert inv["member_a_name"] == "Raúl"
+
+
+def test_cross_id_collision_name_resolution(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """
+    R-2: Certifica que la ingesta de transacciones resuelva prioritariamente por nombre
+    descartando IDs autoincrementales discordantes entre dispositivos.
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_USUARIO_B")
+
+    # En este dispositivo B existen dos huchas:
+    # ID 1: "Coche" (saldo 500 €)
+    # ID 2: "Vacaciones" (saldo 1000 €)
+    fund_coche = JointSinkingFund(
+        joint_account_id=1,
+        name="Coche",
+        target_amount=3000.0,
+        current_balance=500.0,
+    )
+    fund_vacaciones = JointSinkingFund(
+        joint_account_id=1,
+        name="Vacaciones",
+        target_amount=2000.0,
+        current_balance=1000.0,
+    )
+    db_session.add(fund_coche)
+    db_session.add(fund_vacaciones)
+    db_session.commit()
+    db_session.refresh(fund_coche)
+    db_session.refresh(fund_vacaciones)
+
+    # Llega una transacción desde Dispositivo A imputada a "Vacaciones".
+    # En Dispositivo A, "Vacaciones" tenía ID = 1 (el ID de Coche en B).
+    tx_uuid = str(uuid.uuid4())
+    evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "TRANSACTION",
+        "action": "UPSERT",
+        "origin_device_id": "PC_USUARIO_A",
+        "timestamp_utc": "2026-11-03T18:00:00Z",
+        "payload": {
+            "uuid": tx_uuid,
+            "date": "2026-11-03",
+            "amount": 200.0,
+            "description": "Hotel Playa",
+            "joint_sinking_fund_id": fund_coche.id,  # ID 1 en A
+            "sinking_fund_name": "Vacaciones",       # Pero nombre es Vacaciones (ID 2 en B)
+            "sinking_fund_deduction": 200.0,
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_cross_id.json", "w", encoding="utf-8") as f:
+        json.dump(evt, f)
+
+    service.process_inbox(db_session)
+
+    # La transacción debe haberse asignado a fund_vacaciones (ID 2), NO a fund_coche (ID 1)
+    tx = db_session.query(JointTransaction).filter_by(uuid=tx_uuid).first()
+    assert tx is not None
+    assert tx.joint_sinking_fund_id == fund_vacaciones.id
+
+    # El saldo de Vacaciones se redujo a 800 €, mientras que Coche permanece intacto en 500 €
+    db_session.refresh(fund_vacaciones)
+    db_session.refresh(fund_coche)
+    assert fund_vacaciones.current_balance == 800.0
+    assert fund_coche.current_balance == 500.0
+
+
+def test_foreign_keys_pragma_and_sinking_fund_deletion(db_session: Session, setup_household_db: dict):
+    """
+    R-3: Certifica que al eliminar una hucha, las transacciones asociadas queden
+    limpiamente desvinculadas (joint_sinking_fund_id = None) evitando huérfanos.
+    """
+    from backend.database.componentes.sqlite_crud import SQLiteRepository
+
+    repo = SQLiteRepository(db_session)
+    fund = JointSinkingFund(
+        joint_account_id=1,
+        name="Fondo Prueba Borrado",
+        target_amount=1000.0,
+        current_balance=200.0,
+    )
+    db_session.add(fund)
+    db_session.commit()
+    db_session.refresh(fund)
+
+    tx = JointTransaction(
+        uuid=str(uuid.uuid4()),
+        joint_account_id=1,
+        date=datetime.now(timezone.utc).date(),
+        amount=50.0,
+        description="Gasto prueba hucha",
+        joint_sinking_fund_id=fund.id,
+        created_by_profile="MEMBER_A",
+    )
+    db_session.add(tx)
+    db_session.commit()
+    db_session.refresh(tx)
+
+    assert tx.joint_sinking_fund_id == fund.id
+
+    # Eliminar hucha
+    ok = repo.delete_joint_sinking_fund(fund.id)
+    assert ok is True
+
+    # La transacción debe seguir existiendo pero con joint_sinking_fund_id = None
+    db_session.refresh(tx)
+    assert tx.joint_sinking_fund_id is None
+
+
+def test_contribution_uuid_and_multi_contribution_same_month(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """
+    R-5: Certifica que cada aportación tiene su UUID propio y que dos aportaciones en el
+    mismo mes (ej. aportación regular + extraordinaria) coexisten sin sobreescribirse.
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    c1_uuid = str(uuid.uuid4())
+    c2_uuid = str(uuid.uuid4())
+
+    evt1 = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "UPSERT",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-01T10:00:00Z",
+        "payload": {
+            "uuid": c1_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+            "amount": 500.0,
+            "contribution_date": "2026-11-01",
+        },
+    }
+    evt2 = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "UPSERT",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-15T12:00:00Z",
+        "payload": {
+            "uuid": c2_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+            "amount": 250.0,
+            "contribution_date": "2026-11-15",
+        },
+    }
+
+    with open(Path(temp_sync_dir) / "inbox" / "evt_c1.json", "w", encoding="utf-8") as f:
+        json.dump(evt1, f)
+    with open(Path(temp_sync_dir) / "inbox" / "evt_c2.json", "w", encoding="utf-8") as f:
+        json.dump(evt2, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 2
+
+    # Ambas aportaciones deben coexistir en la base de datos
+    c1 = db_session.query(JointMonthlyContribution).filter_by(uuid=c1_uuid).first()
+    c2 = db_session.query(JointMonthlyContribution).filter_by(uuid=c2_uuid).first()
+    assert c1 is not None
+    assert c1.amount == 500.0
+    assert c2 is not None
+    assert c2.amount == 250.0
+
+    # Si se envía un tombstone de c1, solo se borra c1, manteniendo c2 intacto
+    evt_del = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "CONTRIBUTION",
+        "action": "DELETE",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-20T10:00:00Z",
+        "payload": {
+            "uuid": c1_uuid,
+            "month": "2026-11",
+            "contributor_profile": "MEMBER_B",
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_del_c1.json", "w", encoding="utf-8") as f:
+        json.dump(evt_del, f)
+
+    res_del = service.process_inbox(db_session)
+    assert res_del["processed_count"] == 1
+    assert db_session.query(JointMonthlyContribution).filter_by(uuid=c1_uuid).first() is None
+    assert db_session.query(JointMonthlyContribution).filter_by(uuid=c2_uuid).first() is not None
+
+
+def test_outbox_rotation(temp_sync_dir: str):
+    """Verifica la rotación de outbox limitando el número de deltas viejos acumulados."""
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_ROTATION")
+
+    # Emitir 6 eventos con rotación forzada a un máximo de 3
+    for i in range(6):
+        service.emit_event(
+            entity_type=SyncEntityType.CONTRIBUTION,
+            action=SyncAction.UPSERT,
+            payload={"month": f"2026-0{i+1}", "amount": 100.0 * (i + 1)},
+        )
+        service.rotate_outbox(max_files=3)
+
+    remaining_outbox = [f for f in service.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")]
+    assert len(remaining_outbox) == 3
+
+
+def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
+    """Verifica que un evento remoto ACCOUNT (DELETE) restablezca la base local a Estado Cero."""
+    repo = SQLiteRepository(db_session)
+
+    # Configurar cuenta local previa
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Test Reset Remoto",
+        cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2000.0,
+        member_b_reference_income=2000.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+    assert repo.get_joint_account() is not None
+
+    # Simular recepción de ACCOUNT (DELETE) desde el dispositivo de la pareja
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    reset_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"household_name": "Casa Test Reset Remoto"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
+        json.dump(reset_evt, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+    # La cuenta ha sido reseteada al Estado Cero y no quedan eventos aplicados huérfanos
+    assert repo.get_joint_account() is None
+    assert db_session.query(JointAppliedSyncEvent).count() == 0
+
+
+def test_subcategory_sync_upsert_and_delete(temp_sync_dir: str, db_session: Session):
+    """Verifica que los eventos delta SUBCATEGORY (UPSERT/DELETE) creen, actualicen y eliminen subcategorías comunes."""
+    repo = SQLiteRepository(db_session)
+
+    # 1. Configurar cuenta local para tener las categorías sembradas
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Test Subcats",
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2500.0,
+        member_b_reference_income=2500.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+
+    # 2. Recepción de SUBCATEGORY (UPSERT) para una nueva subcategoría
+    subcat_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "UPSERT",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T10:00:00Z",
+        "payload": {
+            "name": "Mascotas (Veterinario y Comida)",
+            "monthly_budget": 85.0,
+            "category_name": "Necesidades Básicas del Hogar",
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_create.json", "w", encoding="utf-8") as f:
+        json.dump(subcat_evt, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    subcats = repo.get_joint_subcategories()
+    mascotas = next((s for s in subcats if s.name == "Mascotas (Veterinario y Comida)"), None)
+    assert mascotas is not None
+    assert float(mascotas.monthly_budget) == 85.0
+
+    # 3. Recepción de SUBCATEGORY (UPSERT) para actualizar el presupuesto
+    update_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "UPSERT",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T11:00:00Z",
+        "payload": {
+            "name": "Mascotas (Veterinario y Comida)",
+            "monthly_budget": 120.0,
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_update.json", "w", encoding="utf-8") as f:
+        json.dump(update_evt, f)
+
+    res_update = service.process_inbox(db_session)
+    assert res_update["processed_count"] == 1
+
+    db_session.refresh(mascotas)
+    assert float(mascotas.monthly_budget) == 120.0
+
+    # 4. Recepción de SUBCATEGORY (DELETE)
+    del_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"name": "Mascotas (Veterinario y Comida)"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_del.json", "w", encoding="utf-8") as f:
+        json.dump(del_evt, f)
+
+    res_del = service.process_inbox(db_session)
+    assert res_del["processed_count"] == 1
+
+    subcats_after = repo.get_joint_subcategories()
+    assert not any(s.name == "Mascotas (Veterinario y Comida)" for s in subcats_after)
+
+
+
 

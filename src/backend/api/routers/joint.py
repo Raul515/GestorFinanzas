@@ -5,16 +5,18 @@ y control de transacciones para onboarding, configuración, huchas, aportaciones
 """
 
 from datetime import date, datetime, timezone
+import json
 import logging
 from typing import Any, Dict, List, Optional
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.componentes.sqlite_db import get_db
-from backend.domain.models import transactions as personal_trans_model
 from backend.domain.models.joint import JointAppliedSyncEvent
+from backend.domain.models.transactions import Transaction as PersonalTransaction
 from backend.domain.schemas import joint as schemas
 from backend.services.joint_accounting_service import (
     calculate_joint_annual_summary,
@@ -44,6 +46,7 @@ class AssistedContributionRequest(BaseModel):
     contributor_profile: schemas.ProfileIdentifier
     personal_subcategory_id: Optional[int] = None
     contribution_date: Optional[date] = None
+    target_sinking_fund_id: Optional[int] = None
 
 
 # ==========================================
@@ -51,17 +54,27 @@ class AssistedContributionRequest(BaseModel):
 # ==========================================
 
 @router.get("/status", response_model=schemas.JointStatusResponse)
-def get_joint_status(repo: SQLiteRepository = Depends(get_repo)):
+def get_joint_status(repo: SQLiteRepository = Depends(get_repo)) -> schemas.JointStatusResponse:
     """Retorna si la cuenta conjunta está configurada o si el usuario se encuentra en Estado Cero."""
     account = repo.get_joint_account()
     if not account:
         return schemas.JointStatusResponse(is_configured=False)
 
+    try:
+        stage = schemas.CohabitationStage(account.cohabitation_stage)
+    except (ValueError, KeyError):
+        stage = schemas.CohabitationStage.PRE_COHABITATION
+
+    try:
+        loc_prof = schemas.ProfileIdentifier(account.local_profile)
+    except (ValueError, KeyError):
+        loc_prof = schemas.ProfileIdentifier.MEMBER_A
+
     return schemas.JointStatusResponse(
         is_configured=True,
         household_name=account.household_name,
-        cohabitation_stage=schemas.CohabitationStage(account.cohabitation_stage),
-        local_profile=schemas.ProfileIdentifier(account.local_profile),
+        cohabitation_stage=stage,
+        local_profile=loc_prof,
     )
 
 
@@ -70,7 +83,7 @@ def setup_joint_account(
     setup_req: schemas.JointAccountSetupRequest,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointAccountResponse:
     """Ejecuta el Asistente de Configuración Inicial (Onboarding) y siembra las subcategorías base."""
     existing = repo.get_joint_account()
     if existing:
@@ -88,13 +101,13 @@ def setup_joint_account(
             payload=setup_req.model_dump(mode="json"),
             origin_device_id=sync_service.local_device_id,
         )
-        return account
+        return schemas.JointAccountResponse.model_validate(account)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("/account", response_model=schemas.JointAccountResponse)
-def get_joint_account(repo: SQLiteRepository = Depends(get_repo)):
+def get_joint_account(repo: SQLiteRepository = Depends(get_repo)) -> schemas.JointAccountResponse:
     """Consulta la configuración y parámetros del hogar."""
     account = repo.get_joint_account()
     if not account:
@@ -102,7 +115,7 @@ def get_joint_account(repo: SQLiteRepository = Depends(get_repo)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="La cuenta conjunta aún no ha sido configurada en este dispositivo.",
         )
-    return account
+    return schemas.JointAccountResponse.model_validate(account)
 
 
 @router.put("/account", response_model=schemas.JointAccountResponse)
@@ -110,7 +123,7 @@ def update_joint_account(
     update_req: schemas.JointAccountUpdate,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointAccountResponse:
     """Actualiza los parámetros de convivencia, split o ingresos de referencia del hogar."""
     account = repo.update_joint_account(update_req)
     if not account:
@@ -125,7 +138,7 @@ def update_joint_account(
         payload=update_req.model_dump(exclude_unset=True, mode="json"),
         origin_device_id=sync_service.local_device_id,
     )
-    return account
+    return schemas.JointAccountResponse.model_validate(account)
 
 
 @router.post("/resend-invitation")
@@ -191,7 +204,7 @@ def accept_joint_invitation(
     db: Session = Depends(get_db),
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointAccountResponse:
     """
     Acepta la invitación detectada en sync/inbox/ y configura la cuenta conjunta local
     con los perfiles complementarios invertidos (Opción A).
@@ -214,17 +227,32 @@ def accept_joint_invitation(
     strategy_val = invitation.get("contribution_strategy", "NOMINAL_TEMPLATE")
     split_val = invitation.get("split_mode", "EQUAL_50_50")
 
+    try:
+        cohab_stage = schemas.CohabitationStage(stage_val)
+    except (ValueError, KeyError):
+        cohab_stage = schemas.CohabitationStage.PRE_COHABITATION
+
+    try:
+        contrib_strategy = schemas.ContributionStrategy(strategy_val)
+    except (ValueError, KeyError):
+        contrib_strategy = schemas.ContributionStrategy.NOMINAL_TEMPLATE
+
+    try:
+        split_mode = schemas.SplitMode(split_val)
+    except (ValueError, KeyError):
+        split_mode = schemas.SplitMode.EQUAL_50_50
+
     setup_req = schemas.JointAccountSetupRequest(
         household_name=invitation["household_name"],
         member_a_name=invitation.get("member_a_name", "Miembro A"),
         member_b_name=invitation.get("member_b_name", "Miembro B"),
-        cohabitation_stage=schemas.CohabitationStage(stage_val) if hasattr(schemas.CohabitationStage, stage_val) else schemas.CohabitationStage.PRE_COHABITATION,
-        contribution_strategy=schemas.ContributionStrategy(strategy_val) if hasattr(schemas.ContributionStrategy, strategy_val) else schemas.ContributionStrategy.NOMINAL_TEMPLATE,
-        split_mode=schemas.SplitMode(split_val) if hasattr(schemas.SplitMode, split_val) else schemas.SplitMode.EQUAL_50_50,
+        cohabitation_stage=cohab_stage,
+        contribution_strategy=contrib_strategy,
+        split_mode=split_mode,
         member_a_reference_income=float(invitation.get("member_a_reference_income", 0.0)),
         member_b_reference_income=float(invitation.get("member_b_reference_income", 0.0)),
-        member_a_contribution_pct=50.0,
-        member_b_contribution_pct=50.0,
+        member_a_contribution_pct=float(invitation.get("member_a_contribution_pct", 50.0)),
+        member_b_contribution_pct=float(invitation.get("member_b_contribution_pct", 50.0)),
         local_profile=schemas.ProfileIdentifier.MEMBER_B,
         remote_profile=schemas.ProfileIdentifier.MEMBER_A,
     )
@@ -244,7 +272,7 @@ def accept_joint_invitation(
     # Procesar cualquier otro evento en espera en inbox (huchas, etc.)
     sync_service.process_inbox(db)
 
-    return account
+    return schemas.JointAccountResponse.model_validate(account)
 
 
 @router.post("/reset")
@@ -255,12 +283,25 @@ def reset_joint_account(
     """
     Purga la cuenta conjunta completa y limpia las carpetas de sincronización,
     devolviendo el sistema al Estado Cero de monousuario.
+    Emite un evento ACCOUNT (DELETE) para propagar el reset a la pareja.
     """
+    account = repo.get_joint_account()
+    had_account = account is not None
+    if account:
+        try:
+            sync_service.emit_event(
+                entity_type=schemas.SyncEntityType.ACCOUNT,
+                action=schemas.SyncAction.DELETE,
+                payload={"household_name": account.household_name},
+                origin_device_id=sync_service.local_device_id,
+            )
+        except Exception as exc:
+            logger.warning("No se pudo emitir evento ACCOUNT DELETE en reset: %s", exc)
+
     repo.reset_joint_account()
-    sync_service.clear_sync_folders()
+    sync_service.clear_sync_folders(keep_outbox=had_account)
     logger.info("Cuenta conjunta reseteada al Estado Cero exitosamente.")
     return {"status": "success", "message": "Cuenta conjunta purgada y restablecida al Estado Cero."}
-
 
 
 # ==========================================
@@ -268,18 +309,102 @@ def reset_joint_account(
 # ==========================================
 
 @router.get("/categories", response_model=List[schemas.JointCategoryResponse])
-def get_joint_categories(repo: SQLiteRepository = Depends(get_repo)):
+def get_joint_categories(repo: SQLiteRepository = Depends(get_repo)) -> List[schemas.JointCategoryResponse]:
     """Obtiene el catálogo de conceptos comunes (sin ocio)."""
-    return repo.get_joint_categories()
+    return [schemas.JointCategoryResponse.model_validate(c) for c in repo.get_joint_categories()]
 
 
 @router.get("/subcategories", response_model=List[schemas.JointSubcategoryResponse])
 def get_joint_subcategories(
     category_id: Optional[int] = None,
     repo: SQLiteRepository = Depends(get_repo),
-):
+) -> List[schemas.JointSubcategoryResponse]:
     """Obtiene las subcategorías de necesidades del hogar."""
-    return repo.get_joint_subcategories(category_id=category_id)
+    return [schemas.JointSubcategoryResponse.model_validate(s) for s in repo.get_joint_subcategories(category_id=category_id)]
+
+
+@router.post("/subcategories", response_model=schemas.JointSubcategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_joint_subcategory(
+    subcat_create: schemas.JointSubcategoryCreate,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointSubcategoryResponse:
+    """Crea una nueva subcategoría de necesidades comunes y emite evento delta a la pareja."""
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe configurar la cuenta conjunta antes de añadir subcategorías.",
+        )
+
+    subcat = repo.create_joint_subcategory(subcat_create)
+    cat = repo.get_joint_category(subcat.joint_category_id)
+    cat_name = cat.name if cat else None
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "name": subcat.name,
+            "monthly_budget": subcat.monthly_budget,
+            "category_name": cat_name,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+    return schemas.JointSubcategoryResponse.model_validate(subcat)
+
+
+@router.put("/subcategories/{subcategory_id}", response_model=schemas.JointSubcategoryResponse)
+def update_joint_subcategory(
+    subcategory_id: int,
+    subcat_update: schemas.JointSubcategoryUpdate,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointSubcategoryResponse:
+    """Actualiza una subcategoría de necesidades comunes y propaga el cambio a la pareja."""
+    subcat = repo.update_joint_subcategory(subcategory_id, subcat_update)
+    if not subcat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
+
+    cat = repo.get_joint_category(subcat.joint_category_id)
+    cat_name = cat.name if cat else None
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "name": subcat.name,
+            "monthly_budget": subcat.monthly_budget,
+            "category_name": cat_name,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+    return schemas.JointSubcategoryResponse.model_validate(subcat)
+
+
+@router.delete("/subcategories/{subcategory_id}")
+def delete_joint_subcategory(
+    subcategory_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Elimina una subcategoría de necesidades comunes y propaga el tombstone a la pareja."""
+    subcat = repo.get_joint_subcategory(subcategory_id)
+    if not subcat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
+
+    subcat_name = subcat.name
+    success = repo.delete_joint_subcategory(subcategory_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la subcategoría.")
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.DELETE,
+        payload={"name": subcat_name},
+        origin_device_id=sync_service.local_device_id,
+    )
+    return {"deleted": True, "subcategory_id": subcategory_id}
 
 
 # ==========================================
@@ -290,9 +415,9 @@ def get_joint_subcategories(
 def get_joint_sinking_funds(
     fund_status: Optional[str] = Query(default=None, alias="status"),
     repo: SQLiteRepository = Depends(get_repo),
-):
+) -> List[schemas.JointSinkingFundResponse]:
     """Consulta las huchas de amortización del hogar."""
-    return repo.get_joint_sinking_funds(status=fund_status)
+    return [schemas.JointSinkingFundResponse.model_validate(f) for f in repo.get_joint_sinking_funds(status=fund_status)]
 
 
 @router.post("/sinking-funds", response_model=schemas.JointSinkingFundResponse, status_code=status.HTTP_201_CREATED)
@@ -300,7 +425,7 @@ def create_joint_sinking_fund(
     fund_create: schemas.JointSinkingFundCreate,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointSinkingFundResponse:
     """Crea una nueva meta de amortización para el hogar."""
     account = repo.get_joint_account()
     if not account:
@@ -316,7 +441,7 @@ def create_joint_sinking_fund(
         payload=fund_create.model_dump(mode="json"),
         origin_device_id=sync_service.local_device_id,
     )
-    return fund
+    return schemas.JointSinkingFundResponse.model_validate(fund)
 
 
 @router.put("/sinking-funds/{fund_id}", response_model=schemas.JointSinkingFundResponse)
@@ -325,7 +450,7 @@ def update_joint_sinking_fund(
     fund_update: schemas.JointSinkingFundUpdate,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointSinkingFundResponse:
     """Edita las metas, cuotas o estado de una hucha de amortización."""
     fund = repo.update_joint_sinking_fund(fund_id, fund_update)
     if not fund:
@@ -339,7 +464,7 @@ def update_joint_sinking_fund(
         payload=payload,
         origin_device_id=sync_service.local_device_id,
     )
-    return fund
+    return schemas.JointSinkingFundResponse.model_validate(fund)
 
 
 @router.delete("/sinking-funds/{fund_id}")
@@ -348,7 +473,7 @@ def delete_joint_sinking_fund(
     reallocate_to_fund_id: Optional[int] = Query(default=None),
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """Elimina una hucha de amortización, reasignando su saldo remanente a otra hucha activa si procede."""
     fund = repo.get_joint_sinking_fund(fund_id)
     if not fund:
@@ -375,10 +500,10 @@ def delete_joint_sinking_fund(
                 action=schemas.SyncAction.UPSERT,
                 payload={
                     "name": target_fund.name,
-                    "target_amount": float(target_fund.target_amount),
-                    "current_balance": float(target_fund.current_balance),
-                    "monthly_target_amount": float(target_fund.monthly_target_amount),
-                    "allocation_percentage": float(target_fund.allocation_percentage),
+                    "target_amount": target_fund.target_amount,
+                    "current_balance": target_fund.current_balance,
+                    "monthly_target_amount": target_fund.monthly_target_amount,
+                    "allocation_percentage": target_fund.allocation_percentage,
                     "status": target_fund.status,
                     "priority": target_fund.priority,
                 },
@@ -397,9 +522,9 @@ def get_joint_transactions(
     year: Optional[int] = None,
     month: Optional[str] = None,
     repo: SQLiteRepository = Depends(get_repo),
-):
+) -> List[schemas.JointTransactionResponse]:
     """Obtiene transacciones de necesidades o cargos a huchas comunes."""
-    return repo.get_joint_transactions(year=year, month=month)
+    return [schemas.JointTransactionResponse.model_validate(t) for t in repo.get_joint_transactions(year=year, month=month)]
 
 
 @router.post("/transactions", response_model=schemas.JointTransactionResponse, status_code=status.HTTP_201_CREATED)
@@ -407,7 +532,7 @@ def create_joint_transaction(
     tx_create: schemas.JointTransactionCreate,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> schemas.JointTransactionResponse:
     """Registra un nuevo gasto común del hogar."""
     account = repo.get_joint_account()
     if not account:
@@ -430,39 +555,26 @@ def create_joint_transaction(
         fund = repo.get_joint_sinking_fund(tx.joint_sinking_fund_id)
         if fund:
             sinking_name = fund.name
-            sync_service.emit_event(
-                entity_type=schemas.SyncEntityType.SINKING_FUND,
-                action=schemas.SyncAction.UPSERT,
-                payload={
-                    "name": fund.name,
-                    "target_amount": float(fund.target_amount),
-                    "current_balance": float(fund.current_balance),
-                    "monthly_target_amount": float(fund.monthly_target_amount),
-                    "allocation_percentage": float(fund.allocation_percentage),
-                    "status": fund.status,
-                    "priority": fund.priority,
-                },
-                origin_device_id=sync_service.local_device_id,
-            )
 
-    # Emitir delta para sync
+    # Emitir delta para sync (solo TRANSACTION, evitando doble deducción en el receptor)
     sync_service.emit_event(
         entity_type=schemas.SyncEntityType.TRANSACTION,
         action=schemas.SyncAction.UPSERT,
         payload={
             "uuid": tx.uuid,
-            "date": tx.date.isoformat(),
+            "date": tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
             "amount": tx.amount,
             "description": tx.description,
             "joint_subcategory_id": tx.joint_subcategory_id,
             "subcategory_name": subcat_name,
             "joint_sinking_fund_id": tx.joint_sinking_fund_id,
             "sinking_fund_name": sinking_name,
+            "sinking_fund_deduction": float(getattr(tx, "sinking_fund_deduction", 0.0) or 0.0),
             "created_by_profile": tx.created_by_profile,
         },
         origin_device_id=sync_service.local_device_id,
     )
-    return tx
+    return schemas.JointTransactionResponse.model_validate(tx)
 
 
 @router.delete("/transactions/{transaction_id}")
@@ -470,41 +582,19 @@ def delete_joint_transaction(
     transaction_id: int,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """Elimina un gasto común y emite el tombstone correspondiente a Syncthing."""
-    existing_tx = repo.get_joint_transaction(transaction_id)
-    if not existing_tx:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transacción no encontrada.")
-
-    fund_id_affected = existing_tx.joint_sinking_fund_id
     tx_uuid = repo.delete_joint_transaction(transaction_id)
     if not tx_uuid:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transacción no encontrada.")
 
+    # Emitir tombstone de borrado (el receptor revertirá la deducción de la hucha a partir de la transacción)
     sync_service.emit_event(
         entity_type=schemas.SyncEntityType.TRANSACTION,
         action=schemas.SyncAction.DELETE,
         payload={"uuid": tx_uuid},
         origin_device_id=sync_service.local_device_id,
     )
-
-    if fund_id_affected:
-        fund = repo.get_joint_sinking_fund(fund_id_affected)
-        if fund:
-            sync_service.emit_event(
-                entity_type=schemas.SyncEntityType.SINKING_FUND,
-                action=schemas.SyncAction.UPSERT,
-                payload={
-                    "name": fund.name,
-                    "target_amount": float(fund.target_amount),
-                    "current_balance": float(fund.current_balance),
-                    "monthly_target_amount": float(fund.monthly_target_amount),
-                    "allocation_percentage": float(fund.allocation_percentage),
-                    "status": fund.status,
-                    "priority": fund.priority,
-                },
-                origin_device_id=sync_service.local_device_id,
-            )
 
     return {"deleted": True, "uuid": tx_uuid}
 
@@ -518,9 +608,9 @@ def get_joint_contributions(
     year: Optional[int] = None,
     month: Optional[str] = None,
     repo: SQLiteRepository = Depends(get_repo),
-):
+) -> List[schemas.JointMonthlyContributionResponse]:
     """Obtiene el historial de aportaciones realizadas por ambos miembros."""
-    return repo.get_joint_contributions(year=year, month=month)
+    return [schemas.JointMonthlyContributionResponse.model_validate(c) for c in repo.get_joint_contributions(year=year, month=month)]
 
 
 @router.get("/contributions/calculation")
@@ -545,15 +635,26 @@ def get_joint_contribution_calculation(
         {
             "id": f.id,
             "status": f.status,
-            "monthly_target_amount": float(f.monthly_target_amount),
-            "allocation_percentage": float(f.allocation_percentage),
+            "monthly_target_amount": f.monthly_target_amount,
+            "allocation_percentage": f.allocation_percentage,
         }
         for f in funds
     ]
 
-    stage_val = schemas.CohabitationStage(account.cohabitation_stage) if hasattr(account, "cohabitation_stage") else schemas.CohabitationStage.PRE_COHABITATION
-    strat_val = schemas.ContributionStrategy(account.contribution_strategy) if hasattr(account, "contribution_strategy") else schemas.ContributionStrategy.NOMINAL_TEMPLATE
-    split_val = schemas.SplitMode(account.split_mode) if hasattr(account, "split_mode") else schemas.SplitMode.EQUAL_50_50
+    try:
+        stage_val = schemas.CohabitationStage(account.cohabitation_stage)
+    except (ValueError, KeyError):
+        stage_val = schemas.CohabitationStage.PRE_COHABITATION
+
+    try:
+        strat_val = schemas.ContributionStrategy(account.contribution_strategy)
+    except (ValueError, KeyError):
+        strat_val = schemas.ContributionStrategy.NOMINAL_TEMPLATE
+
+    try:
+        split_val = schemas.SplitMode(account.split_mode)
+    except (ValueError, KeyError):
+        split_val = schemas.SplitMode.EQUAL_50_50
 
     calc = calculate_monthly_contributions(
         cohabitation_stage=stage_val,
@@ -561,10 +662,10 @@ def get_joint_contribution_calculation(
         split_mode=split_val,
         needs_budget=needs_budget,
         sinking_funds=funds_dicts,
-        member_a_income=float(account.member_a_reference_income),
-        member_b_income=float(account.member_b_reference_income),
-        member_a_contribution_pct=float(account.member_a_contribution_pct),
-        member_b_contribution_pct=float(account.member_b_contribution_pct),
+        member_a_income=account.member_a_reference_income,
+        member_b_income=account.member_b_reference_income,
+        member_a_contribution_pct=account.member_a_contribution_pct,
+        member_b_contribution_pct=account.member_b_contribution_pct,
     )
     calc["local_profile"] = account.local_profile
     calc["remote_profile"] = account.remote_profile
@@ -579,7 +680,7 @@ def record_assisted_contribution(
     db: Session = Depends(get_db),
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """
     Ejecuta el asiento en 1 clic de inicio de mes:
     1. Inserta el gasto en el perfil personal (en Necesidades Básicas o Ahorro).
@@ -593,7 +694,10 @@ def record_assisted_contribution(
             detail="Cuenta conjunta no configurada.",
         )
 
-    stage = schemas.CohabitationStage(account.cohabitation_stage) if hasattr(account, "cohabitation_stage") else schemas.CohabitationStage.PRE_COHABITATION
+    try:
+        stage = schemas.CohabitationStage(account.cohabitation_stage)
+    except (ValueError, KeyError):
+        stage = schemas.CohabitationStage.PRE_COHABITATION
     eff_subcat_id = req.personal_subcategory_id
 
     if not eff_subcat_id:
@@ -633,44 +737,130 @@ def record_assisted_contribution(
                 eff_subcat_id = created_subcat.id
             else:
                 eff_subcat_id = subcats[0].id if subcats else 1
+
+    c_uuid = str(uuid.uuid4())
+    allocations_dict: Dict[str, float] = {}
+    target_fund_name: Optional[str] = None
+
+    if req.target_sinking_fund_id:
+        target_fund = repo.get_joint_sinking_fund(req.target_sinking_fund_id)
+        if target_fund:
+            target_fund_name = target_fund.name
+            target_fund.current_balance = round(float(target_fund.current_balance) + float(req.amount), 2)
+            allocations_dict[str(target_fund.id)] = round(float(req.amount), 2)
+    else:
+        # Reparto ordinario de ahorro entre huchas activas según sus ponderaciones
+        subcats = repo.get_joint_subcategories()
+        needs_budget = sum(float(s.monthly_budget) for s in subcats) if subcats else 0.0
+        funds = repo.get_joint_sinking_funds()
+        funds_dicts = [
+            {
+                "id": f.id,
+                "status": f.status,
+                "monthly_target_amount": f.monthly_target_amount,
+                "allocation_percentage": f.allocation_percentage,
+            }
+            for f in funds
+        ]
+        try:
+            eff_strat = schemas.ContributionStrategy(account.contribution_strategy)
+        except (ValueError, KeyError):
+            eff_strat = schemas.ContributionStrategy.NOMINAL_TEMPLATE
+
+        try:
+            eff_split = schemas.SplitMode(account.split_mode)
+        except (ValueError, KeyError):
+            eff_split = schemas.SplitMode.EQUAL_50_50
+
+        calc = calculate_monthly_contributions(
+            cohabitation_stage=stage,
+            contribution_strategy=eff_strat,
+            split_mode=eff_split,
+            needs_budget=needs_budget,
+            sinking_funds=funds_dicts,
+            member_a_income=account.member_a_reference_income,
+            member_b_income=account.member_b_reference_income,
+            member_a_contribution_pct=account.member_a_contribution_pct,
+            member_b_contribution_pct=account.member_b_contribution_pct,
+        )
+        total_budget = float(calc.get("total_household_budget", 0.0))
+        fund_allocs = calc.get("fund_allocations", {})
+        if total_budget > 0 and fund_allocs:
+            ratio = min(1.0, float(req.amount) / total_budget)
+            for fid, target_amount in fund_allocs.items():
+                part = round(float(target_amount) * ratio, 2)
+                if part > 0:
+                    f_obj = repo.get_joint_sinking_fund(int(fid))
+                    if f_obj:
+                        f_obj.current_balance = round(float(f_obj.current_balance) + part, 2)
+                        allocations_dict[str(fid)] = part
+
+    eff_subcat_id_int = eff_subcat_id if eff_subcat_id is not None else 1
+
     res_plan = prepare_assisted_contribution(
         month=req.month,
         contributor_profile=req.contributor_profile,
         contribution_amount=req.amount,
         cohabitation_stage=stage,
-        personal_subcategory_id=eff_subcat_id,
+        personal_subcategory_id=eff_subcat_id_int,
         contribution_date=req.contribution_date,
         device_id=sync_service.local_device_id,
+        contribution_uuid=c_uuid,
+        target_sinking_fund_name=target_fund_name,
     )
 
     try:
         # 1. Asentar gasto en el perfil personal
         p_tx = res_plan["personal_transaction"]
-        personal_tx = personal_trans_model.Transaction(
+        personal_tx = PersonalTransaction(
             date=p_tx["date"],
             amount=p_tx["amount"],
             description=p_tx["description"],
             subcategory_id=p_tx["subcategory_id"],
+            joint_contribution_uuid=c_uuid,
         )
         db.add(personal_tx)
+        db.flush()
 
-        # 2. Asentar aportación en la cuenta conjunta
-        j_cb = res_plan["joint_contribution"]
+        # 2. Asentar aportación en la cuenta conjunta con UUID y enlace a transacción personal
+        eff_contrib_date = req.contribution_date or date.today()
         joint_contrib = schemas.JointMonthlyContributionCreate(
-            month=j_cb["month"],
-            contributor_profile=j_cb["contributor_profile"],
-            amount=j_cb["amount"],
-            contribution_date=j_cb["contribution_date"],
+            uuid=c_uuid,
+            month=req.month,
+            contributor_profile=req.contributor_profile,
+            amount=round(float(req.amount), 2),
+            contribution_date=eff_contrib_date,
+            personal_transaction_id=personal_tx.id,
+            sinking_fund_allocations=json.dumps(allocations_dict) if allocations_dict else None,
         )
         repo.create_joint_contribution(joint_contrib)
 
-        # 3. Emitir evento delta en outbox
+        # 3. Emitir evento delta de aportación en outbox
         sync_service.emit_event(
             entity_type=schemas.SyncEntityType.CONTRIBUTION,
             action=schemas.SyncAction.UPSERT,
             payload=res_plan["sync_event"]["payload"],
             origin_device_id=sync_service.local_device_id,
         )
+
+        # 4. Emitir deltas SINKING_FUND (UPSERT) para huchas cuyo saldo creció
+        for fid_str in allocations_dict:
+            f_obj = repo.get_joint_sinking_fund(int(fid_str))
+            if f_obj:
+                sync_service.emit_event(
+                    entity_type=schemas.SyncEntityType.SINKING_FUND,
+                    action=schemas.SyncAction.UPSERT,
+                    payload={
+                        "name": f_obj.name,
+                        "target_amount": f_obj.target_amount,
+                        "current_balance": f_obj.current_balance,
+                        "monthly_target_amount": f_obj.monthly_target_amount,
+                        "allocation_percentage": f_obj.allocation_percentage,
+                        "status": f_obj.status,
+                        "priority": f_obj.priority,
+                    },
+                    origin_device_id=sync_service.local_device_id,
+                )
 
         return {
             "success": True,
@@ -688,12 +878,53 @@ def record_assisted_contribution(
         )
 
 
+@router.delete("/contributions/{contribution_id}")
+def delete_joint_contribution(
+    contribution_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """
+    Elimina físicamente una aportación conjunta, revierte el saldo incrementado en huchas,
+    elimina en cascada la transacción personal y emite tombstone de sincronización a la pareja.
+    """
+    del_info = repo.delete_joint_contribution(contribution_id)
+    if not del_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aportación conjunta no encontrada.",
+        )
+
+    # Emitir tombstone CONTRIBUTION (DELETE)
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.CONTRIBUTION,
+        action=schemas.SyncAction.DELETE,
+        payload={
+            "uuid": del_info["uuid"],
+            "month": del_info["month"],
+            "contributor_profile": del_info["contributor_profile"],
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+
+    # Emitir SINKING_FUND (UPSERT) para huchas revertidas
+    for fund_data in (del_info.get("reverted_funds") or {}).values():
+        sync_service.emit_event(
+            entity_type=schemas.SyncEntityType.SINKING_FUND,
+            action=schemas.SyncAction.UPSERT,
+            payload=fund_data,
+            origin_device_id=sync_service.local_device_id,
+        )
+
+    return {"success": True, "deleted_uuid": del_info["uuid"]}
+
+
 # ==========================================
 # 6. DIAGNÓSTICO DE SALUD Y RESUMEN ANUAL CONSOLIDADO
 # ==========================================
 
 @router.get("/health", response_model=schemas.JointHealthDiagnosticResponse)
-def get_joint_health(repo: SQLiteRepository = Depends(get_repo)):
+def get_joint_health(repo: SQLiteRepository = Depends(get_repo)) -> schemas.JointHealthDiagnosticResponse:
     """Calcula la Tasa de Esfuerzo Familiar y el semáforo determinista de sostenibilidad."""
     account = repo.get_joint_account()
     if not account:
@@ -709,7 +940,7 @@ def get_joint_health(repo: SQLiteRepository = Depends(get_repo)):
         subcats = repo.get_joint_subcategories()
         needs_budget = sum(float(s.monthly_budget) for s in subcats)
 
-    combined_income = float(account.member_a_reference_income) + float(account.member_b_reference_income)
+    combined_income = account.member_a_reference_income + account.member_b_reference_income
     return evaluate_household_health(needs_budget, combined_income)
 
 
@@ -717,7 +948,7 @@ def get_joint_health(repo: SQLiteRepository = Depends(get_repo)):
 def get_joint_annual_summary(
     year: int = Query(..., ge=2000, le=2100),
     repo: SQLiteRepository = Depends(get_repo),
-):
+) -> schemas.JointAnnualSummaryResponse:
     """
     Retorna el Resumen Anual consolidado del hogar.
     Prohíbe estrictamente comparativas individuales Member A vs Member B.
@@ -733,7 +964,7 @@ def get_joint_annual_summary(
     contribs = repo.get_joint_contributions(year=year)
     funds = repo.get_joint_sinking_funds()
 
-    combined_monthly_income = float(account.member_a_reference_income) + float(account.member_b_reference_income)
+    combined_monthly_income = account.member_a_reference_income + account.member_b_reference_income
     annual_combined_income = combined_monthly_income * 12.0
 
     return calculate_joint_annual_summary(
@@ -754,7 +985,7 @@ def get_joint_annual_summary(
 def trigger_process_inbox(
     db: Session = Depends(get_db),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """Dispara el procesamiento de los ficheros delta depositados por Syncthing en sync/inbox/."""
     result = sync_service.process_inbox(db)
     return {"status": "ok", "summary": result}
@@ -764,6 +995,6 @@ def trigger_process_inbox(
 def get_sync_status(
     db: Session = Depends(get_db),
     sync_service: JointSyncService = Depends(get_sync_service),
-):
+) -> Dict[str, Any]:
     """Retorna las métricas y estado del buzón de sincronización."""
     return sync_service.get_sync_status(db)

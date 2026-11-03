@@ -4,6 +4,7 @@ Verifica los contratos HTTP, códigos de estado (200, 201, 400, 404, 409) y obse
 """
 
 from pathlib import Path
+import json
 import shutil
 import tempfile
 import pytest
@@ -109,6 +110,65 @@ def test_joint_account_update_endpoint(client: TestClient):
     assert updated["household_name"] == "Hogar Renovado"
 
 
+def test_joint_subcategories_crud_and_sync(client: TestClient, api_sync_dir: str):
+    """Verifica la creación, edición y eliminación de subcategorías de necesidades comunes y sus eventos delta."""
+    # 1. Configurar hogar
+    client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Hogar Subcategorías",
+            "cohabitation_stage": "COHABITATION",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "split_mode": "EQUAL_50_50",
+        },
+    )
+
+    # 2. Consultar categorías para obtener el ID de Necesidades Básicas
+    cats_resp = client.get("/joint/categories")
+    assert cats_resp.status_code == 200
+    cats = cats_resp.json()
+    assert len(cats) >= 1
+    cat_id = cats[0]["id"]
+
+    # 3. Crear subcategoría común (POST /joint/subcategories)
+    create_payload = {
+        "joint_category_id": cat_id,
+        "name": "Mascotas (Alimento y Salud)",
+        "monthly_budget": 95.0,
+    }
+    create_resp = client.post("/joint/subcategories", json=create_payload)
+    assert create_resp.status_code == 201
+    created_sub = create_resp.json()
+    assert created_sub["name"] == "Mascotas (Alimento y Salud)"
+    assert created_sub["monthly_budget"] == 95.0
+    sub_id = created_sub["id"]
+
+    # 4. Verificar que se emitió evento delta SUBCATEGORY (UPSERT) en outbox
+    outbox_files = list((Path(api_sync_dir) / "outbox").glob("*.json"))
+    sub_events = []
+    for f in outbox_files:
+        with open(f, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+            if data.get("entity_type") == "SUBCATEGORY":
+                sub_events.append(data)
+    assert any(e["action"] == "UPSERT" and e["payload"]["name"] == "Mascotas (Alimento y Salud)" for e in sub_events)
+
+    # 5. Editar subcategoría (PUT /joint/subcategories/{id})
+    update_resp = client.put(f"/joint/subcategories/{sub_id}", json={"monthly_budget": 130.0})
+    assert update_resp.status_code == 200
+    assert update_resp.json()["monthly_budget"] == 130.0
+
+    # 6. Eliminar subcategoría (DELETE /joint/subcategories/{id})
+    del_resp = client.delete(f"/joint/subcategories/{sub_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["deleted"] is True
+
+    # 7. Verificar que no aparece en GET /joint/subcategories
+    get_all = client.get("/joint/subcategories")
+    assert get_all.status_code == 200
+    assert not any(s["id"] == sub_id for s in get_all.json())
+
+
 def test_joint_sinking_funds_endpoints(client: TestClient):
     """Verifica el catálogo y gestión de Huchas de Amortización (/joint/sinking-funds)."""
     client.post(
@@ -195,7 +255,11 @@ def test_joint_transactions_endpoints(client: TestClient):
 
 
 def test_assisted_contribution_flow(client: TestClient):
-    """Verifica el endpoint de aportación asistida en 1 clic (/joint/contributions/asentar-asistida)."""
+    """
+    Verifica el endpoint de aportación asistida en 1 clic (/joint/contributions/asentar-asistida),
+    crecimiento real de huchas (R-4), reversión por DELETE /joint/contributions/{id} (R-6)
+    y eliminación en cascada desde la transacción personal (R-6).
+    """
     client.post(
         "/joint/setup",
         json={
@@ -206,6 +270,23 @@ def test_assisted_contribution_flow(client: TestClient):
         },
     )
 
+    # Crear una hucha activa para probar asignación y crecimiento (R-4)
+    fund_resp = client.post(
+        "/joint/sinking-funds",
+        json={
+            "name": "Hucha Vacaciones 2027",
+            "target_amount": 1200.0,
+            "current_balance": 100.0,
+            "monthly_target_amount": 100.0,
+            "allocation_percentage": 100.0,
+            "status": "ACTIVE",
+            "priority": 1,
+        },
+    )
+    assert fund_resp.status_code == 201
+    fund_id = fund_resp.json()["id"]
+
+    # 1. Aportación ordinaria mensual
     asentar_payload = {
         "month": "2026-11",
         "amount": 750.0,
@@ -217,11 +298,53 @@ def test_assisted_contribution_flow(client: TestClient):
     assert res_data["success"] is True
     assert res_data["amount"] == 750.0
 
-    # Comprobar que la aportación figura en /joint/contributions
+    # Comprobar que la aportación figura en /joint/contributions con UUID (R-5)
     contribs_resp = client.get("/joint/contributions?month=2026-11")
     assert contribs_resp.status_code == 200
-    assert len(contribs_resp.json()) == 1
-    assert contribs_resp.json()[0]["amount"] == 750.0
+    contribs = contribs_resp.json()
+    assert len(contribs) == 1
+    assert contribs[0]["amount"] == 750.0
+    assert "uuid" in contribs[0]
+    first_contrib_id = contribs[0]["id"]
+    first_tx_id = contribs[0]["personal_transaction_id"]
+
+    # 2. Aportación extraordinaria directa a la hucha (R-4)
+    extra_payload = {
+        "month": "2026-11",
+        "amount": 200.0,
+        "contributor_profile": "MEMBER_A",
+        "target_sinking_fund_id": fund_id,
+    }
+    resp_extra = client.post("/joint/contributions/asentar-asistida", json=extra_payload)
+    assert resp_extra.status_code == 201
+
+    # Verificar que el saldo de la hucha creció en 200 € directos (R-4)
+    funds_list = client.get("/joint/sinking-funds").json()
+    fund_check = next(f for f in funds_list if f["id"] == fund_id)
+    assert fund_check["current_balance"] >= 300.0
+
+    # 3. Eliminar aportación extraordinaria vía DELETE /joint/contributions/{id} (R-6)
+    extra_contribs = client.get("/joint/contributions?month=2026-11").json()
+    assert len(extra_contribs) == 2
+    extra_contrib_id = next(c["id"] for c in extra_contribs if c["id"] != first_contrib_id)
+
+    del_resp = client.delete(f"/joint/contributions/{extra_contrib_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["success"] is True
+
+    # Comprobar que el saldo de la hucha se revirtió (R-6)
+    funds_list_after = client.get("/joint/sinking-funds").json()
+    fund_after_del = next(f for f in funds_list_after if f["id"] == fund_id)
+    assert fund_after_del["current_balance"] < fund_check["current_balance"]
+
+    # 4. Eliminación en cascada: borrar la transacción personal en /transactions/{id} (R-6)
+    assert first_tx_id is not None
+    tx_del_resp = client.delete(f"/transactions/{first_tx_id}")
+    assert tx_del_resp.status_code == 200
+
+    # Verificar que la aportación conjunta vinculada fue eliminada en cascada
+    contribs_final = client.get("/joint/contributions?month=2026-11").json()
+    assert len(contribs_final) == 0
 
     # Comprobar endpoint de cálculo dinámico de cuotas (Mejora 1)
     calc_resp = client.get("/joint/contributions/calculation")
@@ -283,8 +406,8 @@ def test_joint_sync_endpoints(client: TestClient, api_sync_dir: str):
     assert process_resp.json()["status"] == "ok"
 
 
-def test_joint_reset_lifecycle(client: TestClient):
-    """Verifica el restablecimiento completo de la cuenta conjunta a Estado Cero (/joint/reset)."""
+def test_joint_reset_lifecycle(client: TestClient, api_sync_dir: str):
+    """Verifica el restablecimiento completo de la cuenta conjunta a Estado Cero (/joint/reset) y emisión de delta ACCOUNT (DELETE)."""
     # 1. Configurar cuenta y datos
     client.post(
         "/joint/setup",
@@ -316,6 +439,14 @@ def test_joint_reset_lifecycle(client: TestClient):
     assert client.get("/joint/sinking-funds").json() == []
     assert client.get("/joint/transactions").json() == []
 
+    # 4. Verificar que se emitió el delta ACCOUNT (DELETE) a outbox para la pareja
+    outbox_files = [f for f in (Path(api_sync_dir) / "outbox").glob("*.json") if not f.name.endswith(".tmp")]
+    assert len(outbox_files) > 0
+    all_events = [json.loads(f.read_text(encoding="utf-8")) for f in outbox_files]
+    delete_account_events = [e for e in all_events if e.get("entity_type") == "ACCOUNT" and e.get("action") == "DELETE"]
+    assert len(delete_account_events) == 1
+    assert delete_account_events[0]["payload"]["household_name"] == "Hogar a Purgar"
+
 
 def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_dir: str):
     """Verifica la detección automática de invitación y adopción en 1 clic (Opción A)."""
@@ -341,6 +472,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
             "split_mode": "EQUAL_50_50",
             "member_a_reference_income": 2500.0,
             "member_b_reference_income": 2100.0,
+            "member_a_contribution_pct": 65.0,
+            "member_b_contribution_pct": 35.0,
             "member_a_name": "David",
             "member_b_name": "Raquel",
         },
@@ -355,6 +488,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert res_inv["has_invitation"] is True
     assert res_inv["invitation"]["household_name"] == "Hogar Compartido D&R"
     assert res_inv["invitation"]["member_a_name"] == "David"
+    assert res_inv["invitation"]["member_a_contribution_pct"] == 65.0
+    assert res_inv["invitation"]["member_b_contribution_pct"] == 35.0
 
     # 4. Aceptar la invitación en 1 clic
     accept_resp = client.post("/joint/accept-invitation")
@@ -363,6 +498,8 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert acc["household_name"] == "Hogar Compartido D&R"
     assert acc["member_a_name"] == "David"
     assert acc["member_b_name"] == "Raquel"
+    assert acc["member_a_contribution_pct"] == 65.0
+    assert acc["member_b_contribution_pct"] == 35.0
     assert acc["local_profile"] == "MEMBER_B"
     assert acc["remote_profile"] == "MEMBER_A"
 
