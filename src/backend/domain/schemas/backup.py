@@ -43,8 +43,8 @@ class BackupMetadata(BaseModel):
     file_size_bytes: int = Field(ge=0, description="Tamaño en bytes")
     file_size_formatted: str = Field(description="Tamaño legible")
     sha256: str = Field(description="Hash SHA-256 del archivo de respaldo")
-    backup_type: Literal["MANUAL", "AUTOMATIC", "SAFETY_PRERESTORE"] = Field(
-        description="Origen de la copia: manual, programada o instantánea de seguridad"
+    backup_type: Literal["MANUAL", "AUTOMATIC", "SAFETY_PRERESTORE", "SAFETY_PREUPDATE"] = Field(
+        description="Origen de la copia: manual, programada, instantánea de seguridad o pre-actualización"
     )
 
 

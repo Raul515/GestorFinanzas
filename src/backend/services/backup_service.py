@@ -200,6 +200,7 @@ def create_backup(
         "MANUAL": "manual_backup_",
         "AUTOMATIC": "auto_backup_",
         "SAFETY_PRERESTORE": "safety_prerestore_",
+        "SAFETY_PREUPDATE": "safety_preupdate_",
     }
     prefix = prefix_map.get(backup_type, "manual_backup_")
 
@@ -363,6 +364,8 @@ def list_backups(backup_dir: Optional[Path] = None) -> BackupListResponse:
             b_type = "SAFETY_PRERESTORE"
             if latest_safety_snapshot is None:
                 latest_safety_snapshot = f.name
+        elif f.name.startswith("safety_preupdate_"):
+            b_type = "SAFETY_PREUPDATE"
         elif f.name.startswith("auto_backup_"):
             b_type = "AUTOMATIC"
         else:

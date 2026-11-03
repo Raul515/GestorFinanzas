@@ -71,9 +71,10 @@ def apply_update(payload: Optional[UpdateApplyRequest] = None):
             detail=str(exc),
         )
     except RuntimeError as exc:
-        logger.error("Error de descarga o red al actualizar: %s", exc)
+        logger.error("Error operativo al actualizar: %s", exc)
+        status_code = status.HTTP_409_CONFLICT if "en curso" in str(exc) else status.HTTP_502_BAD_GATEWAY
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
+            status_code=status_code,
             detail=str(exc),
         )
     except Exception as exc:
@@ -94,6 +95,12 @@ def rollback_update():
         logger.warning("Intento de rollback sin instantánea previa: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except RuntimeError as exc:
+        logger.error("Error de concurrencia en rollback: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         )
     except ValueError as exc:

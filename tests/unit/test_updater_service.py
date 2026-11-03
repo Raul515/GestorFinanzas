@@ -225,6 +225,17 @@ def test_anti_tar_slip_detection(tmp_path: Path):
     slip_info = tarfile.TarInfo(name="src/../../evil.py")
     assert not _is_safe_tar_member(slip_info, target)
 
+    # Caso 4: Enlaces simbólicos y duros (Symlink Poisoning)
+    symlink_info = tarfile.TarInfo(name="src/evil_link.py")
+    symlink_info.type = tarfile.SYMTYPE
+    symlink_info.linkname = "/etc/passwd"
+    assert not _is_safe_tar_member(symlink_info, target)
+
+    hardlink_info = tarfile.TarInfo(name="src/hard_link.py")
+    hardlink_info.type = tarfile.LNKTYPE
+    hardlink_info.linkname = "src/app.py"
+    assert not _is_safe_tar_member(hardlink_info, target)
+
 
 def test_extract_tarball_with_staging_normalization(tmp_path: Path):
     """
@@ -413,7 +424,7 @@ def test_apply_update_full_lifecycle(mock_project_env: Path, tmp_path: Path):
         file_size_bytes=1024,
         file_size_formatted="1.00 KB",
         sha256="mockhash",
-        backup_type="MANUAL",
+        backup_type="SAFETY_PREUPDATE",
     )
 
     with patch("backend.services.updater_service.create_backup", return_value=mock_meta):
@@ -471,3 +482,16 @@ def test_apply_update_aborts_on_syntax_error(mock_project_env: Path, tmp_path: P
     # Producción debe permanecer intacta
     current_main = (mock_project_env / "src" / "backend" / "api" / "main.py").read_text(encoding="utf-8")
     assert current_main == original_main
+
+def test_updater_concurrency_lock(mock_project_env: Path):
+    """Verifica que el cerrojo _update_lock impida operaciones simultáneas de actualización o rollback."""
+    from backend.services.updater_service import _update_lock
+    assert _update_lock.acquire(blocking=False)
+    try:
+        with pytest.raises(RuntimeError, match="Ya hay una operación de actualización o reversión en curso"):
+            apply_update(project_root=mock_project_env)
+        with pytest.raises(RuntimeError, match="Ya hay una operación de actualización o reversión en curso"):
+            rollback_code(project_root=mock_project_env)
+    finally:
+        _update_lock.release()
+

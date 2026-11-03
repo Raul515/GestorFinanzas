@@ -184,7 +184,7 @@ def test_updater_full_lifecycle_e2e(client: TestClient, isolated_e2e_env: Path):
         file_size_bytes=1024,
         file_size_formatted="1.00 KB",
         sha256="abcdef1234567890" * 4,
-        backup_type="MANUAL",
+        backup_type="SAFETY_PREUPDATE",
         is_encrypted=False,
     )
 

@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import tarfile
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,6 +60,8 @@ _cache: Dict[str, Any] = {
     "response": None,
     "timestamp": 0.0,
 }
+
+_update_lock = threading.Lock()
 
 CACHE_TTL_SECONDS: float = 900.0  # 15 minutos
 DEBOUNCE_SECONDS: float = 60.0    # 60 segundos
@@ -341,6 +344,8 @@ def check_remote_updates(
 
 def _is_safe_tar_member(member: tarfile.TarInfo, target_dir: Path) -> bool:
     """Valida rigurosamente que una entrada de un tarball no escape del destino (Anti-Tar-Slip)."""
+    if member.issym() or member.islnk():
+        return False
     if os.path.isabs(member.name):
         return False
     parts = Path(member.name).parts
@@ -633,6 +638,15 @@ def rollback_code(project_root: Optional[Path] = None) -> CodeRollbackResponse:
     Restaura el código y los requerimientos desde backups/code_snapshot_prev.tar.gz
     dejando la base de datos contable intacta.
     """
+    if not _update_lock.acquire(blocking=False):
+        raise RuntimeError("Ya hay una operación de actualización o reversión en curso. Por favor, espera a que finalice.")
+    try:
+        return _rollback_code_internal(project_root)
+    finally:
+        _update_lock.release()
+
+
+def _rollback_code_internal(project_root: Optional[Path] = None) -> CodeRollbackResponse:
     root = project_root or get_project_root()
     b_dir = get_backup_dir()
     snapshot_path = b_dir / "code_snapshot_prev.tar.gz"
@@ -692,6 +706,33 @@ def apply_update(
 ) -> UpdateApplyResponse:
     """
     Orquestador completo del ciclo de actualización:
+    """
+    if not _update_lock.acquire(blocking=False):
+        raise RuntimeError("Ya hay una operación de actualización o reversión en curso. Por favor, espera a que finalice.")
+    try:
+        return _apply_update_internal(
+            project_root=project_root,
+            branch=branch,
+            remote_commit=remote_commit,
+            custom_tarball_path=custom_tarball_path,
+            repo_owner=repo_owner,
+            repo_name=repo_name,
+            github_token=github_token,
+        )
+    finally:
+        _update_lock.release()
+
+
+def _apply_update_internal(
+    project_root: Optional[Path] = None,
+    branch: Optional[str] = None,
+    remote_commit: Optional[str] = None,
+    custom_tarball_path: Optional[Path] = None,
+    repo_owner: Optional[str] = None,
+    repo_name: Optional[str] = None,
+    github_token: Optional[str] = None,
+) -> UpdateApplyResponse:
+    """Orquestador interno protegido del ciclo de actualización:
     1. Respaldo de base de datos preventivo (sqlite3.backup).
     2. Snapshot previo de código (code_snapshot_prev.tar.gz).
     3. Descarga y extracción en staging con normalización de subcarpeta de GitHub.
@@ -757,8 +798,8 @@ def apply_update(
         # Paso 5: Generar respaldo preventivo de base de datos
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         pre_backup_meta = create_backup(
-            backup_type="MANUAL",
-            custom_name=f"pre_update_safety_{ts}.db",
+            backup_type="SAFETY_PREUPDATE",
+            custom_name=f"safety_preupdate_{ts}.db",
             backup_dir=b_dir,
         )
         pre_backup_path_str = str(b_dir / pre_backup_meta.filename)

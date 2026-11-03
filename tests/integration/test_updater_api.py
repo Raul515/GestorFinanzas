@@ -164,3 +164,28 @@ def test_api_rollback_not_found_404(client: TestClient):
         err_detail = str(data["detail"])
         assert "No existe snapshot previo" in err_detail
 
+
+def test_api_apply_update_concurrency_conflict_409(client: TestClient):
+    """POST /api/updater/apply devuelve 409 Conflict si otra operación está en curso."""
+    with patch(
+        "backend.services.updater_service.apply_update",
+        side_effect=RuntimeError("Ya hay una operación de actualización o reversión en curso..."),
+    ):
+        response = client.post("/api/updater/apply")
+        assert response.status_code == 409
+        data = response.json()
+        assert "en curso" in data["detail"]
+
+
+def test_api_rollback_concurrency_conflict_409(client: TestClient):
+    """POST /api/updater/rollback devuelve 409 Conflict si otra operación está en curso."""
+    with patch(
+        "backend.services.updater_service.rollback_code",
+        side_effect=RuntimeError("Ya hay una operación de actualización o reversión en curso..."),
+    ):
+        response = client.post("/api/updater/rollback")
+        assert response.status_code == 409
+        data = response.json()
+        assert "en curso" in data["detail"]
+
+

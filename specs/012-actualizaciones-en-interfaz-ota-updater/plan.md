@@ -92,3 +92,42 @@ El presente plan establece el desglose técnico y la secuencia de ejecución est
   git status -u
   ```
 - **Criterio de Aceptación**: 100% de las pruebas de la especificación pasando, cero advertencias en `compileall`, árbol de trabajo limpio y confirmación del usuario para fusionar en `develop`.
+
+---
+
+## Auditoría Técnica Post-Implementación y Resolución de Riesgos Operativos
+
+A raíz de la auditoría técnica realizada tras completar las fases 1 a 4, se identificaron y resolvieron los siguientes riesgos operativos:
+
+1. **Riesgo 1: Recarga de Procesos / Contenedores en Caliente**
+   - **Diagnóstico**: En entornos Docker de producción donde Uvicorn se ejecuta sin el flag `--reload`, actualizar los archivos de código en disco no recarga automáticamente el proceso Python en memoria.
+   - **Resolución aprobada**: Siguiendo las directrices del diseño inicial y la Constitución, no se intenta reiniciar en caliente procesos de sistema dentro de contenedores (evitando inestabilidades o caídas irreversibles). En su lugar, el sistema detecta de forma determinista si hay cambios en dependencias o código, emite una advertencia destacada en la interfaz recomendando el reinicio del servicio (`docker compose restart`), y ofrece un botón de recarga de vista `st.rerun()`.
+
+2. **Riesgo 2: Condición de Carrera y Concurrencia en `apply_update` y `rollback_code`**
+   - **Diagnóstico**: Solicitudes concurrentes o múltiples clics simultáneos en «Actualizar Sistema» o «Deshacer Actualización» podían provocar escrituras solapadas en `tmp/update_staging/` o sobreescritura corrupta de snapshots.
+   - **Resolución técnica implementada**: Se introdujo un cerrojo de exclusión mutua a nivel de proceso (`_update_lock = threading.Lock()`) con adquisición no bloqueante (`acquire(blocking=False)`). En caso de detectarse una operación activa, se lanza un `RuntimeError` capturado en FastAPI para responder con código HTTP `409 Conflict`.
+
+3. **Riesgo 3: Reversión Manual vs Automática en Caso de Fallo Durante la Copia**
+   - **Diagnóstico**: Si ocurre un fallo durante la transferencia de archivos desde staging al directorio del proyecto, evaluar si se requiere un rollback automático inmediato.
+   - **Resolución aprobada**: Debido a que la fase de staging pre-valida la integridad y la sintaxis (`compileall`) antes de mover un solo fichero, la probabilidad de error durante la copia es mínima. En caso de incidencia, la reversión manual en 1 clic está garantizada y protegida por el snapshot previo `code_snapshot_prev.tar.gz` y el respaldo de base de datos `SAFETY_PREUPDATE`.
+
+4. **Riesgo 4: Blindaje Anti-Tar-Slip frente a Symlinks y Hardlinks**
+   - **Diagnóstico**: Un archivo tarball descargado de GitHub podría contener enlaces simbólicos (`issym()`) o duros (`islnk()`) manipulados para escribir fuera del directorio de staging en Python 3.11.
+   - **Resolución técnica implementada**: La función `_is_safe_tar_member()` fue ampliada para rechazar de forma estricta cualquier miembro que sea symlink (`member.issym()`) o hardlink (`member.islnk()`), garantizando que solo se extraigan archivos regulares y directorios legítimos.
+
+5. **Riesgo 5: Tipado e Identificación Formal de Respaldos `SAFETY_PREUPDATE`**
+   - **Diagnóstico**: El esquema `BackupMetadata` en `schemas/backup.py` solo contemplaba los tipos literales `MANUAL`, `AUTOMATIC` y `SAFETY_PRERESTORE`. Al generar respaldos automáticos previos a una actualización OTA, se producía un fallo de validación Pydantic o inconsistencia en el catálogo.
+   - **Resolución técnica implementada**: Se amplió formalmente el contrato Pydantic v2 incorporando `"SAFETY_PREUPDATE"` al tipo literal `backup_type`, se registró el prefijo `safety_preupdate_` en `backup_service.py` y se actualizó `updater_service.py` para utilizar formalmente esta categoría.
+
+---
+
+## Mejoras Clave Futuras (Backlog Técnico Post-Spec 012)
+
+Las siguientes mejoras técnicas quedan documentadas para su futura priorización en especificaciones dedicadas:
+
+- **Pre-flight Check de Espacio en Disco**: Validar con `shutil.disk_usage()` que el volumen anfitrión cuenta con al menos 100 MB libres (o 2.5x el tamaño estimado del tarball) antes de iniciar la descarga.
+- **Soporte de SemVer y GitHub Releases**: Ampliar el servicio para consultar lanzamientos formales (`/releases/latest`) permitiendo actualizaciones por etiquetas de versión semántica (v1.2.0) además del modo commit SHA actual.
+- **Soporte para Repositorios Privados vía Tarball API**: Para organizaciones con repositorios privados, soportar la descarga vía endpoint autenticado `/repos/{owner}/{repo}/tarball/{ref}` con cabecera `Authorization: Bearer <GITHUB_TOKEN>`.
+- **Limpieza Proactiva de Cachés de Streamlit**: Ejecutar una purga selectiva de `st.session_state` y cachés en memoria de Streamlit tras una actualización exitosa para evitar conflictos de esquemas.
+- **Canary Health Check Post-Actualización**: Implementar una llamada de sondeo interno al endpoint `/health` tras la actualización antes de marcar la operación como completada exitosamente.
+
