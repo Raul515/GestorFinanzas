@@ -246,10 +246,70 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 
 ---
 
-### Registro de Mejoras Futuras (Post-Spec)
+### Fase 7.2: Implementación de Mejoras (Alerta de Sobregasto, Exportación Tabular y Visor de Sincronización) [COMPLETADA]
 
-- **Alerta de Sobregasto en Huchas de Amortización**: Emisión de aviso informativo (`st.warning`) en la UI si un cargo a una hucha supera el saldo disponible acumulado, indicando que la hucha ha quedado a 0 € y el remanente ha sido absorbido por la tesorería común del hogar.
-- **Exportación Consolidada del Hogar a Excel / CSV**: Generación y descarga de archivos tabulares con el histórico de gastos comunes, aportaciones mensuales y estado de huchas para justificaciones de alquiler o control anual.
-- **Visor de Sincronización Avanzado en UI**: En el panel de configuración, visualización de deltas archivados en `sync/processed/` y funcionalidad para inspeccionar o reintentar eventos fallidos en `sync/error/` directamente desde la interfaz gráfica.
+- **Objetivo**: Desarrollar e integrar las 3 mejoras funcionales acordadas para robustecer la operativa cotidiana, la justificación documental y la observabilidad de sincronización:
+  1. **Alerta de Sobregasto en Huchas con Confirmación Bloqueante**:
+     - En el formulario de *Registrar Gasto Común* de `joint_view.py`, al seleccionar una hucha cuyo saldo disponible sea inferior al importe introducido (`fund.current_balance < amount`), el sistema despliega una advertencia destacada (`st.warning`) detallando el saldo actual de la hucha, el déficit remanente que asumirá la tesorería común del hogar y desactiva el botón de guardar hasta que el usuario marque una casilla obligatoria de confirmación: `[ ] Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común`.
+  2. **Exportación Consolidada del Hogar a Excel (.xlsx)**:
+     - Servicio backend en `joint_accounting_service.py` (`generate_household_excel_export()`) que genera un archivo estructurado con 3 pestañas:
+       - *Gastos Comunes*: Fecha, Concepto, Categoría, Subcategoría, Importe, Hucha Vinculada, Importe Deducido de Hucha.
+       - *Aportaciones del Hogar*: Mes, Año, Miembro Aportante, Tipo/Estrategia, Importe, Salario Base Computado, Fecha de Registro.
+       - *Huchas de Amortización*: Nombre de Hucha, Saldo Actual, Meta Objetivo, Porcentaje de Asignación, Fecha Creación.
+     - Endpoint FastAPI `GET /joint/export/excel` con `Response` de tipo `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+     - Integración de botones de descarga directa (`st.download_button`) en **ambas pestañas**: *📊 Resumen Anual del Hogar* y *⚙️ Configuración del Hogar*.
+  3. **Visor de Sincronización Avanzado y Gestión de Errores en UI**:
+     - Endpoints FastAPI `GET /joint/sync/events` (detalle de ficheros e inspección de últimos eventos en outbox, inbox, processed y error) y `POST /joint/sync/retry-errors` (recuperación y reprocesamiento de deltas fallidos de `sync/error/` a `sync/inbox/`).
+     - Módulo de observabilidad en `joint_view.py` bajo *⚙️ Configuración del Hogar* con:
+       - 4 tarjetas métricas (Deltas en Outbox, Inbox, Procesados, En Error).
+       - Botón `[🔄 Sincronizar Ahora]` (ejecución forzada en caliente con feedback inmediato).
+       - Botón `[🔁 Reintentar Eventos en Error]` (solo visible o activo si existen archivos en `sync/error/`).
+       - Tabla interactiva con los últimos eventos procesados (timestamp, entidad, acción, UUID).
+- **Archivos creados/modificados**:
+  - `requirements/backend.txt` [MODIFICADO: Añadido `openpyxl>=3.1.0`].
+  - `src/backend/services/joint_accounting_service.py` [MODIFICADO: Función `generate_household_excel_export()` con openpyxl].
+  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Funciones `get_sync_events_detail()` y `retry_failed_events()`].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `GET /joint/export/excel`, `GET /joint/sync/events`, `POST /joint/sync/retry-errors`].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos `export_joint_excel()`, `get_joint_sync_events_detail()`, `retry_joint_sync_errors()`].
+  - `src/frontend/views/joint_view.py` [MODIFICADO: Alerta bloqueante con checkbox en formulario de gasto, botones de descarga en Resumen Anual y Configuración, y visor de diagnóstico desplegable].
+  - `tests/unit/test_joint_accounting_service.py` [MODIFICADO: Pruebas unitarias de exportación Excel].
+  - `tests/unit/test_joint_sync_service.py` [MODIFICADO: Pruebas de reintento de errores y visor de eventos].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas de cliente y renderizado de las 3 mejoras].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración de exportación y diagnóstico].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
+  ```
+- **Criterio de Aceptación**: 100% de las 59 pruebas pasando, exportación Excel descargable y legible, bloqueo de sobregasto estricto sin confirmación, y visor de eventos interactivo y operativo.
 
+---
 
+### Registro de Nuevas Mejoras Futuras Identificadas (Ordenadas por Prioridad e Impacto)
+
+Tras la implementación de la Fase 7.2 y una auditoría funcional orientada a la experiencia de vida real en pareja, se identifican las siguientes 5 posibles ampliaciones ordenadas por impacto operativo:
+
+1. **Prioridad 1 (ESENCIAL): Liquidación y Reembolso de Gastos Adelantados con Tarjeta Personal (*Expense Settlement*)**:
+   - *Problema en la vida real*: Cuando un miembro paga un gasto común con su tarjeta personal (`paid_by = MEMBER_A` o `MEMBER_B`) porque no tenía a mano la tarjeta de la cuenta conjunta, la app computa el gasto del hogar pero no calcula el saldo adeudado ("El fondo común debe X € a Miembro A").
+   - *Solución*:
+     - Un indicador de liquidación en la pestaña mensual: *"Saldo pendiente de reembolso: El hogar adeuda 145,00 € a David por gastos adelantados"*.
+     - Un botón asistido `[💸 Registrar Reembolso desde la Cuenta Conjunta]` que liquida la deuda cuando se realiza la transferencia de devolución desde el banco común.
+
+2. **Prioridad 2 (ALTA): Traspaso Directo / Rebalanceo entre Huchas de Amortización**:
+   - *Problema en la vida real*: Si se cancela un viaje o surge una urgencia en el vehículo, la pareja necesita reasignar dinero acumulado en "Fondo Vacaciones" hacia "Fondo Coche". Actualmente, solo se puede hacer borrando una hucha con reasignación total o editando manualmente los saldos.
+   - *Solución*:
+     - Modal o expander en la pestaña *🎯 Huchas de Amortización*: `[↔️ Traspasar Saldo entre Huchas]` con selector de origen, destino e importe, generando los deltas `UPSERT` correspondientes para replicar el movimiento en ambos terminales.
+
+3. **Prioridad 3 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
+   - *Problema en la vida real*: El banner de aportación en el Perfil Personal se oculta o marca como completado cuando el usuario local aporta. Para comprobar si la pareja ya ha aportado su parte del mes, el usuario debe navegar explícitamente a "Economía del Hogar".
+   - *Solución*:
+     - Un badge compacto en el banner personal: *"Noviembre: David (✅ Aportado: 600 €) | Raquel (⏳ Pendiente: 400 €)"*, ofreciendo visibilidad inmediata sin cambiar de pantalla.
+
+4. **Prioridad 4 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
+   - *Problema en la vida real*: Buscar un gasto específico (ej. "IKEA", "Seguro Hogar", "Veterinario") a lo largo del año requiere revisar los 12 meses uno a uno o inspeccionar la hoja de cálculo exportada.
+   - *Solución*:
+     - Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
+
+5. **Prioridad 5 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
+   - *Problema en la vida real*: El saldo de tesorería de la app es puramente contable (`aportaciones - gastos`). Pequeños descuadres bancarios (comisiones de mantenimiento de 0,50 €, intereses a favor de céntimos o redondeos) hacen que el saldo bancario real no coincida al céntimo.
+   - *Solución*:
+     - Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.

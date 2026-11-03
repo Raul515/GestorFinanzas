@@ -696,5 +696,73 @@ def test_subcategory_sync_upsert_and_delete(temp_sync_dir: str, db_session: Sess
     assert not any(s.name == "Mascotas (Veterinario y Comida)" for s in subcats_after)
 
 
+def test_sync_events_detail_and_retry_errors(db_session: Session, temp_sync_dir: str):
+    """
+    Fase 7.2: Verifica la inspeccion de deltas en outbox, inbox, processed y error,
+    asi como la recuperacion y reintento de eventos fallidos en cuarentena.
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_A")
 
+    # 1. Crear evento valido en inbox
+    inbox_path = Path(temp_sync_dir) / "inbox"
+    evt_ok = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SINKING_FUND",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_B",
+        "timestamp_utc": "2026-11-20T10:00:00Z",
+        "payload": {
+            "name": "Hucha Test Viewer",
+            "target_amount": 500.0,
+            "current_balance": 100.0,
+            "monthly_target_amount": 50.0,
+            "allocation_percentage": 10.0,
+        },
+    }
+    with open(inbox_path / "evt_ok.json", "w", encoding="utf-8") as f:
+        json.dump(evt_ok, f)
+
+    # 2. Procesar inbox (va a processed/)
+    service.process_inbox(db_session)
+
+    # 3. Crear archivo erroneo en sync/error/
+    error_path = Path(temp_sync_dir) / "error"
+    with open(error_path / "bad_file.json", "w", encoding="utf-8") as f:
+        f.write("{ invalid json")
+
+    # 4. Consultar detalle de eventos
+    details = service.get_sync_events_detail()
+    assert details["inbox_count"] == 0
+    assert details["processed_count"] >= 1
+    assert details["error_count"] == 1
+    assert len(details["processed_events"]) >= 1
+    assert details["processed_events"][0]["entity_type"] == "SINKING_FUND"
+    assert len(details["error_events"]) == 1
+    assert "bad_file.json" in details["error_events"][0]["filename"]
+
+    # 5. Reemplazar archivo de error por un delta corregido y reintentar
+    fixed_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SINKING_FUND",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_B",
+        "timestamp_utc": "2026-11-20T10:05:00Z",
+        "payload": {
+            "name": "Hucha Recuperada",
+            "target_amount": 1000.0,
+            "current_balance": 200.0,
+            "monthly_target_amount": 100.0,
+            "allocation_percentage": 20.0,
+        },
+    }
+    with open(error_path / "bad_file.json", "w", encoding="utf-8") as f:
+        json.dump(fixed_evt, f)
+
+    retry_res = service.retry_failed_events(db_session)
+    assert retry_res["retried_count"] == 1
+    assert retry_res["process_summary"]["processed_count"] == 1
+
+    details_after = service.get_sync_events_detail()
+    assert details_after["error_count"] == 0
+    assert details_after["processed_count"] >= 2
 

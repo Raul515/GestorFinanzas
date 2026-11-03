@@ -393,3 +393,104 @@ def prepare_assisted_contribution(
         "joint_contribution": joint_contribution_payload,
         "sync_event": sync_event.model_dump(),
     }
+
+
+def generate_household_excel_export(db: Any, household_id: int) -> bytes:
+    """
+    Genera un archivo binario Excel (.xlsx) con 3 hojas estructuradas del hogar:
+    1. Gastos Comunes: Detalle de transacciones comunes, deduccion de huchas e imputacion.
+    2. Aportaciones del Hogar: Historico de aportaciones de cada miembro.
+    3. Huchas de Amortizacion: Catalogo de huchas, saldos actuales y objetivos.
+    """
+    import io
+    import pandas as pd
+    from backend.domain.models.joint import JointTransaction, JointMonthlyContribution, JointSinkingFund
+
+    # 1. Gastos Comunes
+    txs = (
+        db.query(JointTransaction)
+        .filter(JointTransaction.joint_account_id == household_id)
+        .order_by(JointTransaction.date.desc(), JointTransaction.id.desc())
+        .all()
+    )
+    tx_rows = []
+    for t in txs:
+        subcat_name = t.joint_subcategory.name if getattr(t, 'joint_subcategory', None) else ''
+        fund_name = t.joint_sinking_fund.name if getattr(t, 'joint_sinking_fund', None) else ''
+        cat_name = ''
+        if getattr(t, 'joint_subcategory', None) and getattr(t.joint_subcategory, 'joint_category', None):
+            cat_name = t.joint_subcategory.joint_category.name
+
+        tx_rows.append({
+            'ID': t.id,
+            'UUID': t.uuid or '',
+            'Fecha': t.date.isoformat() if hasattr(t.date, 'isoformat') else str(t.date),
+            'Concepto': t.description,
+            'Categoria': cat_name,
+            'Subcategoria': subcat_name,
+            'Importe (EUR)': round(float(t.amount), 2),
+            'Hucha de Amortizacion': fund_name,
+            'Deduccion Hucha (EUR)': round(float(t.sinking_fund_deduction or 0.0), 2),
+            'Registrado Por': str(t.created_by_profile),
+        })
+    df_tx = pd.DataFrame(tx_rows)
+    if df_tx.empty:
+        df_tx = pd.DataFrame(columns=[
+            'ID', 'UUID', 'Fecha', 'Concepto', 'Categoria', 'Subcategoria',
+            'Importe (EUR)', 'Hucha de Amortizacion', 'Deduccion Hucha (EUR)', 'Registrado Por'
+        ])
+
+    # 2. Aportaciones del Hogar
+    contribs = (
+        db.query(JointMonthlyContribution)
+        .filter(JointMonthlyContribution.joint_account_id == household_id)
+        .order_by(JointMonthlyContribution.contribution_date.desc(), JointMonthlyContribution.id.desc())
+        .all()
+    )
+    contrib_rows = []
+    for c in contribs:
+        contrib_rows.append({
+            'ID': c.id,
+            'UUID': c.uuid or '',
+            'Fecha': c.contribution_date.isoformat() if hasattr(c.contribution_date, 'isoformat') else str(c.contribution_date),
+            'Mes': c.month,
+            'Miembro': str(c.contributor_profile),
+            'Importe (EUR)': round(float(c.amount), 2),
+        })
+    df_contrib = pd.DataFrame(contrib_rows)
+    if df_contrib.empty:
+        df_contrib = pd.DataFrame(columns=['ID', 'UUID', 'Fecha', 'Mes', 'Miembro', 'Importe (EUR)'])
+
+    # 3. Huchas de Amortizacion
+    funds = (
+        db.query(JointSinkingFund)
+        .filter(JointSinkingFund.joint_account_id == household_id)
+        .order_by(JointSinkingFund.name.asc())
+        .all()
+    )
+    fund_rows = []
+    for f in funds:
+        fund_rows.append({
+            'ID': f.id,
+            'Nombre': f.name,
+            'Saldo Actual (EUR)': round(float(f.current_balance), 2),
+            'Meta Objetivo (EUR)': round(float(f.target_amount or 0.0), 2),
+            'Objetivo Mensual (EUR)': round(float(f.monthly_target_amount or 0.0), 2),
+            'Porcentaje Asignacion (%)': round(float(f.allocation_percentage or 0.0), 2),
+            'Estado': str(f.status),
+        })
+    df_funds = pd.DataFrame(fund_rows)
+    if df_funds.empty:
+        df_funds = pd.DataFrame(columns=[
+            'ID', 'Nombre', 'Saldo Actual (EUR)', 'Meta Objetivo (EUR)',
+            'Objetivo Mensual (EUR)', 'Porcentaje Asignacion (%)', 'Estado'
+        ])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_tx.to_excel(writer, sheet_name='Gastos Comunes', index=False)
+        df_contrib.to_excel(writer, sheet_name='Aportaciones del Hogar', index=False)
+        df_funds.to_excel(writer, sheet_name='Huchas de Amortizacion', index=False)
+
+    return output.getvalue()
+

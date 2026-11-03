@@ -628,3 +628,82 @@ class JointSyncService:
             except Exception as exc:
                 logger.warning("Error inspeccionando posible invitación en %s: %s", file_path.name, exc)
         return None
+
+    def get_sync_events_detail(self, max_processed: int = 30) -> Dict[str, Any]:
+        """
+        Inspecciona detalladamente los buzones de sincronizacion:
+        - outbox: deltas pendientes de salida generados localmente.
+        - inbox: deltas pendientes de entrada recibidos por Syncthing.
+        - processed: ultimos N eventos archivados tras su aplicacion exitosa.
+        - error: eventos en cuarentena que fallaron durante el procesamiento.
+        """
+        outbox_files = [f.name for f in self.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")] if self.outbox_dir.exists() else []
+        inbox_files = [f.name for f in self.inbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")] if self.inbox_dir.exists() else []
+
+        processed_files = [f for f in self.processed_dir.iterdir() if f.is_file() and f.suffix == ".json"] if self.processed_dir.exists() else []
+        processed_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+
+        processed_events = []
+        for pf in processed_files[:max_processed]:
+            try:
+                with open(pf, "r", encoding="utf-8") as f:
+                    ev_data = json.load(f)
+                processed_events.append({
+                    "filename": pf.name,
+                    "event_id": ev_data.get("event_id", ""),
+                    "entity_type": ev_data.get("entity_type", ""),
+                    "action": ev_data.get("action", ""),
+                    "timestamp_utc": ev_data.get("timestamp_utc", ""),
+                    "origin_device_id": ev_data.get("origin_device_id", ""),
+                })
+            except Exception as exc:
+                logger.warning("Error leyendo evento procesado %s: %s", pf.name, exc)
+
+        error_files = [f for f in self.error_dir.iterdir() if f.is_file()] if self.error_dir.exists() else []
+        error_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+
+        error_events = []
+        for ef in error_files:
+            try:
+                with open(ef, "r", encoding="utf-8", errors="replace") as f:
+                    snippet = f.read(250)
+                error_events.append({
+                    "filename": ef.name,
+                    "preview": snippet,
+                })
+            except Exception as exc:
+                error_events.append({"filename": ef.name, "preview": f"Error: {exc}"})
+
+        return {
+            "outbox_count": len(outbox_files),
+            "inbox_count": len(inbox_files),
+            "processed_count": len(processed_files),
+            "error_count": len(error_files),
+            "processed_events": processed_events,
+            "error_events": error_events,
+        }
+
+    def retry_failed_events(self, db: Session) -> Dict[str, Any]:
+        """
+        Recupera los archivos de sync/error/, los devuelve a sync/inbox/ y dispara
+        inmediatamente el procesamiento para reintentar su aplicacion.
+        """
+        if not self.error_dir.exists():
+            return {"retried_count": 0, "status": "No existe directorio de error."}
+
+        error_files = [f for f in self.error_dir.iterdir() if f.is_file()]
+        retried = 0
+        for ef in error_files:
+            dest = self.inbox_dir / ef.name
+            try:
+                shutil.move(str(ef), str(dest))
+                retried += 1
+            except Exception as exc:
+                logger.warning("Error moviendo evento fallido %s a inbox: %s", ef.name, exc)
+
+        summary = self.process_inbox(db)
+        return {
+            "retried_count": retried,
+            "process_summary": summary,
+        }
+

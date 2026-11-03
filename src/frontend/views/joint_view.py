@@ -284,7 +284,20 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
     Renderiza el Resumen Anual consolidado de la unidad familiar.
     Regla innegociable: no incluye comparativas de quién aportó más (Miembro A vs Miembro B).
     """
-    st.subheader(f"Resumen Consolidado del Hogar - Año {selected_year}")
+    col_rh1, col_rh2 = st.columns([3, 1])
+    with col_rh1:
+        st.subheader(f"Resumen Consolidado del Hogar - Año {selected_year}")
+    with col_rh2:
+        excel_anual = api_client.export_joint_excel()
+        if excel_anual:
+            st.download_button(
+                label="📥 Exportar a Excel (.xlsx)",
+                data=excel_anual,
+                file_name=f"finanzas_hogar_{selected_year}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"download_excel_annual_{selected_year}",
+            )
 
     annual_summary = api_client.get_joint_annual_summary(year=selected_year)
     if not annual_summary:
@@ -606,11 +619,20 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         selected_fund_obj = next((f for f in sinking_funds if f["id"] == chosen_fund_id), None)
                         fund_balance = float(selected_fund_obj.get("current_balance", 0.0)) if selected_fund_obj else 0.0
                         st.caption(f"Saldo disponible en esta hucha: **{fund_balance:,.2f} €**")
-                        if fund_balance < float(tx_amount):
+                        has_overdraft = (fund_balance < float(tx_amount))
+                        confirm_overdraft = False
+                        if has_overdraft:
                             diff_treasury = float(tx_amount) - fund_balance
-                            st.caption(
-                                f"ℹ️ *El gasto ({tx_amount:,.2f} €) supera el saldo ({fund_balance:,.2f} €). "
-                                f"La hucha quedará a 0,00 € y los {diff_treasury:,.2f} € restantes se asumirán por la tesorería del hogar.*"
+                            st.warning(
+                                f"⚠️ **Atención: Sobregasto Detectado**\n\n"
+                                f"El importe del gasto (**{tx_amount:,.2f} €**) supera el saldo disponible en la hucha "
+                                f"'{selected_fund_obj.get('name')}' (**{fund_balance:,.2f} €**).\n\n"
+                                f"La hucha quedará a **0,00 €** y el remanente de **{diff_treasury:,.2f} €** "
+                                f"será absorbido por la tesorería corriente de necesidades comunes."
+                            )
+                            confirm_overdraft = st.checkbox(
+                                "Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común del hogar",
+                                key=f"confirm_overdraft_{selected_month_name}",
                             )
                     else:
                         st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Entrada de Piso).")
@@ -638,6 +660,8 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                     st.error("Debes seleccionar una subcategoría de necesidad común.")
                 elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
                     st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
+                elif charge_type == "Cargo a Hucha de Amortización" and fund_map and (float(selected_fund_obj.get("current_balance", 0.0) if selected_fund_obj else 0.0) < float(tx_amount)) and not confirm_overdraft:
+                    st.error("⚠️ Debes marcar la casilla obligatoria de confirmación de sobregasto para autorizar el cargo a la tesorería común.")
                 else:
                     payload_tx = {
                         "description": tx_desc.strip(),
@@ -910,6 +934,67 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                 else:
                     st.error("Error al reenviar la invitación.")
 
+
+    # Visor Avanzado de Sincronización y Registro de Eventos
+    with st.expander("🔍 Visor Avanzado de Sincronización y Registro de Eventos", expanded=False):
+        sync_detail = api_client.get_joint_sync_events_detail()
+        if sync_detail:
+            col_v1, col_v2, col_v3, col_v4 = st.columns(4)
+            with col_v1:
+                st.metric("Outbox (Salida)", sync_detail.get("outbox_count", 0))
+            with col_v2:
+                st.metric("Inbox (Entrada)", sync_detail.get("inbox_count", 0))
+            with col_v3:
+                st.metric("Archivados (Processed)", sync_detail.get("processed_count", 0))
+            with col_v4:
+                err_c = sync_detail.get("error_count", 0)
+                st.metric("Eventos en Error", err_c, delta="⚠️ Requiere atención" if err_c > 0 else None, delta_color="inverse")
+
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                if st.button("🔄 Sincronizar Ahora (Forzar Inbox)", key="btn_sync_now_viewer", use_container_width=True):
+                    with st.spinner("Procesando deltas de entrada..."):
+                        res_s = api_client.trigger_process_inbox()
+                        st.toast("Sincronización procesada.")
+                        st.rerun()
+            with col_act2:
+                if err_c > 0:
+                    if st.button("🔁 Reintentar Eventos en Error", key="btn_retry_errors_viewer", type="primary", use_container_width=True):
+                        with st.spinner("Reintentando eventos en error..."):
+                            res_r = api_client.retry_joint_sync_errors()
+                            cnt = res_r.get("retried_count", 0) if res_r else 0
+                            st.success(f"Se han reintentado {cnt} eventos.")
+                            st.rerun()
+
+            if err_c > 0:
+                st.markdown("#### ⚠️ Eventos en Error")
+                for ef in sync_detail.get("error_events", []):
+                    st.error(f"**Archivo**: `{ef.get('filename')}`\n\n```\n{ef.get('preview')}\n```")
+
+            st.markdown("#### 📋 Últimos Eventos Procesados")
+            proc_evs = sync_detail.get("processed_events", [])
+            if proc_evs:
+                st.dataframe(proc_evs, use_container_width=True)
+            else:
+                st.caption("No hay eventos archivados en processed/ aún.")
+
+    # Exportación Consolidada del Hogar a Excel
+    st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
+    st.markdown("### 📥 Exportación Consolidada del Hogar")
+    st.markdown(
+        "Descarga un archivo Excel (.xlsx) estructurado con 3 pestañas conteniendo el histórico completo de "
+        "gastos comunes, aportaciones de los miembros y estado de las huchas de amortización."
+    )
+    excel_cfg = api_client.export_joint_excel()
+    if excel_cfg:
+        st.download_button(
+            label="📥 Descargar Datos del Hogar en Excel (.xlsx)",
+            data=excel_cfg,
+            file_name=f"finanzas_hogar_completo.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=False,
+            key="download_excel_config_tab",
+        )
 
     st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
     st.markdown("### Parámetros de la Cuenta Conjunta")

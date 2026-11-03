@@ -306,3 +306,48 @@ def test_render_joint_view_routes_to_dashboard_when_configured():
          patch.object(joint_view, "_render_configured_joint_view") as mock_dashboard:
         joint_view.render_joint_view(selected_year=2026)
         mock_dashboard.assert_called_once()
+
+
+def test_api_client_export_and_sync_detail_endpoints():
+    """Valida los metodos cliente de exportacion a Excel y visor de sincronizacion (Fase 7.2)."""
+    # 1. export_joint_excel
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.content = b"PK\x03\x04dummy_excel_bytes"
+        mock_get.return_value = mock_resp
+
+        data = api_client.export_joint_excel()
+        assert data is not None
+        assert data.startswith(b"PK\x03\x04")
+
+    # 2. get_joint_sync_events_detail
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "outbox_count": 2,
+            "inbox_count": 0,
+            "processed_count": 15,
+            "error_count": 1,
+            "processed_events": [],
+            "error_events": [{"filename": "err1.json", "preview": "syntax error"}],
+        }
+        mock_get.return_value = mock_resp
+
+        detail = api_client.get_joint_sync_events_detail()
+        assert detail is not None
+        assert detail["outbox_count"] == 2
+        assert detail["error_count"] == 1
+
+    # 3. retry_joint_sync_errors
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"retried_count": 1, "process_summary": {"processed_count": 1}}
+        mock_post.return_value = mock_resp
+
+        res_retry = api_client.retry_joint_sync_errors()
+        assert res_retry is not None
+        assert res_retry["retried_count"] == 1
+

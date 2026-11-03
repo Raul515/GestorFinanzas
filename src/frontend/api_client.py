@@ -1182,6 +1182,53 @@ def resend_joint_invitation() -> bool:
     return False
 
 
+def export_joint_excel() -> Optional[bytes]:
+    """Descarga el archivo Excel estructurado (.xlsx) con los datos consolidados del hogar."""
+    url = f"{API_URL}/joint/export/excel"
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            return response.content
+        logger.warning("Fallo en export_joint_excel (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en export_joint_excel en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en export_joint_excel(): %s", e)
+    return None
+
+
+def get_joint_sync_events_detail(max_processed: int = 30) -> Optional[Dict[str, Any]]:
+    """Consulta la inspección detallada de deltas en outbox, inbox, processed y error."""
+    url = f"{API_URL}/joint/sync/events"
+    try:
+        response = requests.get(url, params={"max_processed": max_processed}, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_sync_events_detail (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_sync_events_detail en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_sync_events_detail(): %s", e)
+    return None
+
+
+def retry_joint_sync_errors() -> Optional[Dict[str, Any]]:
+    """Solicita al backend mover los eventos de sync/error/ a sync/inbox/ y reprocesarlos."""
+    url = f"{API_URL}/joint/sync/retry-errors"
+    try:
+        response = requests.post(url, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en retry_joint_sync_errors (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en retry_joint_sync_errors en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en retry_joint_sync_errors(): %s", e)
+    return None
+
+
+
+
 # ==============================================================================
 # MÉTODOS DE COPIAS DE SEGURIDAD Y RESTAURACIÓN (SPEC 011 - BACKUP & RESTORE)
 # ==============================================================================

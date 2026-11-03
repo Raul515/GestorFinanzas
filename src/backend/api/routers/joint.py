@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from backend.domain.models.transactions import Transaction as PersonalTransactio
 from backend.domain.schemas import joint as schemas
 from backend.services.joint_accounting_service import (
     calculate_joint_annual_summary,
+    generate_household_excel_export,
     calculate_monthly_contributions,
     evaluate_household_health,
     prepare_assisted_contribution,
@@ -998,3 +999,48 @@ def get_sync_status(
 ) -> Dict[str, Any]:
     """Retorna las métricas y estado del buzón de sincronización."""
     return sync_service.get_sync_status(db)
+
+
+# ==========================================
+# 8. EXPORTACIÓN Y DIAGNÓSTICO AVANZADO (FASE 7.2)
+# ==========================================
+
+@router.get("/export/excel")
+def export_joint_data_excel(
+    db: Session = Depends(get_db),
+    repo: SQLiteRepository = Depends(get_repo),
+) -> Response:
+    """Genera y descarga el archivo Excel (.xlsx) estructurado con los datos del hogar."""
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cuenta conjunta no configurada.",
+        )
+    excel_bytes = generate_household_excel_export(db, account.id)
+    today_str = datetime.now().strftime("%Y%m%d")
+    filename = f"finanzas_hogar_{account.id}_{today_str}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/sync/events")
+def get_sync_events_detail(
+    max_processed: int = Query(default=30, ge=1, le=100),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Retorna la inspección detallada de deltas en outbox, inbox, processed y error."""
+    return sync_service.get_sync_events_detail(max_processed=max_processed)
+
+
+@router.post("/sync/retry-errors")
+def retry_sync_errors(
+    db: Session = Depends(get_db),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Mueve los deltas de sync/error/ a sync/inbox/ y dispara el procesamiento inmediato."""
+    return sync_service.retry_failed_events(db)
+

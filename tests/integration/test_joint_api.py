@@ -507,3 +507,44 @@ def test_joint_invitation_detection_and_acceptance(client: TestClient, api_sync_
     assert client.get("/joint/invitation").json()["has_invitation"] is False
     assert client.post("/joint/accept-invitation").status_code == 409
 
+
+def test_joint_export_and_sync_viewer_endpoints(client: TestClient):
+    """
+    Fase 7.2: Valida los endpoints REST de exportacion a Excel (.xlsx),
+    inspeccion de eventos en el visor de sincronizacion y reintento de errores.
+    """
+    # 1. Configurar hogar
+    setup_resp = client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Casa Test Export",
+            "cohabitation_stage": "COHABITATION",
+            "split_mode": "EQUAL_50_50",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "member_a_reference_income": 3000.0,
+            "member_b_reference_income": 2000.0,
+        },
+    )
+    assert setup_resp.status_code == 201
+
+    # 2. Descargar Excel
+    export_resp = client.get("/joint/export/excel")
+    assert export_resp.status_code == 200
+    assert export_resp.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment; filename=finanzas_hogar_1_" in export_resp.headers.get("content-disposition", "")
+    assert len(export_resp.content) > 0
+
+    # 3. Consultar eventos de sincronizacion
+    events_resp = client.get("/joint/sync/events")
+    assert events_resp.status_code == 200
+    data_ev = events_resp.json()
+    assert "outbox_count" in data_ev
+    assert "inbox_count" in data_ev
+    assert "processed_count" in data_ev
+    assert "error_count" in data_ev
+
+    # 4. Reintentar errores (sin errores pendientes devuelve 0 retried)
+    retry_resp = client.post("/joint/sync/retry-errors")
+    assert retry_resp.status_code == 200
+    assert retry_resp.json()["retried_count"] == 0
+

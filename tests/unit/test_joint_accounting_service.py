@@ -415,3 +415,57 @@ def test_sqlite_repository_joint_crud_lifecycle(db_session: Session):
     # Consulta de aportaciones
     contribs = repo.get_joint_contributions(year=2026, month="2026-11")
     assert len(contribs) == 1
+
+
+def test_generate_household_excel_export(db_session: Session):
+    """Verifica que la exportacion Excel binaria genere las 3 pestanas requeridas."""
+    import io
+    import openpyxl
+    from backend.services.joint_accounting_service import generate_household_excel_export
+
+    repo = SQLiteRepository(db_session)
+    setup_req = JointAccountSetupRequest(
+        household_name="Hogar Export Test",
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        split_mode=SplitMode.EQUAL_50_50,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        member_a_reference_income=2500.0,
+        member_b_reference_income=2500.0,
+    )
+    repo.create_joint_account(setup_req)
+
+    fund = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Fondo Vacaciones", target_amount=1200.0, current_balance=500.0)
+    )
+
+    repo.create_joint_transaction(
+        JointTransactionCreate(
+            date=date(2026, 11, 2),
+            amount=150.0,
+            description="Billetes avion",
+            joint_sinking_fund_id=fund.id,
+            created_by_profile=ProfileIdentifier.MEMBER_A,
+        )
+    )
+
+    repo.create_joint_contribution(
+        JointMonthlyContributionCreate(
+            month="2026-11",
+            contributor_profile=ProfileIdentifier.MEMBER_A,
+            amount=600.0,
+            contribution_date=date(2026, 11, 1),
+        )
+    )
+
+    excel_bytes = generate_household_excel_export(db_session, household_id=1)
+    assert len(excel_bytes) > 0
+
+    wb = openpyxl.load_workbook(io.BytesIO(excel_bytes))
+    sheet_names = wb.sheetnames
+    assert "Gastos Comunes" in sheet_names
+    assert "Aportaciones del Hogar" in sheet_names
+    assert "Huchas de Amortizacion" in sheet_names
+
+    ws_tx = wb["Gastos Comunes"]
+    assert ws_tx.max_row >= 2
+
