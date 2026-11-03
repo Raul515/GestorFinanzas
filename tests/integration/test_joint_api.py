@@ -110,6 +110,65 @@ def test_joint_account_update_endpoint(client: TestClient):
     assert updated["household_name"] == "Hogar Renovado"
 
 
+def test_joint_subcategories_crud_and_sync(client: TestClient, api_sync_dir: str):
+    """Verifica la creación, edición y eliminación de subcategorías de necesidades comunes y sus eventos delta."""
+    # 1. Configurar hogar
+    client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Hogar Subcategorías",
+            "cohabitation_stage": "COHABITATION",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "split_mode": "EQUAL_50_50",
+        },
+    )
+
+    # 2. Consultar categorías para obtener el ID de Necesidades Básicas
+    cats_resp = client.get("/joint/categories")
+    assert cats_resp.status_code == 200
+    cats = cats_resp.json()
+    assert len(cats) >= 1
+    cat_id = cats[0]["id"]
+
+    # 3. Crear subcategoría común (POST /joint/subcategories)
+    create_payload = {
+        "joint_category_id": cat_id,
+        "name": "Mascotas (Alimento y Salud)",
+        "monthly_budget": 95.0,
+    }
+    create_resp = client.post("/joint/subcategories", json=create_payload)
+    assert create_resp.status_code == 201
+    created_sub = create_resp.json()
+    assert created_sub["name"] == "Mascotas (Alimento y Salud)"
+    assert created_sub["monthly_budget"] == 95.0
+    sub_id = created_sub["id"]
+
+    # 4. Verificar que se emitió evento delta SUBCATEGORY (UPSERT) en outbox
+    outbox_files = list((Path(api_sync_dir) / "outbox").glob("*.json"))
+    sub_events = []
+    for f in outbox_files:
+        with open(f, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+            if data.get("entity_type") == "SUBCATEGORY":
+                sub_events.append(data)
+    assert any(e["action"] == "UPSERT" and e["payload"]["name"] == "Mascotas (Alimento y Salud)" for e in sub_events)
+
+    # 5. Editar subcategoría (PUT /joint/subcategories/{id})
+    update_resp = client.put(f"/joint/subcategories/{sub_id}", json={"monthly_budget": 130.0})
+    assert update_resp.status_code == 200
+    assert update_resp.json()["monthly_budget"] == 130.0
+
+    # 6. Eliminar subcategoría (DELETE /joint/subcategories/{id})
+    del_resp = client.delete(f"/joint/subcategories/{sub_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["deleted"] is True
+
+    # 7. Verificar que no aparece en GET /joint/subcategories
+    get_all = client.get("/joint/subcategories")
+    assert get_all.status_code == 200
+    assert not any(s["id"] == sub_id for s in get_all.json())
+
+
 def test_joint_sinking_funds_endpoints(client: TestClient):
     """Verifica el catálogo y gestión de Huchas de Amortización (/joint/sinking-funds)."""
     client.post(

@@ -49,6 +49,7 @@ class SyncEntityType(str, Enum):
     CONTRIBUTION = "CONTRIBUTION"
     SINKING_FUND = "SINKING_FUND"
     ACCOUNT = "ACCOUNT"
+    SUBCATEGORY = "SUBCATEGORY"
 
 
 class HealthStatus(str, Enum):

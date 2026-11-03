@@ -236,8 +236,12 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
     - Ejecución reactiva de `trigger_process_inbox()` al inicializar o refrescar `app.py` en cualquier contexto de perfil para mantener los banners e indicadores al día.
 
 #### Paso 4: Robustez de Catálogo (R-11)
-11. **R-11 (Sincronización de Subcategorías)**:
-    - Añadir `SUBCATEGORY` a `SyncEntityType` y soportar su replicación básica ante altas o modificaciones del catálogo común.
+11. [x] **R-11 (Sincronización de Subcategorías)**:
+    - Añadido `SUBCATEGORY` a `SyncEntityType` en `schemas/joint.py`.
+    - Implementados endpoints `POST`, `PUT` y `DELETE` para `/joint/subcategories` con emisión de deltas `SUBCATEGORY (UPSERT / DELETE)`.
+    - Añadidos métodos `get_joint_category()`, `update_joint_subcategory()` y `delete_joint_subcategory()` en `SQLiteRepository`.
+    - Añadido manejador `_apply_subcategory_event()` en `JointSyncService` para replicar altas, modificaciones y borrados en el dispositivo receptor con resolución por nombre.
+    - Añadidas pruebas unitarias y de integración pasando al 100%.
 
 
 ---

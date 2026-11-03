@@ -323,6 +323,90 @@ def get_joint_subcategories(
     return [schemas.JointSubcategoryResponse.model_validate(s) for s in repo.get_joint_subcategories(category_id=category_id)]
 
 
+@router.post("/subcategories", response_model=schemas.JointSubcategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_joint_subcategory(
+    subcat_create: schemas.JointSubcategoryCreate,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointSubcategoryResponse:
+    """Crea una nueva subcategoría de necesidades comunes y emite evento delta a la pareja."""
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe configurar la cuenta conjunta antes de añadir subcategorías.",
+        )
+
+    subcat = repo.create_joint_subcategory(subcat_create)
+    cat = repo.get_joint_category(subcat.joint_category_id)
+    cat_name = cat.name if cat else None
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "name": subcat.name,
+            "monthly_budget": subcat.monthly_budget,
+            "category_name": cat_name,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+    return schemas.JointSubcategoryResponse.model_validate(subcat)
+
+
+@router.put("/subcategories/{subcategory_id}", response_model=schemas.JointSubcategoryResponse)
+def update_joint_subcategory(
+    subcategory_id: int,
+    subcat_update: schemas.JointSubcategoryUpdate,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointSubcategoryResponse:
+    """Actualiza una subcategoría de necesidades comunes y propaga el cambio a la pareja."""
+    subcat = repo.update_joint_subcategory(subcategory_id, subcat_update)
+    if not subcat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
+
+    cat = repo.get_joint_category(subcat.joint_category_id)
+    cat_name = cat.name if cat else None
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "name": subcat.name,
+            "monthly_budget": subcat.monthly_budget,
+            "category_name": cat_name,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+    return schemas.JointSubcategoryResponse.model_validate(subcat)
+
+
+@router.delete("/subcategories/{subcategory_id}")
+def delete_joint_subcategory(
+    subcategory_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Elimina una subcategoría de necesidades comunes y propaga el tombstone a la pareja."""
+    subcat = repo.get_joint_subcategory(subcategory_id)
+    if not subcat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
+
+    subcat_name = subcat.name
+    success = repo.delete_joint_subcategory(subcategory_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la subcategoría.")
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SUBCATEGORY,
+        action=schemas.SyncAction.DELETE,
+        payload={"name": subcat_name},
+        origin_device_id=sync_service.local_device_id,
+    )
+    return {"deleted": True, "subcategory_id": subcategory_id}
+
+
 # ==========================================
 # 3. HUCHAS DE AMORTIZACIÓN (SINKING FUNDS)
 # ==========================================

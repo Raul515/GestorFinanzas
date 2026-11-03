@@ -611,6 +611,14 @@ class SQLiteRepository(IRepository):
         """Obtiene las categorías del hogar junto a sus subcategorías."""
         return self.db.query(joint_model.JointCategory).filter(joint_model.JointCategory.joint_account_id == 1).all()
 
+    def get_joint_category(self, category_id: int) -> Optional[joint_model.JointCategory]:
+        """Obtiene una categoría de necesidades del hogar por su ID."""
+        return (
+            self.db.query(joint_model.JointCategory)
+            .filter(joint_model.JointCategory.id == category_id, joint_model.JointCategory.joint_account_id == 1)
+            .first()
+        )
+
     def create_joint_category(self, category: joint_schema.JointCategoryCreate) -> joint_model.JointCategory:
         """Crea una categoría de necesidades del hogar."""
         data = category.model_dump()
@@ -635,7 +643,6 @@ class SQLiteRepository(IRepository):
         """Obtiene una subcategoría de necesidades comunes por ID."""
         return self.db.query(joint_model.JointSubcategory).filter(joint_model.JointSubcategory.id == subcategory_id).first()
 
-
     def create_joint_subcategory(self, subcategory: joint_schema.JointSubcategoryCreate) -> joint_model.JointSubcategory:
         """Crea una nueva subcategoría de necesidades comunes."""
         data = subcategory.model_dump()
@@ -648,6 +655,29 @@ class SQLiteRepository(IRepository):
         self.db.commit()
         self.db.refresh(db_item)
         return db_item
+
+    def update_joint_subcategory(
+        self, subcategory_id: int, update_data: joint_schema.JointSubcategoryUpdate
+    ) -> Optional[joint_model.JointSubcategory]:
+        """Actualiza el nombre o presupuesto mensual de una subcategoría común."""
+        item = self.get_joint_subcategory(subcategory_id)
+        if not item:
+            return None
+        data = update_data.model_dump(exclude_unset=True)
+        for key, value in data.items():
+            setattr(item, key, value)
+        self.db.commit()
+        self.db.refresh(item)
+        return item
+
+    def delete_joint_subcategory(self, subcategory_id: int) -> bool:
+        """Elimina una subcategoría de necesidades comunes."""
+        item = self.get_joint_subcategory(subcategory_id)
+        if not item:
+            return False
+        self.db.delete(item)
+        self.db.commit()
+        return True
 
     def get_joint_sinking_funds(self, status: Optional[str] = None) -> List[joint_model.JointSinkingFund]:
         """Obtiene las huchas de amortización, filtrando opcionalmente por estado."""

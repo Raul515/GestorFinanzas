@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.domain.models.joint import (
     JointAppliedSyncEvent,
+    JointCategory,
     JointMonthlyContribution,
     JointSinkingFund,
     JointSubcategory,
@@ -267,8 +268,56 @@ class JointSyncService:
             self._apply_sinking_fund_event(db, event)
         elif event.entity_type == SyncEntityType.ACCOUNT:
             self._apply_account_event(db, event)
+        elif event.entity_type == SyncEntityType.SUBCATEGORY:
+            self._apply_subcategory_event(db, event)
         else:
             logger.warning("Tipo de entidad no manejada en sincronización: %s", event.entity_type)
+
+    def _apply_subcategory_event(self, db: Session, event: SyncEventPayload) -> None:
+        """Aplica mutación sobre subcategorías de necesidades comunes sincronizadas."""
+        payload = event.payload
+        name = payload.get("name")
+        if not name:
+            logger.warning("Evento SUBCATEGORY ignorado por falta de 'name' en payload.")
+            return
+
+        subcat = db.query(JointSubcategory).filter(JointSubcategory.name == name).first()
+
+        if event.action == SyncAction.DELETE:
+            if subcat:
+                db.delete(subcat)
+                logger.info("Subcategoría conjunta '%s' eliminada por evento remoto.", name)
+            return
+
+        cat_name = payload.get("category_name")
+        target_cat = None
+        if cat_name:
+            target_cat = db.query(JointCategory).filter(
+                JointCategory.joint_account_id == 1, JointCategory.name == cat_name
+            ).first()
+        if not target_cat:
+            target_cat = db.query(JointCategory).filter(JointCategory.joint_account_id == 1).first()
+
+        if not target_cat:
+            logger.warning("No se encontró categoría para asociar la subcategoría conjunta: %s", name)
+            return
+
+        monthly_budget = float(payload.get("monthly_budget", 0.0))
+
+        if not subcat:
+            subcat = JointSubcategory(
+                joint_category_id=target_cat.id,
+                name=name,
+                monthly_budget=monthly_budget,
+            )
+            db.add(subcat)
+            logger.info("Subcategoría conjunta '%s' creada con éxito por evento remoto.", name)
+        else:
+            if "monthly_budget" in payload:
+                subcat.monthly_budget = monthly_budget
+            if target_cat and subcat.joint_category_id != target_cat.id:
+                subcat.joint_category_id = target_cat.id
+            logger.info("Subcategoría conjunta '%s' actualizada por evento remoto.", name)
 
     def _apply_account_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica eventos sobre la cuenta del hogar (ej. DELETE para reset remoto a Estado Cero)."""

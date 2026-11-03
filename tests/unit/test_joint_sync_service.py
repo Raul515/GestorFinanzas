@@ -613,4 +613,88 @@ def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
     assert db_session.query(JointAppliedSyncEvent).count() == 0
 
 
+def test_subcategory_sync_upsert_and_delete(temp_sync_dir: str, db_session: Session):
+    """Verifica que los eventos delta SUBCATEGORY (UPSERT/DELETE) creen, actualicen y eliminen subcategorías comunes."""
+    repo = SQLiteRepository(db_session)
+
+    # 1. Configurar cuenta local para tener las categorías sembradas
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Test Subcats",
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2500.0,
+        member_b_reference_income=2500.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+
+    # 2. Recepción de SUBCATEGORY (UPSERT) para una nueva subcategoría
+    subcat_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "UPSERT",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T10:00:00Z",
+        "payload": {
+            "name": "Mascotas (Veterinario y Comida)",
+            "monthly_budget": 85.0,
+            "category_name": "Necesidades Básicas del Hogar",
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_create.json", "w", encoding="utf-8") as f:
+        json.dump(subcat_evt, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    subcats = repo.get_joint_subcategories()
+    mascotas = next((s for s in subcats if s.name == "Mascotas (Veterinario y Comida)"), None)
+    assert mascotas is not None
+    assert float(mascotas.monthly_budget) == 85.0
+
+    # 3. Recepción de SUBCATEGORY (UPSERT) para actualizar el presupuesto
+    update_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "UPSERT",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T11:00:00Z",
+        "payload": {
+            "name": "Mascotas (Veterinario y Comida)",
+            "monthly_budget": 120.0,
+        },
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_update.json", "w", encoding="utf-8") as f:
+        json.dump(update_evt, f)
+
+    res_update = service.process_inbox(db_session)
+    assert res_update["processed_count"] == 1
+
+    db_session.refresh(mascotas)
+    assert float(mascotas.monthly_budget) == 120.0
+
+    # 4. Recepción de SUBCATEGORY (DELETE)
+    del_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"name": "Mascotas (Veterinario y Comida)"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_del.json", "w", encoding="utf-8") as f:
+        json.dump(del_evt, f)
+
+    res_del = service.process_inbox(db_session)
+    assert res_del["processed_count"] == 1
+
+    subcats_after = repo.get_joint_subcategories()
+    assert not any(s.name == "Mascotas (Veterinario y Comida)" for s in subcats_after)
+
+
+
 
