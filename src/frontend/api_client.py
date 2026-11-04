@@ -1,8 +1,11 @@
+import streamlit as st
 import logging
 import os
 import sys
 from typing import Any, Dict, List, Optional
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 # Asegurar que src esté en el sys.path si se invoca directamente desde el frontend
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -17,12 +20,28 @@ logger = logging.getLogger(__name__)
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
+# Pool de conexiones persistentes HTTP con Keep-Alive para eliminar sobrecarga de sockets
+_session = requests.Session()
+_adapter = HTTPAdapter(
+    pool_connections=20,
+    pool_maxsize=30,
+    max_retries=Retry(total=2, backoff_factor=0.2, status_forcelist=[502, 503, 504]),
+)
+_session.mount("http://", _adapter)
+_session.mount("https://", _adapter)
 
+
+def get_session() -> requests.Session:
+    """Retorna la sesión HTTP persistente compartida."""
+    return _session
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def get_categorias():
     """Obtiene el listado de categorías, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/categories/"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for c in raw:
@@ -52,6 +71,7 @@ def get_categorias():
     return []
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def get_subcategorias(categoria_id=None):
     """Obtiene subcategorías, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/categories/subcategories/"
@@ -59,7 +79,7 @@ def get_subcategorias(categoria_id=None):
     if categoria_id:
         params["category_id"] = categoria_id
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for s in raw:
@@ -84,7 +104,7 @@ def get_presupuestos(mes):
     """Obtiene presupuestos de un mes, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/budgets/{mes}"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for p in raw:
@@ -116,7 +136,7 @@ def get_transacciones(mes=None):
     if mes:
         params["month"] = mes
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             raw = response.json()
             for t in raw:
@@ -154,7 +174,7 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
         "description": concepto,
     }
     try:
-        response = requests.post(url, json=data, timeout=10)
+        response = _session.post(url, json=data, timeout=10)
         if response.status_code == 200:
             res = response.json()
             if "date" in res and "fecha" not in res:
@@ -181,7 +201,7 @@ def delete_transaction(transaction_id: int) -> bool:
     """
     url = f"{API_URL}/transactions/{transaction_id}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             logger.info("Transacción %s eliminada exitosamente en el backend", transaction_id)
             return True
@@ -211,7 +231,7 @@ def save_presupuestos_bulk(presupuestos_list):
         a = p.get("amount") if p.get("amount") is not None else p.get("cantidad", 0.0)
         payload.append({"month": m, "subcategory_id": s, "amount": a})
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             res = response.json()
             if isinstance(res, list):
@@ -237,8 +257,13 @@ def get_safety_status(mes=None):
     if mes:
         params["mes"] = mes
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
+            try:
+                get_macro_indicators.clear()
+                get_market_news.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Respuesta no exitosa al consultar safety-status (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -259,7 +284,7 @@ def update_emergency_fund_config(target_months=None, current_balance=None, mes=N
     if current_balance is not None:
         data["current_balance"] = current_balance
     try:
-        response = requests.post(url, params=params, json=data, timeout=10)
+        response = _session.post(url, params=params, json=data, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Error al actualizar configuración del fondo de emergencia (%s): %s", response.status_code, response.text)
@@ -270,11 +295,12 @@ def update_emergency_fund_config(target_months=None, current_balance=None, mes=N
     return None
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_macro_indicators():
     """Obtiene los indicadores macroeconómicos y deuda soberana desde el backend."""
     url = f"{API_URL}/market/macro-indicators"
     try:
-        response = requests.get(url, timeout=15)
+        response = _session.get(url, timeout=15)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al obtener indicadores macro (%s): %s", response.status_code, response.text)
@@ -285,11 +311,12 @@ def get_macro_indicators():
     return None
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_market_news(limit=15):
     """Obtiene las noticias financieras depuradas con análisis de IA desde el backend."""
     url = f"{API_URL}/market/news"
     try:
-        response = requests.get(url, params={"limit": limit}, timeout=35)
+        response = _session.get(url, params={"limit": limit}, timeout=35)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al obtener noticias de mercado (%s): %s", response.status_code, response.text)
@@ -304,7 +331,7 @@ def refresh_market_radar():
     """Fuerza la invalidación y recarga manual del Radar de Mercado y Noticias."""
     url = f"{API_URL}/market/refresh"
     try:
-        response = requests.post(url, timeout=60)
+        response = _session.post(url, timeout=60)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al refrescar el radar de mercado (%s): %s", response.status_code, response.text)
@@ -315,11 +342,12 @@ def refresh_market_radar():
     return None
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_screener_universes():
     """Obtiene la lista de universos predefinidos para el screener."""
     url = f"{API_URL}/screener/universes"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar universos de screener (%s): %s", response.status_code, response.text)
@@ -330,6 +358,7 @@ def get_screener_universes():
     return []
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_screener_universe(
     universe_id: str,
     preset=None,
@@ -359,7 +388,7 @@ def get_screener_universe(
         params["search_query"] = search_query
 
     try:
-        response = requests.get(url, params=params, timeout=30)
+        response = _session.get(url, params=params, timeout=30)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar universo '%s' (%s): %s", universe_id, response.status_code, response.text)
@@ -375,7 +404,7 @@ def get_screener_custom(tickers, filter_params=None):
     url = f"{API_URL}/screener/custom"
     payload = {"tickers": tickers, "filter_params": filter_params}
     try:
-        response = requests.post(url, json=payload, timeout=35)
+        response = _session.post(url, json=payload, timeout=35)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar tickers custom (%s): %s", response.status_code, response.text)
@@ -390,8 +419,12 @@ def refresh_screener_universe(universe_id: str):
     """Fuerza la invalidación de la caché en SQLite y descarga datos frescos de Yahoo Finance."""
     url = f"{API_URL}/screener/refresh/{universe_id}"
     try:
-        response = requests.post(url, timeout=60)
+        response = _session.post(url, timeout=60)
         if response.status_code == 200:
+            try:
+                get_screener_universe.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Respuesta no exitosa al refrescar universo '%s' (%s): %s", universe_id, response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -401,12 +434,13 @@ def refresh_screener_universe(universe_id: str):
     return None
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def get_deepdive_analysis(ticker: str):
     """Consulta el diagnóstico contable en profundidad (Deep Dive) con caché SQLite de 24 horas."""
     clean_ticker = ticker.strip().upper()
     url = f"{API_URL}/deepdive/{clean_ticker}"
     try:
-        response = requests.get(url, timeout=40)
+        response = _session.get(url, timeout=40)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar Deep Dive para '%s' (%s): %s", clean_ticker, response.status_code, response.text)
@@ -422,8 +456,12 @@ def refresh_deepdive_analysis(ticker: str):
     clean_ticker = ticker.strip().upper()
     url = f"{API_URL}/deepdive/refresh/{clean_ticker}"
     try:
-        response = requests.post(url, timeout=60)
+        response = _session.post(url, timeout=60)
         if response.status_code == 200:
+            try:
+                get_deepdive_analysis.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Respuesta no exitosa al refrescar Deep Dive para '%s' (%s): %s", clean_ticker, response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -437,7 +475,7 @@ def get_watchlist():
     """Recupera la lista de activos en seguimiento guardados en la base de datos local SQLite."""
     url = f"{API_URL}/watchlist"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar la watchlist (%s): %s", response.status_code, response.text)
@@ -452,7 +490,7 @@ def add_to_watchlist(item: dict):
     """Añade o actualiza un activo con sus notas en la lista de seguimiento local."""
     url = f"{API_URL}/watchlist"
     try:
-        response = requests.post(url, json=item, timeout=10)
+        response = _session.post(url, json=item, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Respuesta no exitosa al guardar en watchlist (%s): %s", response.status_code, response.text)
@@ -468,7 +506,7 @@ def remove_from_watchlist(ticker: str) -> bool:
     clean_ticker = ticker.strip().upper()
     url = f"{API_URL}/watchlist/{clean_ticker}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Respuesta no exitosa al eliminar de watchlist '%s' (%s): %s", clean_ticker, response.status_code, response.text)
@@ -487,7 +525,7 @@ def get_copilot_sessions():
     """Obtiene el listado de sesiones históricas del Copiloto Patrimonial."""
     url = f"{API_URL}/copilot/sessions"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al listar sesiones del copiloto (%s): %s", response.status_code, response.text)
@@ -503,7 +541,7 @@ def create_copilot_session(title=None):
     url = f"{API_URL}/copilot/sessions"
     payload = {"title": title} if title else {}
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Respuesta no exitosa al crear sesión del copiloto (%s): %s", response.status_code, response.text)
@@ -518,7 +556,7 @@ def get_copilot_session_detail(session_id: int):
     """Obtiene el detalle de una sesión con todos sus mensajes e historial."""
     url = f"{API_URL}/copilot/sessions/{session_id}"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al consultar sesión %d (%s): %s", session_id, response.status_code, response.text)
@@ -533,7 +571,7 @@ def delete_copilot_session(session_id: int) -> bool:
     """Elimina una sesión de conversación y todos sus mensajes."""
     url = f"{API_URL}/copilot/sessions/{session_id}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Respuesta no exitosa al eliminar sesión %d (%s): %s", session_id, response.status_code, response.text)
@@ -552,7 +590,7 @@ def send_copilot_chat(message: str, session_id=None):
     url = f"{API_URL}/copilot/chat"
     payload = {"message": message, "session_id": session_id}
     try:
-        response = requests.post(url, json=payload, timeout=60)
+        response = _session.post(url, json=payload, timeout=60)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa al enviar chat al copiloto (%s): %s", response.status_code, response.text)
@@ -580,7 +618,7 @@ def run_investment_committee(ticker=None, month=None, initial_notes=None):
         "initial_notes": initial_notes.strip() if initial_notes and isinstance(initial_notes, str) and initial_notes.strip() else None,
     }
     try:
-        response = requests.post(url, json=payload, timeout=90)
+        response = _session.post(url, json=payload, timeout=90)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -625,7 +663,7 @@ def get_monthly_guidelines(
         "safety_status": safety_status,
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -648,7 +686,7 @@ def get_annual_guidelines(metrics):
     url = f"{API_URL}/guidelines/annual"
     payload = {"metrics": metrics}
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -670,7 +708,7 @@ def apply_guideline_strategy(payload: dict):
     """
     url = f"{API_URL}/guidelines/apply-strategy"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -703,7 +741,7 @@ def sweep_month_surplus(
         "mode": mode,
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -740,7 +778,7 @@ def compensate_guideline_deficit(
         "target_subcategory_ids": target_subcategory_ids,
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -767,7 +805,7 @@ def revert_guideline_strategy(month_key: str, scenario_type: str = "NEEDS_SURPLU
         "scenario_type": scenario_type,
     }
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning(
@@ -790,7 +828,7 @@ def get_joint_status() -> Dict[str, Any]:
     """Consulta si la cuenta conjunta está configurada o si nos encontramos en Estado Cero."""
     url = f"{API_URL}/joint/status"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Respuesta no exitosa en get_joint_status (%s): %s", response.status_code, response.text)
@@ -805,7 +843,7 @@ def setup_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
     """Ejecuta el onboarding inicial para crear la cuenta conjunta."""
     url = f"{API_URL}/joint/setup"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Fallo en setup_joint_account (%s): %s", response.status_code, response.text)
@@ -820,7 +858,7 @@ def get_joint_account() -> Optional[Dict[str, Any]]:
     """Obtiene la configuración activa de la cuenta conjunta."""
     url = f"{API_URL}/joint/account"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_account (%s): %s", response.status_code, response.text)
@@ -835,7 +873,7 @@ def update_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
     """Actualiza los parámetros del hogar."""
     url = f"{API_URL}/joint/account"
     try:
-        response = requests.put(url, json=payload, timeout=10)
+        response = _session.put(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en update_joint_account (%s): %s", response.status_code, response.text)
@@ -846,11 +884,12 @@ def update_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
     return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def get_joint_categories() -> List[Dict[str, Any]]:
     """Obtiene el catálogo de categorías del hogar."""
     url = f"{API_URL}/joint/categories"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_categories (%s): %s", response.status_code, response.text)
@@ -861,6 +900,7 @@ def get_joint_categories() -> List[Dict[str, Any]]:
     return []
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def get_joint_subcategories(category_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Obtiene las subcategorías de necesidades comunes."""
     url = f"{API_URL}/joint/subcategories"
@@ -868,7 +908,7 @@ def get_joint_subcategories(category_id: Optional[int] = None) -> List[Dict[str,
     if category_id:
         params["category_id"] = category_id
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_subcategories (%s): %s", response.status_code, response.text)
@@ -879,6 +919,7 @@ def get_joint_subcategories(category_id: Optional[int] = None) -> List[Dict[str,
     return []
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_joint_sinking_funds(status: Optional[str] = None) -> List[Dict[str, Any]]:
     """Obtiene las metas de ahorro / huchas de amortización del hogar."""
     url = f"{API_URL}/joint/sinking-funds"
@@ -886,7 +927,7 @@ def get_joint_sinking_funds(status: Optional[str] = None) -> List[Dict[str, Any]
     if status:
         params["status"] = status
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_sinking_funds (%s): %s", response.status_code, response.text)
@@ -901,8 +942,12 @@ def create_joint_sinking_fund(payload: dict) -> Optional[Dict[str, Any]]:
     """Crea una nueva hucha de amortización."""
     url = f"{API_URL}/joint/sinking-funds"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            try:
+                get_joint_sinking_funds.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Fallo en create_joint_sinking_fund (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -916,8 +961,12 @@ def update_joint_sinking_fund(fund_id: int, payload: dict) -> Optional[Dict[str,
     """Edita una hucha de amortización existente."""
     url = f"{API_URL}/joint/sinking-funds/{fund_id}"
     try:
-        response = requests.put(url, json=payload, timeout=10)
+        response = _session.put(url, json=payload, timeout=10)
         if response.status_code == 200:
+            try:
+                get_joint_sinking_funds.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Fallo en update_joint_sinking_fund (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -934,8 +983,12 @@ def delete_joint_sinking_fund(fund_id: int, reallocate_to_fund_id: Optional[int]
     if reallocate_to_fund_id:
         params["reallocate_to_fund_id"] = reallocate_to_fund_id
     try:
-        response = requests.delete(url, params=params, timeout=10)
+        response = _session.delete(url, params=params, timeout=10)
         if response.status_code == 200:
+            try:
+                get_joint_sinking_funds.clear()
+            except Exception:
+                pass
             return True
         logger.warning("Fallo en delete_joint_sinking_fund (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -949,8 +1002,12 @@ def transfer_joint_sinking_fund(payload: dict) -> Optional[Dict[str, Any]]:
     """Ejecuta un rebalanceo o traspaso directo de saldo entre huchas del hogar."""
     url = f"{API_URL}/joint/sinking-funds/transfer"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            try:
+                get_joint_sinking_funds.clear()
+            except Exception:
+                pass
             return response.json()
         logger.warning("Fallo en transfer_joint_sinking_fund (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -964,7 +1021,7 @@ def get_joint_sinking_fund_transfers(limit: int = 100) -> List[Dict[str, Any]]:
     """Obtiene el historial de traspasos y rebalanceos entre huchas de amortización."""
     url = f"{API_URL}/joint/sinking-funds/transfers"
     try:
-        response = requests.get(url, params={"limit": limit}, timeout=10)
+        response = _session.get(url, params={"limit": limit}, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_sinking_fund_transfers (%s): %s", response.status_code, response.text)
@@ -984,7 +1041,7 @@ def get_joint_transactions(year: Optional[int] = None, month: Optional[str] = No
     if month:
         params["month"] = month
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_transactions (%s): %s", response.status_code, response.text)
@@ -1029,7 +1086,7 @@ def search_joint_transactions(
         params["max_amount"] = max_amount
 
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en search_joint_transactions (%s): %s", response.status_code, response.text)
@@ -1044,7 +1101,7 @@ def create_joint_transaction(payload: dict) -> Optional[Dict[str, Any]]:
     """Registra un nuevo gasto común del hogar."""
     url = f"{API_URL}/joint/transactions"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Fallo en create_joint_transaction (%s): %s", response.status_code, response.text)
@@ -1059,7 +1116,7 @@ def delete_joint_transaction(tx_id: int) -> bool:
     """Elimina una transacción conjunta."""
     url = f"{API_URL}/joint/transactions/{tx_id}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en delete_joint_transaction (%s): %s", response.status_code, response.text)
@@ -1074,7 +1131,7 @@ def get_joint_settlement_summary() -> Optional[Dict[str, Any]]:
     """Obtiene el resumen consolidado de liquidación y reembolsos de gastos adelantados."""
     url = f"{API_URL}/joint/settlement/summary"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_settlement_summary (%s): %s", response.status_code, response.text)
@@ -1089,7 +1146,7 @@ def settle_joint_transaction(tx_id: int) -> bool:
     """Marca una transacción conjunta pendiente como liquidada/reembolsada."""
     url = f"{API_URL}/joint/settlement/settle-transaction/{tx_id}"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en settle_joint_transaction (%s): %s", response.status_code, response.text)
@@ -1104,7 +1161,7 @@ def settle_all_joint_transactions() -> bool:
     """Marca todas las transacciones conjuntas pendientes como liquidadas/reembolsadas."""
     url = f"{API_URL}/joint/settlement/settle-all"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en settle_all_joint_transactions (%s): %s", response.status_code, response.text)
@@ -1124,7 +1181,7 @@ def get_joint_contributions(year: Optional[int] = None, month: Optional[str] = N
     if month:
         params["month"] = month
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_contributions (%s): %s", response.status_code, response.text)
@@ -1139,7 +1196,7 @@ def get_joint_contribution_calculation() -> Optional[Dict[str, Any]]:
     """Consulta el cálculo dinámico de las cuotas mensuales del hogar (Mejora 1)."""
     url = f"{API_URL}/joint/contributions/calculation"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_contribution_calculation (%s): %s", response.status_code, response.text)
@@ -1154,7 +1211,7 @@ def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
     """Ejecuta el asiento asistido en 1 clic de inicio de mes."""
     url = f"{API_URL}/joint/contributions/asentar-asistida"
     try:
-        response = requests.post(url, json=payload, timeout=10)
+        response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Fallo en asentar_aportacion_asistida (%s): %s", response.status_code, response.text)
@@ -1169,7 +1226,7 @@ def delete_joint_contribution(contribution_id: int) -> bool:
     """Elimina físicamente una aportación a la cuenta común."""
     url = f"{API_URL}/joint/contributions/{contribution_id}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en delete_joint_contribution (%s): %s", response.status_code, response.text)
@@ -1184,7 +1241,7 @@ def get_joint_health() -> Optional[Dict[str, Any]]:
     """Consulta la Tasa de Esfuerzo Familiar y el semáforo determinista."""
     url = f"{API_URL}/joint/health"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_health (%s): %s", response.status_code, response.text)
@@ -1200,7 +1257,7 @@ def get_joint_annual_summary(year: int) -> Optional[Dict[str, Any]]:
     url = f"{API_URL}/joint/annual-summary"
     params = {"year": year}
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = _session.get(url, params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_annual_summary (%s): %s", response.status_code, response.text)
@@ -1215,7 +1272,7 @@ def trigger_process_inbox() -> Dict[str, Any]:
     """Dispara el procesamiento de los deltas de Syncthing en sync/inbox/."""
     url = f"{API_URL}/joint/sync/process-inbox"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en trigger_process_inbox (%s): %s", response.status_code, response.text)
@@ -1230,7 +1287,7 @@ def get_sync_status() -> Dict[str, Any]:
     """Obtiene el estado de sincronización y métricas de deltas pendientes."""
     url = f"{API_URL}/joint/sync/status"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_sync_status (%s): %s", response.status_code, response.text)
@@ -1245,7 +1302,7 @@ def reset_joint_account() -> bool:
     """Purga la cuenta conjunta completa y vacía los buzones de sincronización (regreso a Estado Cero)."""
     url = f"{API_URL}/joint/reset"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en reset_joint_account (%s): %s", response.status_code, response.text)
@@ -1260,7 +1317,7 @@ def get_joint_invitation() -> Dict[str, Any]:
     """Comprueba si hay una invitación de hogar pendiente enviada por la pareja."""
     url = f"{API_URL}/joint/invitation"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_invitation (%s): %s", response.status_code, response.text)
@@ -1275,7 +1332,7 @@ def accept_joint_invitation() -> Optional[Dict[str, Any]]:
     """Acepta la invitación de hogar detectada en 1 clic (Opción A)."""
     url = f"{API_URL}/joint/accept-invitation"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Fallo en accept_joint_invitation (%s): %s", response.status_code, response.text)
@@ -1291,7 +1348,7 @@ def resend_joint_invitation() -> bool:
     """Solicita al backend que vuelva a emitir la invitación para la pareja en outbox/."""
     url = f"{API_URL}/joint/resend-invitation"
     try:
-        response = requests.post(url, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en resend_joint_invitation (%s): %s", response.status_code, response.text)
@@ -1306,7 +1363,7 @@ def export_joint_excel() -> Optional[bytes]:
     """Descarga el archivo Excel estructurado (.xlsx) con los datos consolidados del hogar."""
     url = f"{API_URL}/joint/export/excel"
     try:
-        response = requests.get(url, timeout=15)
+        response = _session.get(url, timeout=15)
         if response.status_code == 200:
             return response.content
         logger.warning("Fallo en export_joint_excel (%s): %s", response.status_code, response.text)
@@ -1321,7 +1378,7 @@ def get_joint_sync_events_detail(max_processed: int = 30) -> Optional[Dict[str, 
     """Consulta la inspección detallada de deltas en outbox, inbox, processed y error."""
     url = f"{API_URL}/joint/sync/events"
     try:
-        response = requests.get(url, params={"max_processed": max_processed}, timeout=10)
+        response = _session.get(url, params={"max_processed": max_processed}, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_joint_sync_events_detail (%s): %s", response.status_code, response.text)
@@ -1336,7 +1393,7 @@ def retry_joint_sync_errors() -> Optional[Dict[str, Any]]:
     """Solicita al backend mover los eventos de sync/error/ a sync/inbox/ y reprocesarlos."""
     url = f"{API_URL}/joint/sync/retry-errors"
     try:
-        response = requests.post(url, timeout=15)
+        response = _session.post(url, timeout=15)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en retry_joint_sync_errors (%s): %s", response.status_code, response.text)
@@ -1357,7 +1414,7 @@ def get_database_health() -> Optional[Dict[str, Any]]:
     """Consulta el diagnóstico de salud, integridad y advertencia de respaldos."""
     url = f"{API_URL}/backup/health"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_database_health (%s): %s", response.status_code, response.text)
@@ -1373,7 +1430,7 @@ def create_backup(custom_name: Optional[str] = None) -> Optional[Dict[str, Any]]
     url = f"{API_URL}/backup/create"
     params = {"custom_name": custom_name} if custom_name else {}
     try:
-        response = requests.post(url, params=params, timeout=30)
+        response = _session.post(url, params=params, timeout=30)
         if response.status_code in (200, 201):
             return response.json()
         logger.warning("Fallo en create_backup (%s): %s", response.status_code, response.text)
@@ -1388,7 +1445,7 @@ def download_backup_bytes() -> Optional[tuple[bytes, str]]:
     """Descarga los bytes binarios de la base de datos consistente y retorna (bytes, filename)."""
     url = f"{API_URL}/backup/download"
     try:
-        response = requests.get(url, timeout=45)
+        response = _session.get(url, timeout=45)
         if response.status_code == 200:
             # Obtener nombre del header Content-Disposition si existe
             filename = "finanzas_backup.db"
@@ -1408,7 +1465,7 @@ def list_backups() -> Dict[str, Any]:
     """Obtiene el catálogo de copias de seguridad locales disponibles."""
     url = f"{API_URL}/backup/list"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en list_backups (%s): %s", response.status_code, response.text)
@@ -1424,7 +1481,7 @@ def validate_backup_upload(file_bytes: bytes, filename: str) -> Optional[Dict[st
     url = f"{API_URL}/backup/validate"
     files = {"file": (filename, file_bytes, "application/x-sqlite3")}
     try:
-        response = requests.post(url, files=files, timeout=30)
+        response = _session.post(url, files=files, timeout=30)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en validate_backup_upload (%s): %s", response.status_code, response.text)
@@ -1442,7 +1499,7 @@ def restore_backup_upload(file_bytes: bytes, filename: str) -> Optional[Dict[str
     url = f"{API_URL}/backup/restore/upload"
     files = {"file": (filename, file_bytes, "application/x-sqlite3")}
     try:
-        response = requests.post(url, files=files, timeout=45)
+        response = _session.post(url, files=files, timeout=45)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en restore_backup_upload (%s): %s", response.status_code, response.text)
@@ -1459,7 +1516,7 @@ def restore_backup_local(filename: str) -> Optional[Dict[str, Any]]:
     """Restaura una instantánea del catálogo local en backups/."""
     url = f"{API_URL}/backup/restore/local/{filename}"
     try:
-        response = requests.post(url, timeout=30)
+        response = _session.post(url, timeout=30)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en restore_backup_local (%s): %s", response.status_code, response.text)
@@ -1476,7 +1533,7 @@ def rollback_restore() -> Optional[Dict[str, Any]]:
     """Deshace en 1 clic la última restauración aplicando el snapshot previo de seguridad."""
     url = f"{API_URL}/backup/restore/rollback"
     try:
-        response = requests.post(url, timeout=30)
+        response = _session.post(url, timeout=30)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en rollback_restore (%s): %s", response.status_code, response.text)
@@ -1493,7 +1550,7 @@ def delete_backup_local(filename: str) -> bool:
     """Elimina permanentemente una copia de seguridad local del servidor."""
     url = f"{API_URL}/backup/local/{filename}"
     try:
-        response = requests.delete(url, timeout=10)
+        response = _session.delete(url, timeout=10)
         if response.status_code == 200:
             return True
         logger.warning("Fallo en delete_backup_local (%s): %s", response.status_code, response.text)
@@ -1508,7 +1565,7 @@ def get_backup_schedule() -> Optional[Dict[str, Any]]:
     """Consulta la configuración de programación de copias automáticas."""
     url = f"{API_URL}/backup/schedule"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en get_backup_schedule (%s): %s", response.status_code, response.text)
@@ -1528,7 +1585,7 @@ def update_backup_schedule(enabled: bool, frequency_days: int, keep_max_copies: 
         "keep_max_copies": keep_max_copies,
     }
     try:
-        response = requests.put(url, json=payload, timeout=10)
+        response = _session.put(url, json=payload, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo en update_backup_schedule (%s): %s", response.status_code, response.text)
@@ -1553,11 +1610,12 @@ def update_backup_schedule(enabled: bool, frequency_days: int, keep_max_copies: 
 # SECCIÓN: ACTUALIZADOR EN 1 CLIC (IN-APP OTA UPDATER)
 # ==============================================================================
 
+@st.cache_data(ttl=300, show_spinner=False)
 def get_app_version() -> Optional[Dict[str, Any]]:
     """Obtiene la versión del sistema instalada localmente, rama y disponibilidad de rollback."""
     url = f"{API_URL}/api/updater/version"
     try:
-        response = requests.get(url, timeout=10)
+        response = _session.get(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al obtener versión (%s): %s", response.status_code, response.text)
@@ -1575,7 +1633,7 @@ def check_for_updates(force: bool = False, branch: Optional[str] = None) -> Opti
     if branch:
         params["branch"] = branch
     try:
-        response = requests.get(url, params=params, timeout=15)
+        response = _session.get(url, params=params, timeout=15)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al comprobar actualizaciones (%s): %s", response.status_code, response.text)
@@ -1595,7 +1653,7 @@ def apply_system_update(branch: Optional[str] = None, remote_commit: Optional[st
     if remote_commit:
         payload["remote_commit"] = remote_commit
     try:
-        response = requests.post(url, json=payload, timeout=60)
+        response = _session.post(url, json=payload, timeout=60)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al aplicar actualización (%s): %s", response.status_code, response.text)
@@ -1615,7 +1673,7 @@ def rollback_system_update() -> Optional[Dict[str, Any]]:
     """Restaura la versión previa de código y dependencias desde la instantánea comprimida."""
     url = f"{API_URL}/api/updater/rollback"
     try:
-        response = requests.post(url, timeout=30)
+        response = _session.post(url, timeout=30)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al revertir código (%s): %s", response.status_code, response.text)
@@ -1629,3 +1687,45 @@ def rollback_system_update() -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error("Error inesperado en rollback_system_update(): %s", e)
         return {"success": False, "message": f"Error inesperado: {e}"}
+
+
+# ==============================================================================
+# FUNCIONES DE GESTIÓN E INVALIDACIÓN DE CACHÉ DE FRONTEND (SPEC 014)
+# ==============================================================================
+
+def clear_categories_cache() -> None:
+    """Invalida la caché de categorías y subcategorías."""
+    try:
+        get_categorias.clear()
+        get_subcategorias.clear()
+    except Exception as exc:
+        logger.debug("Error limpiando caché de categorías: %s", exc)
+
+
+def clear_market_cache() -> None:
+    """Invalida la caché de indicadores macro, noticias, screener y deepdive."""
+    try:
+        get_macro_indicators.clear()
+        get_market_news.clear()
+        get_screener_universe.clear()
+        get_deepdive_analysis.clear()
+    except Exception as exc:
+        logger.debug("Error limpiando caché de mercado: %s", exc)
+
+
+def clear_joint_cache() -> None:
+    """Invalida la caché de entidades de cuenta conjunta (huchas y subcategorías)."""
+    try:
+        get_joint_categories.clear()
+        get_joint_subcategories.clear()
+        get_joint_sinking_funds.clear()
+    except Exception as exc:
+        logger.debug("Error limpiando caché de cuenta conjunta: %s", exc)
+
+
+def clear_all_frontend_cache() -> None:
+    """Limpia la totalidad de la caché de datos de Streamlit."""
+    try:
+        st.cache_data.clear()
+    except Exception as exc:
+        logger.debug("Error limpiando caché global de frontend: %s", exc)
