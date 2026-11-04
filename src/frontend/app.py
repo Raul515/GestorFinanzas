@@ -877,46 +877,47 @@ with tab_base:
         presupuestos_base = api_client.get_presupuestos("BASE")
         base_map = {(p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')): (p.get('cantidad') if p.get('cantidad') is not None else p.get('amount', 0.0)) for p in presupuestos_base} if presupuestos_base else {}
         
-        with st.form("form_presupuesto_base"):
-            nuevos_presupuestos = []
-            
-            for cat in categorias:
-                n_cat = cat['nombre']
-                subcats_c = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
-                if not subcats_c:
-                    continue
-                    
-                h_color = colores_cabecera.get(n_cat, "#333333")
-                st.markdown(f"""<div style="border-left: 6px solid {h_color}; padding-left: 12px; margin-top: 25px; margin-bottom: 10px;">
+        with st.expander("⚙️ Formulario de Configuración del Presupuesto Base", expanded=False):
+            with st.form("form_presupuesto_base"):
+                nuevos_presupuestos = []
+                
+                for cat in categorias:
+                    n_cat = cat['nombre']
+                    subcats_c = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
+                    if not subcats_c:
+                        continue
+                        
+                    h_color = colores_cabecera.get(n_cat, "#333333")
+                    st.markdown(f"""<div style="border-left: 6px solid {h_color}; padding-left: 12px; margin-top: 25px; margin-bottom: 10px;">
 <h4 style="margin: 0; color: inherit; font-family: 'Inter', sans-serif;">{n_cat}</h4>
 </div>""", unsafe_allow_html=True)
+                    
+                    cols = st.columns(2)
+                    for i_s, s in enumerate(subcats_c):
+                        val_actual = base_map.get(s['id'], 0.0)
+                        with cols[i_s % 2]:
+                            nuevo_val = st.number_input(
+                                label=f"{s['nombre']} (€)",
+                                min_value=0.0,
+                                value=float(val_actual),
+                                step=10.0,
+                                key=f"base_input_{s['id']}"
+                            )
+                            nuevos_presupuestos.append({
+                                "mes": "BASE",
+                                "subcategoria_id": s['id'],
+                                "cantidad": nuevo_val
+                            })
                 
-                cols = st.columns(2)
-                for i_s, s in enumerate(subcats_c):
-                    val_actual = base_map.get(s['id'], 0.0)
-                    with cols[i_s % 2]:
-                        nuevo_val = st.number_input(
-                            label=f"{s['nombre']} (€)",
-                            min_value=0.0,
-                            value=float(val_actual),
-                            step=10.0,
-                            key=f"base_input_{s['id']}"
-                        )
-                        nuevos_presupuestos.append({
-                            "mes": "BASE",
-                            "subcategoria_id": s['id'],
-                            "cantidad": nuevo_val
-                        })
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            btn_save_base = st.form_submit_button("💾 Guardar Presupuesto Base", width="stretch")
-            if btn_save_base:
-                res = api_client.save_presupuestos_bulk(nuevos_presupuestos)
-                if res is not None:
-                    st.success("¡Presupuesto Base guardado correctamente! Todos los meses sin presupuesto específico adoptarán estos valores.")
-                    st.rerun()
-                else:
-                    st.error("Error al guardar el presupuesto base.")
+                st.markdown("<br>", unsafe_allow_html=True)
+                btn_save_base = st.form_submit_button("💾 Guardar Presupuesto Base", width="stretch")
+                if btn_save_base:
+                    res = api_client.save_presupuestos_bulk(nuevos_presupuestos)
+                    if res is not None:
+                        st.success("¡Presupuesto Base guardado correctamente! Todos los meses sin presupuesto específico adoptarán estos valores.")
+                        st.rerun()
+                    else:
+                        st.error("Error al guardar el presupuesto base.")
 
         # SECCIÓN CONFIGURACIÓN FONDO DE EMERGENCIA (SAFETY GUARD)
         st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -1085,8 +1086,8 @@ with tab_radar:
 
         all_news = news_data.get("news", [])
 
-        # Filtros interactivos de Noticias
-        col_f1, col_f2 = st.columns([1, 1])
+        # Filtros interactivos y ordenación de Noticias
+        col_f1, col_f2, col_f3 = st.columns([1, 1, 1])
         with col_f1:
             impact_options = ["Todos", "Alto", "Medio", "Bajo"]
             impact_selected = st.selectbox("🎯 Filtrar por Impacto:", impact_options, index=0)
@@ -1094,6 +1095,13 @@ with tab_radar:
             existing_topics = sorted(list({n.get("topic") for n in all_news if n.get("topic")}))
             topic_options = ["Todas"] + existing_topics
             topic_selected = st.selectbox("📂 Filtrar por Temática:", topic_options, index=0)
+        with col_f3:
+            sort_options = [
+                "Fecha (más reciente primero)",
+                "Impacto (de mayor a menor)",
+                "Temática (A - Z)",
+            ]
+            sort_selected = st.selectbox("🔃 Ordenar por:", sort_options, index=0)
 
         # Aplicar filtros
         filtered = all_news
@@ -1101,6 +1109,26 @@ with tab_radar:
             filtered = [n for n in filtered if n.get("impact") == impact_selected]
         if topic_selected != "Todas":
             filtered = [n for n in filtered if n.get("topic") == topic_selected]
+
+        # Aplicar ordenación (por defecto de mayor a menor)
+        impact_weights = {"alto": 3, "medio": 2, "bajo": 1}
+        if "Impacto" in sort_selected:
+            filtered = sorted(
+                filtered,
+                key=lambda n: impact_weights.get(str(n.get("impact", "")).lower(), 0),
+                reverse=True,
+            )
+        elif "Fecha" in sort_selected:
+            filtered = sorted(
+                filtered,
+                key=lambda n: n.get("published_at") or "",
+                reverse=True,
+            )
+        elif "Temática" in sort_selected:
+            filtered = sorted(
+                filtered,
+                key=lambda n: (n.get("topic") or "").lower(),
+            )
 
         st.caption(f"Mostrando {len(filtered)} de {len(all_news)} noticias")
 
