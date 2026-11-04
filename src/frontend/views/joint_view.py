@@ -271,14 +271,18 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
         unsafe_allow_html=True,
     )
 
-    # 5 Pestañas Principales
-    tab_resumen, tab_meses, tab_huchas, tab_buscador, tab_config = st.tabs([
+    # RF-10: Pestaña espaciadora invisible (#joint-tabs-marker) para fijar Configuración a la derecha (margin-left: auto !important;)
+    tab_resumen, tab_meses, tab_huchas, tab_buscador, tab_espacio, tab_config = st.tabs([
         "📊 Resumen Anual del Hogar",
         "📅 12 Meses del Hogar",
         "🎯 Huchas de Amortización",
         "🔍 Buscador de Gastos",
+        "ㅤ",
         "⚙️ Configuración del Hogar y Sincronización",
     ])
+
+    with tab_espacio:
+        st.empty()
 
     with tab_resumen:
         _render_tab_resumen_anual(selected_year=selected_year, account=account)
@@ -330,6 +334,23 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
     effort_rate = annual_summary.get("effort_rate_pct", 0.0)
     health_status = annual_summary.get("health_status", "SUSTAINABLE")
 
+    # RF-8: Diagnóstico Inmediato de Salud Financiera y Tasa de Esfuerzo en Cabecera Superior
+    if health_status == "SUSTAINABLE":
+        st.success(
+            f"🟢 **Hogar Sostenible (Tasa de Esfuerzo: {effort_rate:.1f}%)**: "
+            "La carga de gastos esenciales no asfixia la economía familiar (≤ 50% de los ingresos combinados), permitiendo dotar huchas y ahorrar con holgura."
+        )
+    elif health_status == "TENSION":
+        st.warning(
+            f"🟡 **Zona de Tensión Moderada (Tasa de Esfuerzo: {effort_rate:.1f}%)**: "
+            "Los gastos fijos del hogar absorben entre el 50% y el 60% de los ingresos combinados. Conviene vigilar desviaciones en facturas y suministros."
+        )
+    else:
+        st.error(
+            f"🔴 **Alerta Crítica de Sobreesfuerzo (Tasa de Esfuerzo: {effort_rate:.1f}%)**: "
+            "La tasa de esfuerzo supera el umbral de seguridad constitucional del 60%. Se recomienda auditar los suministros y renegociar contratos de vivienda o seguros."
+        )
+
     # Tarjetas de Métricas Principales (3 Columnas)
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -371,23 +392,6 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
                 delta_color="inverse",
                 help="Riesgo de sobrecarga financiera estructural en el hogar.",
             )
-
-    # Diagnóstico del Semáforo
-    if health_status == "SUSTAINABLE":
-        st.success(
-            f"🟢 **Hogar Sostenible**: La tasa de esfuerzo del hogar es del {effort_rate:.1f}%. "
-            "La carga de gastos esenciales no asfixia la economía familiar, permitiendo dotar huchas y ahorrar."
-        )
-    elif health_status == "TENSION":
-        st.warning(
-            f"🟡 **Zona de Tensión**: Los gastos fijos del hogar absorben el {effort_rate:.1f}% "
-            "de los ingresos combinados. Conviene vigilar desviaciones en facturas y suministros."
-        )
-    else:
-        st.error(
-            f"🔴 **Alerta Crítica**: La tasa de esfuerzo ({effort_rate:.1f}%) supera el umbral de seguridad del 60%. "
-            "Se recomienda auditar los suministros y renegociar contratos de vivienda o seguros."
-        )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📊 Evolución Mensual: Aportaciones vs Destino (Necesidades y Ahorro)")
@@ -492,14 +496,38 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
 
 def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
     """Pestaña mensual de tesorería, registro de gastos comunes y listado de transacciones."""
-    col_sel, _ = st.columns([2, 4])
-    with col_sel:
-        current_m_idx = min(max(datetime.now().month - 1, 0), 11)
-        selected_month_name = st.selectbox("Selecciona Mes a Gestionar", MESES_ES, index=current_m_idx)
+    # RF-6: Navegación mensual ágil en 1 clic sincronizada
+    if "joint_active_month" not in st.session_state:
+        st.session_state["joint_active_month"] = MESES_ES[min(max(datetime.now().month - 1, 0), 11)]
+
+    col_nav_prev, col_nav_sel, col_nav_next, _ = st.columns([1.2, 2.6, 1.2, 3.0])
+    with col_nav_prev:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("◀ Mes Anterior", width="stretch", key="btn_joint_prev_month", help="Ir al mes anterior"):
+            cur_idx = MESES_ES.index(st.session_state["joint_active_month"])
+            st.session_state["joint_active_month"] = MESES_ES[(cur_idx - 1) % 12]
+            st.rerun()
+
+    with col_nav_sel:
+        cur_idx = MESES_ES.index(st.session_state["joint_active_month"])
+        selected_month_name = st.selectbox(
+            "Mes a Gestionar",
+            MESES_ES,
+            index=cur_idx,
+            key=f"sel_joint_month_display_{cur_idx}",
+        )
+        if selected_month_name != st.session_state["joint_active_month"]:
+            st.session_state["joint_active_month"] = selected_month_name
+            st.rerun()
         month_idx = MESES_ES.index(selected_month_name) + 1
         month_str = f"{selected_year}-{month_idx:02d}"
 
-    # Cargar datos del mes
+    with col_nav_next:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("Mes Siguiente ▶", width="stretch", key="btn_joint_next_month", help="Ir al mes siguiente"):
+            cur_idx = MESES_ES.index(st.session_state["joint_active_month"])
+            st.session_state["joint_active_month"] = MESES_ES[(cur_idx + 1) % 12]
+            st.rerun()
     transactions = api_client.get_joint_transactions(year=selected_year, month=month_str)
     contributions = api_client.get_joint_contributions(year=selected_year, month=month_str)
 
@@ -581,101 +609,42 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
     st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
 
-    # Formulario para asentar aportación (ordinaria mensual o extraordinaria a hucha concreta)
-    with st.expander(f"📥 Realizar Aportación en {selected_month_name}", expanded=False):
-        contrib_type = st.radio(
-            "Modalidad de Aportación",
-            options=["Aportación Ordinaria (Presupuesto Común)", "Aportación Extraordinaria (Hucha Concreta)"],
-            horizontal=True,
-            key=f"contrib_type_{selected_month_name}",
-        )
-        sinking_funds_avail = api_client.get_joint_sinking_funds(status="ACTIVE")
-        fund_choice_map = {f["id"]: f["name"] for f in sinking_funds_avail} if sinking_funds_avail else {}
+    # RF-7: Disposición Simétrica de Acciones de Entrada (Gasto Común vs Aportación)
+    col_act_gasto, col_act_aport = st.columns(2)
 
-        with st.form(f"new_joint_contrib_form_{selected_month_name}"):
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                target_fund_choice = None
-                if contrib_type == "Aportación Extraordinaria (Hucha Concreta)":
-                    if fund_choice_map:
-                        target_fund_choice = st.selectbox(
-                            "Hucha de Destino",
-                            options=list(fund_choice_map.keys()),
-                            format_func=lambda k: fund_choice_map[k],
-                        )
-                    else:
-                        st.warning("No hay huchas activas. La aportación se ingresará en la tesorería general.")
+    with col_act_gasto:
+        # Formulario para registrar nuevo gasto común
+        is_pre_cohabitation = account.get("cohabitation_stage") in ("PRE_COHABITATION", "DATING_COHABITATION")
+        with st.expander(f"🛒 Registrar Gasto Común ({selected_month_name})", expanded=False):
+            subcategories = api_client.get_joint_subcategories()
+            sinking_funds = api_client.get_joint_sinking_funds(status="ACTIVE")
 
-                cb_amount = st.number_input("Importe a Aportar (€)", min_value=1.0, value=100.0, step=25.0)
-                cb_date = st.date_input("Fecha de Aportación", value=date.today(), format="DD/MM/YYYY", key=f"cb_date_{selected_month_name}")
+            subcat_map = {s["id"]: s["name"] for s in subcategories} if subcategories else {}
+            fund_map = {f["id"]: f["name"] for f in sinking_funds} if sinking_funds else {}
 
-            with col_c2:
-                local_prof = account.get("local_profile", "MEMBER_A")
-                local_name = account.get("member_a_name" if local_prof == "MEMBER_A" else "member_b_name", "Miembro Local")
-                remote_name = account.get("member_b_name" if local_prof == "MEMBER_A" else "member_a_name", "Miembro Pareja")
-                contributor_opts = [local_prof, "MEMBER_B" if local_prof == "MEMBER_A" else "MEMBER_A"]
-                contributor_labels = {
-                    local_prof: f"👤 {local_name} (Tú)",
-                    contributor_opts[1]: f"👤 {remote_name} (Pareja)",
-                }
-                cb_profile = st.selectbox(
-                    "Miembro Aportante",
-                    options=contributor_opts,
-                    format_func=lambda p: contributor_labels.get(p, p),
+            if is_pre_cohabitation:
+                charge_type = "Cargo a Hucha de Amortización"
+                st.info(
+                    "ℹ️ **Modo Pre-Convivencia Activo**: Los gastos comunes de vivienda están desactivados "
+                    "porque aún no compartís domicilio. Todo gasto común se imputa a una Hucha de Amortización."
                 )
-                st.caption(f"Mes imputado: **{month_str}**")
+            else:
+                charge_type = st.radio(
+                    "Tipo de Imputación",
+                    options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
+                    horizontal=True,
+                    key=f"charge_type_{selected_month_name}",
+                    help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha.",
+                )
 
-            cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", width="stretch")
-            if cb_submitted:
-                payload_cb = {
-                    "month": month_str,
-                    "amount": float(cb_amount),
-                    "contributor_profile": cb_profile,
-                    "contribution_date": cb_date.isoformat(),
-                    "target_sinking_fund_id": target_fund_choice,
-                }
-                res_cb = api_client.asentar_aportacion_asistida(payload_cb)
-                if res_cb:
-                    st.success("✅ Aportación asentada correctamente y sincronizada.")
-                    st.rerun()
-                else:
-                    st.error("❌ No se pudo asentar la aportación.")
+            with st.form("new_joint_tx_form"):
+                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Factura Luz, Compra Semanal...")
+                col_amt, col_dt = st.columns(2)
+                with col_amt:
+                    tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
+                with col_dt:
+                    tx_date = st.date_input("Fecha", value=date.today(), format="DD/MM/YYYY")
 
-    # Formulario para registrar nuevo gasto común
-    is_pre_cohabitation = account.get("cohabitation_stage") in ("PRE_COHABITATION", "DATING_COHABITATION")
-
-    with st.expander(f"➕ Registrar Gasto Común en {selected_month_name}", expanded=False):
-        subcategories = api_client.get_joint_subcategories()
-        sinking_funds = api_client.get_joint_sinking_funds(status="ACTIVE")
-
-        subcat_map = {s["id"]: s["name"] for s in subcategories} if subcategories else {}
-        fund_map = {f["id"]: f["name"] for f in sinking_funds} if sinking_funds else {}
-
-        if is_pre_cohabitation:
-            charge_type = "Cargo a Hucha de Amortización"
-            st.info(
-                "ℹ️ **Modo Pre-Convivencia Activo**: Los gastos comunes de vivienda (alquiler, suministros, supermercado) "
-                "están desactivados porque aún no compartís domicilio. Todo gasto común se imputa directamente a una "
-                "Hucha de Amortización de vuestro ahorro conjunto."
-            )
-        else:
-            # Radio selector fuera del form para reactividad instantánea en Streamlit
-            charge_type = st.radio(
-                "Tipo de Imputación",
-                options=["Necesidad Común del Hogar", "Cargo a Hucha de Amortización"],
-                horizontal=True,
-                key=f"charge_type_{selected_month_name}",
-                help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha de ahorro acumulada.",
-            )
-
-        with st.form("new_joint_tx_form"):
-            col_f1, col_f2 = st.columns(2)
-            with col_f1:
-                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Billetes de avión, Factura Luz...")
-                tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
-                tx_date = st.date_input("Fecha", value=date.today(), format="DD/MM/YYYY")
-
-            with col_f2:
                 chosen_subcat_id = None
                 chosen_fund_id = None
 
@@ -703,18 +672,16 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         if has_overdraft:
                             diff_treasury = float(tx_amount) - fund_balance
                             st.warning(
-                                f"⚠️ **Atención: Sobregasto Detectado**\n\n"
-                                f"El importe del gasto (**{tx_amount:,.2f} €**) supera el saldo disponible en la hucha "
-                                f"'{selected_fund_obj.get('name')}' (**{fund_balance:,.2f} €**).\n\n"
-                                f"La hucha quedará a **0,00 €** y el remanente de **{diff_treasury:,.2f} €** "
-                                f"será absorbido por la tesorería corriente de necesidades comunes."
+                                f"⚠️ **Sobregasto Detectado**\n\n"
+                                f"El importe (**{tx_amount:,.2f} €**) supera el saldo (**{fund_balance:,.2f} €**).\n"
+                                f"La diferencia de **{diff_treasury:,.2f} €** será absorbida por la tesorería común."
                             )
                             confirm_overdraft = st.checkbox(
-                                "Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común del hogar",
+                                "Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común",
                                 key=f"confirm_overdraft_{selected_month_name}",
                             )
                     else:
-                        st.warning("⚠️ No hay huchas activas creadas. Crea una en la pestaña '🎯 Huchas de Amortización' (ej. Vacaciones, Entrada de Piso).")
+                        st.warning("⚠️ No hay huchas activas creadas. Crea una en '🎯 Huchas de Amortización'.")
 
                 paid_options = ["COMMON", "MEMBER_A", "MEMBER_B"]
                 paid_labels = {
@@ -735,40 +702,103 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         "Modalidad de Liquidación / Reembolso",
                         options=["COMMON_REIMBURSEMENT", "DIRECT_MEMBER_SETTLEMENT"],
                         format_func=lambda m: (
-                            "🏦 Reembolso desde Cuenta Común (el fondo común devuelve el 100% al miembro)"
+                            "🏦 Reembolso desde Cuenta Común"
                             if m == "COMMON_REIMBURSEMENT"
-                            else "🤝 Liquidación Directa entre Miembros (Bizum/transferencia según ratio pactado)"
+                            else "🤝 Liquidación Directa entre Miembros (Bizum)"
                         ),
                         help="Elige cómo se compensará el gasto adelantado.",
                     )
 
-            tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", width="stretch")
-            if tx_submitted:
-                if not tx_desc.strip():
-                    st.error("Por favor introduce una descripción del gasto.")
-                elif charge_type == "Necesidad Común del Hogar" and not chosen_subcat_id:
-                    st.error("Debes seleccionar una subcategoría de necesidad común.")
-                elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
-                    st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
-                elif charge_type == "Cargo a Hucha de Amortización" and fund_map and (float(selected_fund_obj.get("current_balance", 0.0) if selected_fund_obj else 0.0) < float(tx_amount)) and not confirm_overdraft:
-                    st.error("⚠️ Debes marcar la casilla obligatoria de confirmación de sobregasto para autorizar el cargo a la tesorería común.")
-                else:
-                    payload_tx = {
-                        "description": tx_desc.strip(),
-                        "amount": float(tx_amount),
-                        "date": tx_date.isoformat(),
-                        "joint_subcategory_id": chosen_subcat_id,
-                        "joint_sinking_fund_id": chosen_fund_id,
-                        "created_by_profile": account.get("local_profile", "MEMBER_A"),
-                        "paid_by": paid_choice,
-                        "settlement_mechanism": settlement_mech if paid_choice in ("MEMBER_A", "MEMBER_B") else "COMMON_REIMBURSEMENT",
+                tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", width="stretch")
+                if tx_submitted:
+                    if not tx_desc.strip():
+                        st.error("Por favor introduce una descripción del gasto.")
+                    elif charge_type == "Necesidad Común del Hogar" and not chosen_subcat_id:
+                        st.error("Debes seleccionar una subcategoría de necesidad común.")
+                    elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
+                        st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
+                    elif charge_type == "Cargo a Hucha de Amortización" and fund_map and (float(selected_fund_obj.get("current_balance", 0.0) if selected_fund_obj else 0.0) < float(tx_amount)) and not confirm_overdraft:
+                        st.error("⚠️ Debes marcar la casilla obligatoria de confirmación de sobregasto para autorizar el cargo a la tesorería común.")
+                    else:
+                        payload_tx = {
+                            "description": tx_desc.strip(),
+                            "amount": float(tx_amount),
+                            "date": tx_date.isoformat(),
+                            "joint_subcategory_id": chosen_subcat_id,
+                            "joint_sinking_fund_id": chosen_fund_id,
+                            "created_by_profile": account.get("local_profile", "MEMBER_A"),
+                            "paid_by": paid_choice,
+                            "settlement_mechanism": settlement_mech if paid_choice in ("MEMBER_A", "MEMBER_B") else "COMMON_REIMBURSEMENT",
+                        }
+                        res_tx = api_client.create_joint_transaction(payload_tx)
+                        if res_tx:
+                            st.success("✅ Gasto registrado y transmitido a la sincronización.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al guardar el gasto común.")
+
+    with col_act_aport:
+        # Formulario para asentar aportación (ordinaria mensual o extraordinaria a hucha concreta)
+        with st.expander(f"💰 Asentar Aportación ({selected_month_name})", expanded=False):
+            contrib_type = st.radio(
+                "Modalidad de Aportación",
+                options=["Aportación Ordinaria (Presupuesto Común)", "Aportación Extraordinaria (Hucha Concreta)"],
+                horizontal=True,
+                key=f"contrib_type_{selected_month_name}",
+            )
+            sinking_funds_avail = api_client.get_joint_sinking_funds(status="ACTIVE")
+            fund_choice_map = {f["id"]: f["name"] for f in sinking_funds_avail} if sinking_funds_avail else {}
+
+            with st.form(f"new_joint_contrib_form_{selected_month_name}"):
+                target_fund_choice = None
+                if contrib_type == "Aportación Extraordinaria (Hucha Concreta)":
+                    if fund_choice_map:
+                        target_fund_choice = st.selectbox(
+                            "Hucha de Destino",
+                            options=list(fund_choice_map.keys()),
+                            format_func=lambda k: fund_choice_map[k],
+                        )
+                    else:
+                        st.warning("No hay huchas activas. La aportación se ingresará en la tesorería general.")
+
+                col_camt, col_cdt = st.columns(2)
+                with col_camt:
+                    cb_amount = st.number_input("Importe a Aportar (€)", min_value=1.0, value=100.0, step=25.0)
+                with col_cdt:
+                    cb_date = st.date_input("Fecha de Aportación", value=date.today(), format="DD/MM/YYYY", key=f"cb_date_{selected_month_name}")
+
+                local_prof = account.get("local_profile", "MEMBER_A")
+                local_name = account.get("member_a_name" if local_prof == "MEMBER_A" else "member_b_name", "Miembro Local")
+                remote_name = account.get("member_b_name" if local_prof == "MEMBER_A" else "member_a_name", "Miembro Pareja")
+                contributor_opts = [local_prof, "MEMBER_B" if local_prof == "MEMBER_A" else "MEMBER_A"]
+                contributor_labels = {
+                    local_prof: f"👤 {local_name} (Tú)",
+                    contributor_opts[1]: f"👤 {remote_name} (Pareja)",
+                }
+                cb_profile = st.selectbox(
+                    "Miembro Aportante",
+                    options=contributor_opts,
+                    format_func=lambda p: contributor_labels.get(p, p),
+                )
+                st.caption(f"Mes imputado: **{month_str}**")
+
+                cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", width="stretch")
+                if cb_submitted:
+                    payload_cb = {
+                        "month": month_str,
+                        "amount": float(cb_amount),
+                        "contributor_profile": cb_profile,
+                        "contribution_date": cb_date.isoformat(),
+                        "target_sinking_fund_id": target_fund_choice,
                     }
-                    res_tx = api_client.create_joint_transaction(payload_tx)
-                    if res_tx:
-                        st.success("✅ Gasto registrado y transmitido a la bandeja de sincronización.")
+                    res_cb = api_client.asentar_aportacion_asistida(payload_cb)
+                    if res_cb:
+                        st.success("✅ Aportación asentada correctamente y sincronizada.")
                         st.rerun()
                     else:
-                        st.error("❌ Error al guardar el gasto común.")
+                        st.error("❌ No se pudo asentar la aportación.")
+
+    st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px dashed #334155;'>", unsafe_allow_html=True)
 
     # 1. Historial de Aportaciones Recibidas en el Mes
     st.markdown("#### 📥 Historial de Aportaciones Recibidas")

@@ -288,5 +288,70 @@ div[data-testid="stMetricValue"] {
     margin-bottom: 1rem;
 }
 
+/* =====================================================================
+   SPEC 013 (RF-10): Separación visual de Configuración en Cuenta Conjunta
+   ===================================================================== */
+/* Expansión del contenedor de pestañas */
+.stTabs [data-baseweb="tab-list"],
+div[data-testid="stTabs"] [data-baseweb="tab-list"],
+div[data-testid="stTabs"] [role="tablist"] {
+    width: 100% !important;
+    display: flex !important;
+}
 
+/* En la lista de 6 pestañas de Cuenta Conjunta, la 5ª pestaña ("ㅤ") es un espaciador dinámico, elástico (responsive) e inalcanzable */
+div[data-testid="stTabs"] [data-testid="stTab"]:nth-of-type(5):nth-last-of-type(2),
+div[data-testid="stTabs"] [role="tab"]:nth-of-type(5):nth-last-of-type(2),
+div[data-testid="stTabs"] .react-aria-Tab:nth-of-type(5):nth-last-of-type(2),
+div[data-testid="stTabs"] button:nth-of-type(5):nth-last-of-type(2),
+button[data-testid="stTab"]:nth-of-type(5):nth-last-of-type(2),
+button[data-baseweb="tab"]:nth-of-type(5):nth-last-of-type(2) {
+    flex-grow: 1 !important;
+    flex-shrink: 1 !important;
+    min-width: 20px !important;
+    max-width: 280px !important;
+    width: auto !important;
+    pointer-events: none !important;
+    cursor: default !important;
+    user-select: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
 
+/* Deshabilitar interacción en cualquier hijo o texto dentro de la pestaña espaciadora */
+div[data-testid="stTabs"] [data-testid="stTab"]:nth-of-type(5):nth-last-of-type(2) *,
+div[data-testid="stTabs"] [role="tab"]:nth-of-type(5):nth-last-of-type(2) *,
+div[data-testid="stTabs"] .react-aria-Tab:nth-of-type(5):nth-last-of-type(2) *,
+div[data-testid="stTabs"] button:nth-of-type(5):nth-last-of-type(2) *,
+button[data-testid="stTab"]:nth-of-type(5):nth-last-of-type(2) *,
+button[data-baseweb="tab"]:nth-of-type(5):nth-last-of-type(2) * {
+    pointer-events: none !important;
+    cursor: default !important;
+    user-select: none !important;
+}
+
+/* La 6ª pestaña (⚙️ Configuración del Hogar) se adapta sin forzar desbordamiento */
+div[data-testid="stTabs"] [data-testid="stTab"]:nth-of-type(6),
+div[data-testid="stTabs"] [role="tab"]:nth-of-type(6),
+div[data-testid="stTabs"] .react-aria-Tab:nth-of-type(6),
+div[data-testid="stTabs"] button:nth-of-type(6),
+button[data-testid="stTab"]:nth-of-type(6),
+button[data-baseweb="tab"]:nth-of-type(6) {
+    flex-shrink: 0 !important;
+    margin-left: 5px !important;
+}
+
+/* Adaptación responsive para pantallas medianas / estrechas */
+@media (max-width: 1280px) {
+    div[data-testid="stTabs"] [data-testid="stTab"]:nth-of-type(5):nth-last-of-type(2),
+    div[data-testid="stTabs"] [role="tab"]:nth-of-type(5):nth-last-of-type(2) {
+        max-width: 80px !important;
+        min-width: 15px !important;
+    }
+}
