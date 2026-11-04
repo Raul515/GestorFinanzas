@@ -56,6 +56,10 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
       2. Todas las fases de la especificación se desarrollan, prueban y commitean secuencialmente en dicha rama.
       3. Al concluir la totalidad de las fases y pasar el 100% de las pruebas, se solicita confirmación al usuario para fusionar a `develop` (`git checkout develop` + `git merge feat/spec-XXX-nombre`) y eliminar la rama efímera (`git branch -d feat/spec-XXX-nombre`).
       4. El paso de `develop` a `main` se realiza mediante fast-forward / merge atómico cuando el usuario valide en uso real las especificaciones integradas en `develop`.
+11. **Declaración Obligatoria y Paridad Estricta de Dependencias (`requirements/`)**:
+    - **Regla innegociable de cero dependencias implícitas**: Siempre que una especificación, refactorización o corrección requiera una librería externa (ej. `openpyxl`, `python-multipart`, etc.) o se instale un paquete en el entorno virtual local (`venv`), **es estrictamente obligatorio registrarla de inmediato en su manifiesto correspondiente** (`requirements/backend.txt` para dependencias consumidas por `src/backend/` o `requirements/frontend.txt` para `src/frontend/`).
+    - **Prohibición de suposiciones de entorno**: El entorno virtual local `venv` es compartido entre backend y frontend y puede contener dependencias transitivas (ej. `streamlit` instalando `python-multipart`). **Queda terminantemente prohibido asumir que una librería presente en `venv` existe en los contenedores aislados de Docker o en producción**.
+    - **Puerta de Verificación Pre-Merge**: Antes de solicitar la aprobación de cualquier fase o fusión de rama, el agente debe auditar activamente que todos los paquetes importados en el código estén declarados en sus respectivos `requirements/*.txt`, garantizando que `docker compose up --build` y el actualizador OTA levanten sin fallos de dependencias faltantes.
 
 ---
 
