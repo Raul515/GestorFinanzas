@@ -448,3 +448,114 @@ def test_api_client_sinking_fund_transfer_endpoints():
         history = api_client.get_joint_sinking_fund_transfers()
         assert len(history) == 1
         assert history[0]["source_fund_name"] == "Vacaciones"
+
+
+# =====================================================================
+# 3. PRUEBAS DEL MONITOR DE APORTACIONES CRUZADAS (FASE 7.5)
+# =====================================================================
+
+def test_cross_contribution_monitor_both_completed():
+    """Escenario 1: Ambos han cubierto su cuota mensual -> Auto-ocultación total (sin banner)."""
+    from frontend import app
+
+    account = {
+        "local_profile": "MEMBER_A",
+        "member_a_name": "David",
+        "member_b_name": "Raquel",
+    }
+    calc = {"member_a_contribution": 600.0, "member_b_contribution": 400.0}
+    contributions = [
+        {"contributor_profile": "MEMBER_A", "amount": 600.0},
+        {"contributor_profile": "MEMBER_B", "amount": 400.0},
+    ]
+
+    with patch.object(app.api_client, "get_joint_account", return_value=account), \
+         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+         patch("streamlit.info") as mock_info:
+        app._render_personal_assisted_contribution_banner(2026)
+        mock_info.assert_not_called()
+
+
+def test_cross_contribution_monitor_local_completed_remote_pending():
+    """Escenario 2: Usuario local ya aportó, pareja pendiente -> Banner informativo compacto de 1 línea."""
+    from frontend import app
+
+    account = {
+        "local_profile": "MEMBER_A",
+        "member_a_name": "David",
+        "member_b_name": "Raquel",
+    }
+    calc = {"member_a_contribution": 600.0, "member_b_contribution": 400.0}
+    contributions = [
+        {"contributor_profile": "MEMBER_A", "amount": 600.0},
+    ]
+
+    with patch.object(app.api_client, "get_joint_account", return_value=account), \
+         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+         patch("streamlit.info") as mock_info, \
+         patch("streamlit.button") as mock_button:
+        app._render_personal_assisted_contribution_banner(2026)
+        mock_info.assert_called_once()
+        info_text = mock_info.call_args[0][0]
+        assert "David: ✅ 600.00 € aportados" in info_text
+        assert "Raquel: ⏳ 400.00 € pendientes" in info_text
+        # En este caso no se ofrece botón de asentar porque el usuario local ya cumplió
+        mock_button.assert_not_called()
+
+
+def test_cross_contribution_monitor_both_pending():
+    """Escenario 3: Ambos miembros pendientes -> Banner de acción local con estado cruzado en cabecera."""
+    from frontend import app
+
+    account = {
+        "local_profile": "MEMBER_A",
+        "member_a_name": "David",
+        "member_b_name": "Raquel",
+    }
+    calc = {"member_a_contribution": 600.0, "member_b_contribution": 400.0}
+    contributions = []
+
+    with patch.object(app.api_client, "get_joint_account", return_value=account), \
+         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+         patch("streamlit.info") as mock_info, \
+         patch("streamlit.columns", return_value=(MagicMock(), MagicMock())), \
+         patch("streamlit.number_input", return_value=600.0), \
+         patch("streamlit.button", return_value=False) as mock_button:
+        app._render_personal_assisted_contribution_banner(2026)
+        mock_info.assert_called_once()
+        info_text = mock_info.call_args[0][0]
+        assert "David: ⏳ 600.00 € pendientes" in info_text
+        assert "Raquel: ⏳ 400.00 € pendientes" in info_text
+        mock_button.assert_called_once()
+
+
+def test_cross_contribution_monitor_local_pending_remote_completed():
+    """Escenario 4: Pareja ya aportó, usuario local pendiente -> Banner de acción local con pareja en verde."""
+    from frontend import app
+
+    account = {
+        "local_profile": "MEMBER_A",
+        "member_a_name": "David",
+        "member_b_name": "Raquel",
+    }
+    calc = {"member_a_contribution": 600.0, "member_b_contribution": 400.0}
+    contributions = [
+        {"contributor_profile": "MEMBER_B", "amount": 400.0},
+    ]
+
+    with patch.object(app.api_client, "get_joint_account", return_value=account), \
+         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+         patch("streamlit.info") as mock_info, \
+         patch("streamlit.columns", return_value=(MagicMock(), MagicMock())), \
+         patch("streamlit.number_input", return_value=600.0), \
+         patch("streamlit.button", return_value=False) as mock_button:
+        app._render_personal_assisted_contribution_banner(2026)
+        mock_info.assert_called_once()
+        info_text = mock_info.call_args[0][0]
+        assert "David: ⏳ 600.00 € pendientes" in info_text
+        assert "Raquel: ✅ 400.00 € aportados" in info_text
+        mock_button.assert_called_once()

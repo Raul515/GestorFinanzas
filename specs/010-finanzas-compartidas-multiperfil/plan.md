@@ -372,18 +372,41 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 
 ---
 
+### Fase 7.5: Monitor de Aportaciones Cruzadas en el Perfil Personal
+
+- **Objetivo**: Proporcionar visibilidad bidireccional en tiempo real sobre el estado de cumplimiento de las aportaciones mensuales de ambos miembros del hogar directamente desde el Perfil Personal, sin necesidad de navegar a "Economía del Hogar", manteniendo la pantalla limpia una vez cumplido el objetivo mensual conjunto.
+- **Detalle de Funcionalidades**:
+  1. **Lógica de Evaluación de Aportaciones Cruzadas**:
+     - Cálculo de importes acumulados aportados en el mes en curso por el usuario local (`contrib_local`) y por la pareja remota (`contrib_remote`).
+     - Obtención de las cuotas mensuales objetivo dinámicas para cada perfil (`target_local`, `target_remote`) según la estrategia del hogar (Nominal o Porcentaje de Ingresos).
+     - Determinación precisa del estado de cada miembro: `COMPLETED` (✅ cuota cubierta), `PARTIAL` (🟡 aportación parcial con remanente) o `PENDING` (⏳ cuota pendiente).
+  2. **Comportamiento Reactivo del Banner en `src/frontend/app.py`**:
+     - **Caso 1 (Ambos completados)**: Auto-ocultación total limpia. No se renderiza nada en la vista personal para no ocupar espacio visual innecesario.
+     - **Caso 2 (Local pendiente)**: Muestra el banner con formulario de asiento en 1-clic de su saldo pendiente y cabecera con el estado cruzado de ambos miembros:
+       *"Aportación al Hogar (Mes Año): Tú (Nombre: ⏳ X € pendientes) | Pareja (Nombre: Estado Pareja)"*.
+     - **Caso 3 (Local completado, Pareja pendiente)**: Muestra un banner informativo compacto de una sola línea indicando que la parte local está cubierta y la pareja continúa pendiente:
+       *"ℹ️ Economía del Hogar (Mes Año): Tú (Nombre: ✅ X € aportados) | Pareja (Nombre: ⏳ Y € pendientes)"*, sin botones de acción local.
+  3. **Aislamiento de Perfiles (Principio de Privacidad)**:
+     - El usuario local únicamente puede asentar su propia aportación en su perfil personal; el estado de la pareja se actualiza exclusivamente a través de los deltas de sincronización de Syncthing.
+- **Archivos a crear/modificar**:
+  - `src/frontend/app.py` [MODIFICADO: Refactorización de `_render_personal_assisted_contribution_banner()` con lógica de monitor cruzado y auto-ocultación].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Batería de pruebas unitarias cubriendo los 4 escenarios de estados cruzados].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_frontend.py
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando, auto-ocultación limpia al completarse ambos miembros, visibilidad cruzada exacta y aislamiento estricto de firmas de aportación.
+
+---
+
 ### Registro de Nuevas Mejoras Futuras Identificadas (Ordenadas por Prioridad e Impacto)
 
-Tras la formalización de la Fase 7.4, se retienen las siguientes 3 posibles ampliaciones futuras:
+Tras la formalización de la Fase 7.5, se retienen las siguientes 2 posibles ampliaciones futuras:
 
-1. **Prioridad 1 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
-   - *Problema en la vida real*: El banner de aportación en el Perfil Personal se oculta o marca como completado cuando el usuario local aporta. Para comprobar si la pareja ya ha aportado su parte del mes, el usuario debe navegar explícitamente a "Economía del Hogar".
-   - *Solución*: Un badge compacto en el banner personal: *"Noviembre: David (✅ Aportado: 600 €) | Raquel (⏳ Pendiente: 400 €)"*, ofreciendo visibilidad inmediata sin cambiar de pantalla.
-
-2. **Prioridad 2 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
+1. **Prioridad 1 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
    - *Problema en la vida real*: Buscar un gasto específico (ej. "IKEA", "Seguro Hogar", "Veterinario") a lo largo del año requiere revisar los 12 meses uno a uno o inspeccionar la hoja de cálculo exportada.
    - *Solución*: Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
 
-3. **Prioridad 3 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
+2. **Prioridad 2 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
    - *Problema en la vida real*: El saldo de tesorería de la app es puramente contable (`aportaciones - gastos`). Pequeños descuadres bancarios (comisiones de mantenimiento de 0,50 €, intereses a favor de céntimos o redondeos) hacen que el saldo bancario real no coincida al céntimo.
    - *Solución*: Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.
