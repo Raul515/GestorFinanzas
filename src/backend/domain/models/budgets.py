@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Float, ForeignKey
+from sqlalchemy import String, Float, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from .base import Base
@@ -11,10 +11,13 @@ if TYPE_CHECKING:
 class MonthlyBudget(Base):
     """Modelo ORM para asignaciones presupuestarias mensuales (formato YYYY-MM o BASE)."""
     __tablename__ = "monthly_budgets"
+    __table_args__ = (
+        Index("idx_budget_month_subcat", "month", "subcategory_id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     month: Mapped[str] = mapped_column(String, index=True)  # Formato YYYY-MM o BASE
-    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id"))
+    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id"), index=True)
     amount: Mapped[float] = mapped_column(Float, default=0.0)
 
     subcategory: Mapped["Subcategory"] = relationship("Subcategory", back_populates="budgets")

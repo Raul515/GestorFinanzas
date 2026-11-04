@@ -22,6 +22,7 @@ from backend.domain.schemas import (
 from typing import Optional, Any, List, Dict
 import json
 import datetime
+import calendar
 import uuid
 import logging
 
@@ -72,8 +73,8 @@ class SQLiteRepository(IRepository):
             try:
                 year, m = map(int, month.split('-'))
                 query = query.filter(
-                    extract('year', trans_model.Transaction.date) == year,
-                    extract('month', trans_model.Transaction.date) == m
+                    trans_model.Transaction.date >= datetime.date(year, m, 1),
+                    trans_model.Transaction.date <= datetime.date(year, m, calendar.monthrange(year, m)[1])
                 )
             except ValueError as exc:
                 logger.warning("Formato de mes no interpretable en get_transactions ('%s'): %s", month, exc)
@@ -271,8 +272,12 @@ class SQLiteRepository(IRepository):
         return db_item
 
     def save_budgets_bulk(self, budgets: List[Any]) -> List[pres_model.MonthlyBudget]:
-        """Guarda o actualiza un conjunto masivo de presupuestos mensuales."""
-        result = []
+        """Guarda o actualiza un conjunto masivo de presupuestos mensuales en una única transacción atómica."""
+        if not budgets:
+            return []
+
+        months_set = set()
+        parsed_items = []
         for p in budgets:
             if isinstance(p, dict):
                 m_val = str(p.get("month") or p.get("mes", ""))
@@ -283,21 +288,30 @@ class SQLiteRepository(IRepository):
                 m_val = str(p.month)
                 s_val = int(p.subcategory_id)
                 a_val = float(p.amount)
+            months_set.add(m_val)
+            parsed_items.append((m_val, s_val, a_val))
 
-            db_item = self.db.query(pres_model.MonthlyBudget).filter(
-                pres_model.MonthlyBudget.month == m_val,
-                pres_model.MonthlyBudget.subcategory_id == s_val
-            ).first()
+        existing_items = (
+            self.db.query(pres_model.MonthlyBudget)
+            .filter(pres_model.MonthlyBudget.month.in_(months_set))
+            .all()
+        )
+        existing_map = {(b.month, b.subcategory_id): b for b in existing_items}
 
+        result = []
+        for m_val, s_val, a_val in parsed_items:
+            db_item = existing_map.get((m_val, s_val))
             if db_item:
                 db_item.amount = a_val
             else:
                 db_item = pres_model.MonthlyBudget(month=m_val, subcategory_id=s_val, amount=a_val)
                 self.db.add(db_item)
-
-            self.db.commit()
-            self.db.refresh(db_item)
+                existing_map[(m_val, s_val)] = db_item
             result.append(db_item)
+
+        self.db.commit()
+        for item in result:
+            self.db.refresh(item)
         return result
 
     # 4. Fondo de Emergencia
@@ -837,15 +851,15 @@ class SQLiteRepository(IRepository):
         """Obtiene el historial de gastos comunes o movimientos de huchas."""
         query = self.db.query(joint_model.JointTransaction).filter(joint_model.JointTransaction.joint_account_id == 1)
         if year:
-            query = query.filter(extract("year", joint_model.JointTransaction.date) == year)
+            query = query.filter(joint_model.JointTransaction.date >= datetime.date(year, 1, 1), joint_model.JointTransaction.date <= datetime.date(year, 12, 31))
         if month:
             # month en formato YYYY-MM
             try:
                 parts = month.split("-")
                 m_year, m_num = int(parts[0]), int(parts[1])
                 query = query.filter(
-                    extract("year", joint_model.JointTransaction.date) == m_year,
-                    extract("month", joint_model.JointTransaction.date) == m_num,
+                    joint_model.JointTransaction.date >= datetime.date(m_year, m_num, 1),
+                    joint_model.JointTransaction.date <= datetime.date(m_year, m_num, calendar.monthrange(m_year, m_num)[1]),
                 )
             except Exception as exc:
                 logger.warning("Formato de mes inválido en get_joint_transactions: %s", exc)

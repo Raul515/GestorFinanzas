@@ -16,7 +16,7 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     date: Mapped[datetime.date] = mapped_column(Date, index=True)
-    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id"))
+    subcategory_id: Mapped[int] = mapped_column(ForeignKey("subcategories.id"), index=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str] = mapped_column(String)
     applied_strategy_id: Mapped[Optional[int]] = mapped_column(

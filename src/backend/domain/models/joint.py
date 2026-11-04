@@ -65,7 +65,7 @@ class JointCategory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     joint_account_id: Mapped[int] = mapped_column(
-        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[str] = mapped_column(String(50), default="JOINT_NEEDS")
@@ -109,7 +109,7 @@ class JointSinkingFund(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     joint_account_id: Mapped[int] = mapped_column(
-        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     target_amount: Mapped[float] = mapped_column(Float, nullable=False)
@@ -138,21 +138,21 @@ class JointTransaction(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     joint_account_id: Mapped[int] = mapped_column(
-        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     date: Mapped[datetime.date] = mapped_column(Date, index=True, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     joint_subcategory_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("joint_subcategories.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("joint_subcategories.id", ondelete="SET NULL"), nullable=True, index=True
     )
     joint_sinking_fund_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("joint_sinking_funds.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("joint_sinking_funds.id", ondelete="SET NULL"), nullable=True, index=True
     )
     sinking_fund_deduction: Mapped[float] = mapped_column(Float, default=0.0)
     paid_by: Mapped[str] = mapped_column(String(20), default="COMMON")
     settlement_mechanism: Mapped[Optional[str]] = mapped_column(String(30), default="COMMON_REIMBURSEMENT", nullable=True)
-    settlement_status: Mapped[str] = mapped_column(String(20), default="SETTLED")
+    settlement_status: Mapped[str] = mapped_column(String(20), default="SETTLED", index=True)
     settled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     created_by_profile: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -183,13 +183,13 @@ class JointMonthlyContribution(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
     joint_account_id: Mapped[int] = mapped_column(
-        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("joint_accounts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     month: Mapped[str] = mapped_column(String(7), index=True, nullable=False)  # 'YYYY-MM'
     contributor_profile: Mapped[str] = mapped_column(String(20), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     contribution_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    personal_transaction_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    personal_transaction_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None, index=True)
     sinking_fund_allocations: Mapped[Optional[str]] = mapped_column(String, nullable=True, default=None)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)

@@ -24,6 +24,10 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, SQLite3Connection):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000")
+        cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.close()
 
 
@@ -78,6 +82,16 @@ def init_db():
             if j_cb_cols and "sinking_fund_allocations" not in j_cb_cols:
                 conn.exec_driver_sql("ALTER TABLE joint_monthly_contributions ADD COLUMN sinking_fund_allocations TEXT")
                 conn.commit()
+
+            # Índices de alto rendimiento
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_transactions_subcategory_id ON transactions(subcategory_id)")
+            conn.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS idx_budget_month_subcat ON monthly_budgets(month, subcategory_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_joint_transactions_account ON joint_transactions(joint_account_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_joint_transactions_settlement ON joint_transactions(settlement_status)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_joint_transactions_subcat ON joint_transactions(joint_subcategory_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_joint_transactions_fund ON joint_transactions(joint_sinking_fund_id)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_joint_contributions_personal_tx ON joint_monthly_contributions(personal_transaction_id)")
+            conn.commit()
 
             conn.exec_driver_sql("""
                 CREATE TABLE IF NOT EXISTS joint_sinking_fund_transfers (
