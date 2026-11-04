@@ -378,6 +378,17 @@ class JointSyncService:
             amount = float(payload["amount"])
             desc = payload["description"]
             profile = payload.get("created_by_profile", "REMOTE")
+            paid_by = str(payload.get("paid_by") or "COMMON")
+            mech_raw = payload.get("settlement_mechanism")
+            settlement_mechanism = str(mech_raw) if mech_raw is not None else None
+            settlement_status = str(payload.get("settlement_status") or ("SETTLED" if paid_by == "COMMON" else "PENDING"))
+            settled_at_str = payload.get("settled_at")
+            settled_at_val = None
+            if settled_at_str:
+                try:
+                    settled_at_val = datetime.fromisoformat(settled_at_str.replace("Z", "+00:00"))
+                except Exception as exc:
+                    logger.warning("Error parseando settled_at en sync: %s", exc)
 
             if existing_tx:
                 # Resolución LWW: Solo actualizar si el evento es más reciente que updated_at
@@ -402,6 +413,10 @@ class JointSyncService:
                 existing_tx.joint_subcategory_id = subcat_id
                 existing_tx.joint_sinking_fund_id = sinking_id
                 existing_tx.created_by_profile = profile
+                existing_tx.paid_by = paid_by
+                existing_tx.settlement_mechanism = settlement_mechanism
+                existing_tx.settlement_status = settlement_status
+                existing_tx.settled_at = settled_at_val
                 existing_tx.updated_at = event_dt
 
                 deducted = 0.0
@@ -439,6 +454,10 @@ class JointSyncService:
                     joint_sinking_fund_id=sinking_id,
                     sinking_fund_deduction=deducted,
                     created_by_profile=profile,
+                    paid_by=paid_by,
+                    settlement_mechanism=settlement_mechanism,
+                    settlement_status=settlement_status,
+                    settled_at=settled_at_val,
                     created_at=event_dt,
                     updated_at=event_dt,
                 )

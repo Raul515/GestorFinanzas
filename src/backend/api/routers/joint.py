@@ -24,6 +24,7 @@ from backend.services.joint_accounting_service import (
     calculate_monthly_contributions,
     evaluate_household_health,
     prepare_assisted_contribution,
+    calculate_settlement_summary,
 )
 from backend.services.joint_sync_service import JointSyncService
 
@@ -572,6 +573,10 @@ def create_joint_transaction(
             "sinking_fund_name": sinking_name,
             "sinking_fund_deduction": float(getattr(tx, "sinking_fund_deduction", 0.0) or 0.0),
             "created_by_profile": tx.created_by_profile,
+            "paid_by": tx.paid_by,
+            "settlement_mechanism": tx.settlement_mechanism,
+            "settlement_status": tx.settlement_status,
+            "settled_at": tx.settled_at.isoformat() if tx.settled_at else None,
         },
         origin_device_id=sync_service.local_device_id,
     )
@@ -598,6 +603,117 @@ def delete_joint_transaction(
     )
 
     return {"deleted": True, "uuid": tx_uuid}
+
+
+# ==========================================
+# 4.1 LIQUIDACIÓN Y REEMBOLSO DE GASTOS (SETTLEMENT)
+# ==========================================
+
+@router.get("/settlement/summary", response_model=schemas.JointSettlementSummaryResponse)
+def get_joint_settlement_summary(
+    repo: SQLiteRepository = Depends(get_repo),
+) -> schemas.JointSettlementSummaryResponse:
+    """Obtiene el resumen consolidado de deudas y saldos pendientes de reembolso para gastos pagados con tarjeta personal."""
+    account = repo.get_joint_account()
+    transactions = repo.get_joint_transactions()
+    summary = calculate_settlement_summary(transactions, account)
+    return schemas.JointSettlementSummaryResponse.model_validate(summary)
+
+
+@router.post("/settlement/settle-transaction/{transaction_id}", response_model=schemas.JointTransactionResponse)
+def settle_joint_transaction(
+    transaction_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointTransactionResponse:
+    """Marca un gasto común adelantado como liquidado/reembolsado y emite el delta de sincronización."""
+    tx = repo.settle_joint_transaction(transaction_id)
+    if not tx:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transacción {transaction_id} no encontrada.",
+        )
+
+    subcat_name = None
+    if tx.joint_subcategory_id:
+        subcat = repo.get_joint_subcategory(tx.joint_subcategory_id)
+        if subcat:
+            subcat_name = subcat.name
+
+    sinking_name = None
+    if tx.joint_sinking_fund_id:
+        fund = repo.get_joint_sinking_fund(tx.joint_sinking_fund_id)
+        if fund:
+            sinking_name = fund.name
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.TRANSACTION,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "uuid": tx.uuid,
+            "date": tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
+            "amount": tx.amount,
+            "description": tx.description,
+            "joint_subcategory_id": tx.joint_subcategory_id,
+            "subcategory_name": subcat_name,
+            "joint_sinking_fund_id": tx.joint_sinking_fund_id,
+            "sinking_fund_name": sinking_name,
+            "sinking_fund_deduction": float(getattr(tx, "sinking_fund_deduction", 0.0) or 0.0),
+            "created_by_profile": tx.created_by_profile,
+            "paid_by": tx.paid_by,
+            "settlement_mechanism": tx.settlement_mechanism,
+            "settlement_status": tx.settlement_status,
+            "settled_at": tx.settled_at.isoformat() if tx.settled_at else None,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+
+    return schemas.JointTransactionResponse.model_validate(tx)
+
+
+@router.post("/settlement/settle-all", response_model=List[schemas.JointTransactionResponse])
+def settle_all_joint_transactions(
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> List[schemas.JointTransactionResponse]:
+    """Marca en bloque todas las transacciones pendientes como liquidadas/reembolsadas y emite sus deltas."""
+    settled_txs = repo.settle_all_joint_transactions()
+    for tx in settled_txs:
+        subcat_name = None
+        if tx.joint_subcategory_id:
+            subcat = repo.get_joint_subcategory(tx.joint_subcategory_id)
+            if subcat:
+                subcat_name = subcat.name
+
+        sinking_name = None
+        if tx.joint_sinking_fund_id:
+            fund = repo.get_joint_sinking_fund(tx.joint_sinking_fund_id)
+            if fund:
+                sinking_name = fund.name
+
+        sync_service.emit_event(
+            entity_type=schemas.SyncEntityType.TRANSACTION,
+            action=schemas.SyncAction.UPSERT,
+            payload={
+                "uuid": tx.uuid,
+                "date": tx.date.isoformat() if hasattr(tx.date, "isoformat") else str(tx.date),
+                "amount": tx.amount,
+                "description": tx.description,
+                "joint_subcategory_id": tx.joint_subcategory_id,
+                "subcategory_name": subcat_name,
+                "joint_sinking_fund_id": tx.joint_sinking_fund_id,
+                "sinking_fund_name": sinking_name,
+                "sinking_fund_deduction": float(getattr(tx, "sinking_fund_deduction", 0.0) or 0.0),
+                "created_by_profile": tx.created_by_profile,
+                "paid_by": tx.paid_by,
+                "settlement_mechanism": tx.settlement_mechanism,
+                "settlement_status": tx.settlement_status,
+                "settled_at": tx.settled_at.isoformat() if tx.settled_at else None,
+            },
+            origin_device_id=sync_service.local_device_id,
+        )
+
+    return [schemas.JointTransactionResponse.model_validate(tx) for tx in settled_txs]
 
 
 # ==========================================

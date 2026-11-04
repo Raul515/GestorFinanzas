@@ -500,6 +500,64 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
             delta=f"{net_treasury:,.2f} €",
         )
 
+    # Resumen y Liquidación de Gastos Adelantados con Tarjeta Personal (Fase 7.3)
+    settlement_data = api_client.get_joint_settlement_summary()
+    if settlement_data and settlement_data.get("unsettled_count", 0) > 0:
+        unsettled_n = settlement_data.get("unsettled_count", 0)
+        common_reimb = settlement_data.get("common_reimbursement", {})
+        direct_settle = settlement_data.get("direct_settlement", {})
+        total_common_debt = float(common_reimb.get("total_common_debt", 0.0))
+        net_amount = float(direct_settle.get("net_amount", 0.0))
+
+        st.markdown(
+            """
+            <div style="background-color: #1e293b; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin: 14px 0 10px 0;">
+                <span style="font-weight: 600; color: #fbbf24; font-size: 1.05rem;">💳 Gastos Adelantados con Tarjeta Personal Pendientes de Liquidar</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col_s1, col_s2, col_s3 = st.columns([2, 2, 2])
+        with col_s1:
+            name_a = account.get("member_a_name", "Miembro A")
+            name_b = account.get("member_b_name", "Miembro B")
+            owes_a = float(common_reimb.get("owes_member_a", 0.0))
+            owes_b = float(common_reimb.get("owes_member_b", 0.0))
+            st.metric(
+                "Fondo Común Adeuda",
+                f"{total_common_debt:,.2f} €",
+                help=f"Deuda de la cuenta común hacia los miembros:\n- {name_a}: {owes_a:,.2f} €\n- {name_b}: {owes_b:,.2f} €",
+            )
+            if total_common_debt > 0:
+                st.caption(f"A devolver: {name_a}: **{owes_a:,.2f} €** | {name_b}: **{owes_b:,.2f} €**")
+
+        with col_s2:
+            if net_amount > 0:
+                debtor_prof = direct_settle.get("net_debtor")
+                creditor_prof = direct_settle.get("net_creditor")
+                debtor_name = account.get("member_a_name" if debtor_prof == "MEMBER_A" else "member_b_name", debtor_prof)
+                creditor_name = account.get("member_a_name" if creditor_prof == "MEMBER_A" else "member_b_name", creditor_prof)
+                st.metric(
+                    "Compensación Directa (Bizum)",
+                    f"{net_amount:,.2f} €",
+                    help=f"{debtor_name} debe transferir {net_amount:,.2f} € a {creditor_name} para saldar compras compartidas.",
+                )
+                st.caption(f"📲 **{debtor_name}** debe abonar a **{creditor_name}**")
+            else:
+                st.metric("Compensación Directa (Bizum)", "0,00 €")
+                st.caption("Saldos directos entre miembros equilibrados")
+
+        with col_s3:
+            st.write("")
+            if st.button(f"💸 Liquidar Todo ({unsettled_n} pendientes)", use_container_width=True, key=f"btn_settle_all_{selected_month_name}"):
+                ok_settle = api_client.settle_all_joint_transactions()
+                if ok_settle:
+                    st.success("✅ Todos los gastos adelantados han sido liquidados y reembolsados.")
+                    st.rerun()
+                else:
+                    st.error("No se pudo liquidar el saldo pendiente.")
+
     st.markdown("<hr style='margin: 16px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
 
     # Formulario para asentar aportación (ordinaria mensual o extraordinaria a hucha concreta)
@@ -650,7 +708,18 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                     format_func=lambda k: paid_labels[k],
                     help="Por defecto sale del presupuesto común del hogar. Si uno de los dos adelantó el dinero de su bolsillo, indícalo aquí.",
                 )
-                paid_by = account.get("local_profile", "MEMBER_A") if paid_choice == "COMMON" else paid_choice
+                settlement_mech = "COMMON_REIMBURSEMENT"
+                if paid_choice in ("MEMBER_A", "MEMBER_B"):
+                    settlement_mech = st.selectbox(
+                        "Modalidad de Liquidación / Reembolso",
+                        options=["COMMON_REIMBURSEMENT", "DIRECT_MEMBER_SETTLEMENT"],
+                        format_func=lambda m: (
+                            "🏦 Reembolso desde Cuenta Común (el fondo común devuelve el 100% al miembro)"
+                            if m == "COMMON_REIMBURSEMENT"
+                            else "🤝 Liquidación Directa entre Miembros (Bizum/transferencia según ratio pactado)"
+                        ),
+                        help="Elige cómo se compensará el gasto adelantado.",
+                    )
 
             tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", use_container_width=True)
             if tx_submitted:
@@ -669,7 +738,9 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         "date": tx_date.isoformat(),
                         "joint_subcategory_id": chosen_subcat_id,
                         "joint_sinking_fund_id": chosen_fund_id,
-                        "created_by_profile": paid_by,
+                        "created_by_profile": account.get("local_profile", "MEMBER_A"),
+                        "paid_by": paid_choice,
+                        "settlement_mechanism": settlement_mech if paid_choice in ("MEMBER_A", "MEMBER_B") else "COMMON_REIMBURSEMENT",
                     }
                     res_tx = api_client.create_joint_transaction(payload_tx)
                     if res_tx:
@@ -736,11 +807,25 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
         for tx in transactions:
             subcat_lbl = subcat_dict.get(tx.get("joint_subcategory_id"), "—")
             fund_lbl = funds_dict.get(tx.get("joint_sinking_fund_id"), "—")
-            paid_lbl = (
-                account.get("member_a_name", "Miembro A")
-                if tx.get("created_by_profile") == "MEMBER_A"
-                else account.get("member_b_name", "Miembro B")
-            )
+            
+            paid_by_val = tx.get("paid_by") or "COMMON"
+            if paid_by_val == "MEMBER_A":
+                paid_lbl = f"👤 {account.get('member_a_name', 'Miembro A')}"
+            elif paid_by_val == "MEMBER_B":
+                paid_lbl = f"👤 {account.get('member_b_name', 'Miembro B')}"
+            else:
+                paid_lbl = "💳 Cuenta Común"
+
+            status_val = tx.get("settlement_status")
+            if paid_by_val == "COMMON":
+                status_lbl = "🟢 Directo"
+            elif status_val == "PENDING":
+                mech_val = tx.get("settlement_mechanism")
+                mech_short = "Bizum" if mech_val == "DIRECT_MEMBER_SETTLEMENT" else "Cta. Común"
+                status_lbl = f"🟡 Pendiente ({mech_short})"
+            else:
+                status_lbl = "🟢 Reembolsado"
+
             table_rows.append({
                 "ID": tx.get("id"),
                 "Fecha": tx.get("date"),
@@ -748,11 +833,34 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 "Subcategoría": subcat_lbl,
                 "Hucha Imputada": fund_lbl,
                 "Pagado Por": paid_lbl,
+                "Reembolso": status_lbl,
                 "Importe (€)": f"{tx.get('amount', 0.0):,.2f} €",
+                "_raw": tx,
             })
 
         df_tx = pd.DataFrame(table_rows)
-        st.dataframe(df_tx[["Fecha", "Descripción", "Subcategoría", "Hucha Imputada", "Pagado Por", "Importe (€)"]], use_container_width=True)
+        st.dataframe(df_tx[["Fecha", "Descripción", "Subcategoría", "Hucha Imputada", "Pagado Por", "Reembolso", "Importe (€)"]], use_container_width=True)
+
+        # Acciones de liquidación de gastos adelantados pendientes
+        unsettled_in_table = [r for r in table_rows if r["_raw"].get("settlement_status") == "PENDING" and r["_raw"].get("paid_by") in ("MEMBER_A", "MEMBER_B")]
+        if unsettled_in_table:
+            with st.expander("💸 Liquidar / Reembolsar Gasto Individual"):
+                tx_to_settle = st.selectbox(
+                    "Selecciona el gasto adelantado a marcar como reembolsado",
+                    options=[r["ID"] for r in unsettled_in_table],
+                    format_func=lambda id_val: next(
+                        (f"ID {r['ID']} - {r['Fecha']} | {r['Descripción']} ({r['Importe (€)']}) - {r['Pagado Por']}" for r in unsettled_in_table if r["ID"] == id_val),
+                        str(id_val),
+                    ),
+                    key=f"sel_settle_tx_{selected_month_name}",
+                )
+                if st.button("✓ Confirmar Reembolso / Liquidación", key=f"btn_confirm_settle_{selected_month_name}"):
+                    ok_s = api_client.settle_joint_transaction(tx_to_settle)
+                    if ok_s:
+                        st.success("Gasto marcado como reembolsado con éxito y sincronizado.")
+                        st.rerun()
+                    else:
+                        st.error("No se pudo liquidar la transacción.")
 
         # Acciones de eliminación de transacciones
         with st.expander("🗑️ Eliminar una Transacción"):

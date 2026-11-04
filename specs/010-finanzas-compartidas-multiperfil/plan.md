@@ -284,32 +284,66 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 
 ---
 
+### Fase 7.3: Liquidación y Reembolso de Gastos Adelantados con Tarjeta Personal (Expense Settlement)
+
+- **Objetivo**: Implementar el circuito completo de seguimiento, cálculo de deudas y liquidación de gastos del hogar pagados con tarjetas personales, soportando modalidad híbrida (Reembolso desde la Cuenta Común y Liquidación Directa entre Miembros estilo Bizum), con acciones flexibles de liquidación (gasto a gasto o global en 1 clic) y sincronización P2P reactiva.
+- **Detalle de Funcionalidades**:
+  1. **Modelo y Persistencia de Transacciones**:
+     - Atributos en `JointTransaction`: `paid_by` (`COMMON`, `MEMBER_A`, `MEMBER_B`), `settlement_mechanism` (`COMMON_REIMBURSEMENT`, `DIRECT_MEMBER_SETTLEMENT`), `settlement_status` (`SETTLED`, `PENDING`), `settled_at` (timestamp UTC opcional).
+     - Migración introspectiva defensiva en `sqlite_db.py` para añadir las columnas en bases existentes sin recreación.
+  2. **Motor de Cálculo de Liquidación Desacoplado**:
+     - Función pura `calculate_settlement_summary(transactions, account)` en `joint_accounting_service.py`:
+       - Desglose de deuda del fondo común hacia cada miembro (`common_reimbursement`: cuánto debe la cuenta común a Miembro A y a Miembro B).
+       - Desglose de deuda directa entre miembros (`direct_settlement`: cuánto debe B a A o A a B en base al porcentaje de reparto pactado).
+       - Total de transacciones pendientes y balance neto consolidado.
+  3. **Endpoints REST en FastAPI**:
+     - `GET /joint/settlement/summary`: Retorna el estado y métricas de deudas y reembolsos pendientes.
+     - `POST /joint/settlement/settle-transaction/{transaction_id}`: Marca una transacción como `SETTLED`, actualiza `settled_at` y emite el delta `TRANSACTION (UPSERT)` a outbox.
+     - `POST /joint/settlement/settle-all`: Marca todas las transacciones pendientes como `SETTLED` y emite sus respectivos deltas a outbox.
+  4. **Sincronización P2P**:
+     - Inclusión de los metadatos de liquidación en el payload delta de transacciones y procesamiento en `_apply_transaction_event()` para que los reembolsos marcados en un terminal se repliquen idénticamente en el otro.
+  5. **Interfaz de Usuario en Streamlit**:
+     - Formulario de gasto común: selectores de pagador y modalidad de liquidación al adelantar con tarjeta personal.
+     - Pestaña *12 Meses del Hogar*: tarjeta destacada con métricas de deudas pendientes y botón `[💸 Liquidar Todo el Saldo Pendiente]`.
+     - Historial de gastos: badges de estado (`🟢 Reembolsado` / `🟡 Pendiente Reembolso`) y botón individual por fila `[✓ Reembolsar]`.
+- **Archivos a crear/modificar**:
+  - `src/backend/domain/models/joint.py` [MODIFICADO: Columnas `paid_by`, `settlement_mechanism`, `settlement_status`, `settled_at` en `JointTransaction`].
+  - `src/backend/domain/schemas/joint.py` [MODIFICADO: Campos de settlement en esquemas de transacción y nuevo esquema `JointSettlementSummaryResponse`].
+  - `src/backend/database/componentes/sqlite_db.py` [MODIFICADO: Migración defensiva en `init_db()`].
+  - `src/backend/database/componentes/sqlite_crud.py` [MODIFICADO: Métodos `settle_joint_transaction()` y `settle_all_joint_transactions()`].
+  - `src/backend/services/joint_accounting_service.py` [MODIFICADO: Función `calculate_settlement_summary()`].
+  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Propagación y absorción de atributos de liquidación en deltas de transacción].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `/joint/settlement/*`].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos cliente de settlement].
+  - `src/frontend/views/joint_view.py` [MODIFICADO: Formulario con selector de mecanismo, tarjeta de deudas mensuales y botones de reembolso].
+  - `tests/unit/test_joint_accounting_service.py` [MODIFICADO: Pruebas unitarias de cálculo de liquidación].
+  - `tests/unit/test_joint_sync_service.py` [MODIFICADO: Pruebas de sincronización de eventos de liquidación].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas de cliente frontend].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración de endpoints de settlement].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando, cálculo matemático de deudas exacto, liquidación individual y global operativa y sincronización bidireccional certificada.
+
+---
+
 ### Registro de Nuevas Mejoras Futuras Identificadas (Ordenadas por Prioridad e Impacto)
 
-Tras la implementación de la Fase 7.2 y una auditoría funcional orientada a la experiencia de vida real en pareja, se identifican las siguientes 5 posibles ampliaciones ordenadas por impacto operativo:
+Tras la formalización de la Fase 7.3, se retienen las siguientes 4 posibles ampliaciones futuras ordenadas por impacto operativo:
 
-1. **Prioridad 1 (ESENCIAL): Liquidación y Reembolso de Gastos Adelantados con Tarjeta Personal (*Expense Settlement*)**:
-   - *Problema en la vida real*: Cuando un miembro paga un gasto común con su tarjeta personal (`paid_by = MEMBER_A` o `MEMBER_B`) porque no tenía a mano la tarjeta de la cuenta conjunta, la app computa el gasto del hogar pero no calcula el saldo adeudado ("El fondo común debe X € a Miembro A").
-   - *Solución*:
-     - Un indicador de liquidación en la pestaña mensual: *"Saldo pendiente de reembolso: El hogar adeuda 145,00 € a David por gastos adelantados"*.
-     - Un botón asistido `[💸 Registrar Reembolso desde la Cuenta Conjunta]` que liquida la deuda cuando se realiza la transferencia de devolución desde el banco común.
-
-2. **Prioridad 2 (ALTA): Traspaso Directo / Rebalanceo entre Huchas de Amortización**:
+1. **Prioridad 1 (ALTA): Traspaso Directo / Rebalanceo entre Huchas de Amortización**:
    - *Problema en la vida real*: Si se cancela un viaje o surge una urgencia en el vehículo, la pareja necesita reasignar dinero acumulado en "Fondo Vacaciones" hacia "Fondo Coche". Actualmente, solo se puede hacer borrando una hucha con reasignación total o editando manualmente los saldos.
-   - *Solución*:
-     - Modal o expander en la pestaña *🎯 Huchas de Amortización*: `[↔️ Traspasar Saldo entre Huchas]` con selector de origen, destino e importe, generando los deltas `UPSERT` correspondientes para replicar el movimiento en ambos terminales.
+   - *Solución*: Modal o expander en la pestaña *🎯 Huchas de Amortización*: `[↔️ Traspasar Saldo entre Huchas]` con selector de origen, destino e importe, generando los deltas `UPSERT` correspondientes para replicar el movimiento en ambos terminales.
 
-3. **Prioridad 3 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
+2. **Prioridad 2 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
    - *Problema en la vida real*: El banner de aportación en el Perfil Personal se oculta o marca como completado cuando el usuario local aporta. Para comprobar si la pareja ya ha aportado su parte del mes, el usuario debe navegar explícitamente a "Economía del Hogar".
-   - *Solución*:
-     - Un badge compacto en el banner personal: *"Noviembre: David (✅ Aportado: 600 €) | Raquel (⏳ Pendiente: 400 €)"*, ofreciendo visibilidad inmediata sin cambiar de pantalla.
+   - *Solución*: Un badge compacto en el banner personal: *"Noviembre: David (✅ Aportado: 600 €) | Raquel (⏳ Pendiente: 400 €)"*, ofreciendo visibilidad inmediata sin cambiar de pantalla.
 
-4. **Prioridad 4 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
+3. **Prioridad 3 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
    - *Problema en la vida real*: Buscar un gasto específico (ej. "IKEA", "Seguro Hogar", "Veterinario") a lo largo del año requiere revisar los 12 meses uno a uno o inspeccionar la hoja de cálculo exportada.
-   - *Solución*:
-     - Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
+   - *Solución*: Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
 
-5. **Prioridad 5 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
+4. **Prioridad 4 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
    - *Problema en la vida real*: El saldo de tesorería de la app es puramente contable (`aportaciones - gastos`). Pequeños descuadres bancarios (comisiones de mantenimiento de 0,50 €, intereses a favor de céntimos o redondeos) hacen que el saldo bancario real no coincida al céntimo.
-   - *Solución*:
-     - Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.
+   - *Solución*: Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.

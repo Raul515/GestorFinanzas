@@ -995,6 +995,51 @@ def delete_joint_transaction(tx_id: int) -> bool:
     return False
 
 
+def get_joint_settlement_summary() -> Optional[Dict[str, Any]]:
+    """Obtiene el resumen consolidado de liquidación y reembolsos de gastos adelantados."""
+    url = f"{API_URL}/joint/settlement/summary"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_settlement_summary (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_settlement_summary en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_settlement_summary(): %s", e)
+    return None
+
+
+def settle_joint_transaction(tx_id: int) -> bool:
+    """Marca una transacción conjunta pendiente como liquidada/reembolsada."""
+    url = f"{API_URL}/joint/settlement/settle-transaction/{tx_id}"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en settle_joint_transaction (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en settle_joint_transaction en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en settle_joint_transaction(): %s", e)
+    return False
+
+
+def settle_all_joint_transactions() -> bool:
+    """Marca todas las transacciones conjuntas pendientes como liquidadas/reembolsadas."""
+    url = f"{API_URL}/joint/settlement/settle-all"
+    try:
+        response = requests.post(url, timeout=10)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en settle_all_joint_transactions (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en settle_all_joint_transactions en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en settle_all_joint_transactions(): %s", e)
+    return False
+
+
 def get_joint_contributions(year: Optional[int] = None, month: Optional[str] = None) -> List[Dict[str, Any]]:
     """Obtiene el historial de aportaciones a la cuenta común."""
     url = f"{API_URL}/joint/contributions"

@@ -548,3 +548,99 @@ def test_joint_export_and_sync_viewer_endpoints(client: TestClient):
     assert retry_resp.status_code == 200
     assert retry_resp.json()["retried_count"] == 0
 
+
+
+def test_joint_settlement_api_flow(client: TestClient):
+    """Valida el flujo integral de liquidación de gastos adelantados y reembolsos vía API (Fase 7.3)."""
+    # 1. Configurar hogar
+    setup_resp = client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Casa Test Settlement Flow",
+            "cohabitation_stage": "COHABITATION",
+            "split_mode": "EQUAL_50_50",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "member_a_reference_income": 2500.0,
+            "member_b_reference_income": 2200.0,
+        },
+    )
+    assert setup_resp.status_code == 201
+
+    subcats = client.get("/joint/subcategories").json()
+    subcat_id = subcats[0]["id"]
+
+    # 2. Registrar gasto adelantado por MEMBER_A (Reembolso de Fondo Común)
+    tx1_resp = client.post(
+        "/joint/transactions",
+        json={
+            "date": "2026-11-04",
+            "amount": 100.0,
+            "description": "Compra Leroy Merlin David",
+            "joint_subcategory_id": subcat_id,
+            "created_by_profile": "MEMBER_A",
+            "paid_by": "MEMBER_A",
+            "settlement_mechanism": "COMMON_REIMBURSEMENT",
+        },
+    )
+    assert tx1_resp.status_code == 201
+    tx1 = tx1_resp.json()
+    assert tx1["settlement_status"] == "PENDING"
+    assert tx1["paid_by"] == "MEMBER_A"
+
+    # 3. Registrar gasto adelantado por MEMBER_B (Liquidación Directa Bizum)
+    tx2_resp = client.post(
+        "/joint/transactions",
+        json={
+            "date": "2026-11-04",
+            "amount": 60.0,
+            "description": "Cena compartida Raquel",
+            "joint_subcategory_id": subcat_id,
+            "created_by_profile": "MEMBER_B",
+            "paid_by": "MEMBER_B",
+            "settlement_mechanism": "DIRECT_MEMBER_SETTLEMENT",
+        },
+    )
+    assert tx2_resp.status_code == 201
+    tx2 = tx2_resp.json()
+    assert tx2["settlement_status"] == "PENDING"
+
+    # 4. Consultar resumen de liquidación
+    summary_resp = client.get("/joint/settlement/summary")
+    assert summary_resp.status_code == 200
+    s_data = summary_resp.json()
+    assert s_data["unsettled_count"] == 2
+    assert s_data["common_reimbursement"]["owes_member_a"] == 100.0
+    assert s_data["common_reimbursement"]["total_common_debt"] == 100.0
+    assert s_data["direct_settlement"]["member_a_owes_member_b"] == 30.0
+    assert s_data["direct_settlement"]["net_amount"] == 30.0
+    assert s_data["direct_settlement"]["net_debtor"] == "MEMBER_A"
+
+    # 5. Liquidar individualmente tx1
+    settle1_resp = client.post(f"/joint/settlement/settle-transaction/{tx1['id']}")
+    assert settle1_resp.status_code == 200
+    assert settle1_resp.json()["settlement_status"] == "SETTLED"
+    assert settle1_resp.json()["settled_at"] is not None
+
+    # Consultar resumen tras liquidación de tx1
+    summary_resp2 = client.get("/joint/settlement/summary")
+    assert summary_resp2.status_code == 200
+    s_data2 = summary_resp2.json()
+    assert s_data2["unsettled_count"] == 1
+    assert s_data2["common_reimbursement"]["total_common_debt"] == 0.0
+    assert s_data2["direct_settlement"]["net_amount"] == 30.0
+
+    # 6. Liquidar en bloque con settle-all
+    settle_all_resp = client.post("/joint/settlement/settle-all")
+    assert settle_all_resp.status_code == 200
+    settled_list = settle_all_resp.json()
+    assert len(settled_list) == 1
+    assert settled_list[0]["id"] == tx2["id"]
+    assert settled_list[0]["settlement_status"] == "SETTLED"
+
+    # 7. Resumen final completamente a cero
+    summary_resp3 = client.get("/joint/settlement/summary")
+    assert summary_resp3.status_code == 200
+    s_data3 = summary_resp3.json()
+    assert s_data3["unsettled_count"] == 0
+    assert s_data3["common_reimbursement"]["total_common_debt"] == 0.0
+    assert s_data3["direct_settlement"]["net_amount"] == 0.0

@@ -28,6 +28,7 @@ from backend.services.joint_accounting_service import (
     distribute_sinking_funds_allocation,
     evaluate_household_health,
     prepare_assisted_contribution,
+    calculate_settlement_summary,
 )
 
 
@@ -469,3 +470,141 @@ def test_generate_household_excel_export(db_session: Session):
     ws_tx = wb["Gastos Comunes"]
     assert ws_tx.max_row >= 2
 
+
+
+# ==========================================
+# 6. PRUEBAS DE MOTOR DE LIQUIDACIÓN Y REEMBOLSO (FASE 7.3)
+# ==========================================
+
+def test_calculate_settlement_summary_empty():
+    """Verifica que con lista vacía de transacciones los saldos pendientes sean 0.0."""
+    res = calculate_settlement_summary([], None)
+    assert res["unsettled_count"] == 0
+    assert res["common_reimbursement"]["total_common_debt"] == 0.0
+    assert res["direct_settlement"]["net_amount"] == 0.0
+    assert res["direct_settlement"]["net_debtor"] is None
+
+
+def test_calculate_settlement_summary_common_reimbursement():
+    """Verifica el cálculo de deuda del fondo común hacia los miembros que adelantaron pagos."""
+    account = MagicMock(split_mode="EQUAL_50_50", member_a_contribution_pct=50.0, member_b_contribution_pct=50.0)
+    tx1 = MagicMock(
+        amount=120.0,
+        paid_by="MEMBER_A",
+        settlement_mechanism="COMMON_REIMBURSEMENT",
+        settlement_status="PENDING",
+    )
+    tx2 = MagicMock(
+        amount=45.50,
+        paid_by="MEMBER_B",
+        settlement_mechanism="COMMON_REIMBURSEMENT",
+        settlement_status="PENDING",
+    )
+    tx_settled = MagicMock(
+        amount=300.0,
+        paid_by="MEMBER_A",
+        settlement_mechanism="COMMON_REIMBURSEMENT",
+        settlement_status="SETTLED",
+    )
+
+    res = calculate_settlement_summary([tx1, tx2, tx_settled], account)
+    assert res["unsettled_count"] == 2
+    assert res["common_reimbursement"]["owes_member_a"] == 120.0
+    assert res["common_reimbursement"]["owes_member_b"] == 45.50
+    assert res["common_reimbursement"]["total_common_debt"] == 165.50
+    assert res["direct_settlement"]["net_amount"] == 0.0
+
+
+def test_calculate_settlement_summary_direct_settlement_50_50():
+    """Verifica compensación directa estilo Bizum entre miembros con reparto al 50/50."""
+    account = MagicMock(split_mode="EQUAL_50_50", member_a_contribution_pct=50.0, member_b_contribution_pct=50.0)
+    tx1 = MagicMock(
+        amount=100.0,
+        paid_by="MEMBER_A",
+        settlement_mechanism="DIRECT_MEMBER_SETTLEMENT",
+        settlement_status="PENDING",
+    )
+
+    res = calculate_settlement_summary([tx1], account)
+    assert res["unsettled_count"] == 1
+    assert res["direct_settlement"]["member_b_owes_member_a"] == 50.0
+    assert res["direct_settlement"]["member_a_owes_member_b"] == 0.0
+    assert res["direct_settlement"]["net_debtor"] == "MEMBER_B"
+    assert res["direct_settlement"]["net_creditor"] == "MEMBER_A"
+    assert res["direct_settlement"]["net_amount"] == 50.0
+
+
+def test_calculate_settlement_summary_direct_settlement_proportional():
+    """Verifica compensación proporcional basada en ingresos (A=3000 -> 60%, B=2000 -> 40%)."""
+    account = MagicMock(
+        split_mode="PROPORTIONAL_INCOME",
+        member_a_reference_income=3000.0,
+        member_b_reference_income=2000.0,
+    )
+    # A paga 100€ -> B le debe 40% = 40€
+    tx_a = MagicMock(
+        amount=100.0,
+        paid_by="MEMBER_A",
+        settlement_mechanism="DIRECT_MEMBER_SETTLEMENT",
+        settlement_status="PENDING",
+    )
+    # B paga 50€ -> A le debe 60% = 30€
+    tx_b = MagicMock(
+        amount=50.0,
+        paid_by="MEMBER_B",
+        settlement_mechanism="DIRECT_MEMBER_SETTLEMENT",
+        settlement_status="PENDING",
+    )
+
+    res = calculate_settlement_summary([tx_a, tx_b], account)
+    assert res["unsettled_count"] == 2
+    assert res["direct_settlement"]["member_b_owes_member_a"] == 40.0
+    assert res["direct_settlement"]["member_a_owes_member_b"] == 30.0
+    assert res["direct_settlement"]["net_debtor"] == "MEMBER_B"
+    assert res["direct_settlement"]["net_creditor"] == "MEMBER_A"
+    assert res["direct_settlement"]["net_amount"] == 10.0
+
+
+def test_excel_export_includes_settlement_columns(db_session: Session):
+    """Verifica que el export de Excel estructurado incorpore las columnas de pago y liquidación."""
+    import openpyxl  # type: ignore
+    import io
+    from backend.services.joint_accounting_service import generate_household_excel_export
+
+    repo = SQLiteRepository(db_session)
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Test Excel Settlement",
+            member_a_name="David",
+            member_b_name="Raquel",
+            cohabitation_stage=CohabitationStage.COHABITATION,
+            contribution_strategy=ContributionStrategy.INCOME_PERCENTAGE,
+            split_mode=SplitMode.EQUAL_50_50,
+            member_a_reference_income=2500.0,
+            member_b_reference_income=2000.0,
+            local_profile=ProfileIdentifier.MEMBER_A,
+        )
+    )
+
+    subcat = repo.get_joint_subcategories()[0]
+    repo.create_joint_transaction(
+        JointTransactionCreate(
+            date=date(2026, 11, 2),
+            amount=85.0,
+            description="Compra Supermercado Adelantada David",
+            joint_subcategory_id=subcat.id,
+            created_by_profile=ProfileIdentifier.MEMBER_A,
+            paid_by="MEMBER_A",
+            settlement_mechanism="COMMON_REIMBURSEMENT",
+        )
+    )
+
+    excel_bytes = generate_household_excel_export(db_session, household_id=1)
+    wb = openpyxl.load_workbook(io.BytesIO(excel_bytes))
+    ws_tx = wb["Gastos Comunes"]
+    headers = [cell.value for cell in ws_tx[1]]
+
+    assert "Medio de Pago" in headers
+    assert "Modalidad Liquidacion" in headers
+    assert "Estado Reembolso" in headers
+    assert "Fecha Liquidacion" in headers

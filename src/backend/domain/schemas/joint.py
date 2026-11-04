@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 import uuid
@@ -57,6 +57,25 @@ class HealthStatus(str, Enum):
     SUSTAINABLE = "SUSTAINABLE"  # Tasa de esfuerzo < 50%
     TENSION = "TENSION"          # Tasa de esfuerzo 50% - 60%
     ALERT = "ALERT"              # Tasa de esfuerzo > 60%
+
+
+class PaymentPayer(str, Enum):
+    """Quién pagó efectivamente el gasto."""
+    COMMON = "COMMON"
+    MEMBER_A = "MEMBER_A"
+    MEMBER_B = "MEMBER_B"
+
+
+class SettlementMechanism(str, Enum):
+    """Modalidad de reembolso de gastos adelantados."""
+    COMMON_REIMBURSEMENT = "COMMON_REIMBURSEMENT"
+    DIRECT_MEMBER_SETTLEMENT = "DIRECT_MEMBER_SETTLEMENT"
+
+
+class SettlementStatus(str, Enum):
+    """Estado de liquidación del gasto adelantado."""
+    SETTLED = "SETTLED"
+    PENDING = "PENDING" 
 
 
 # ==========================================
@@ -286,12 +305,20 @@ class JointTransactionBase(BaseModel):
     joint_subcategory_id: Optional[int] = None
     joint_sinking_fund_id: Optional[int] = None
     created_by_profile: ProfileIdentifier
+    paid_by: Optional[str] = "COMMON"
+    settlement_mechanism: Optional[str] = "COMMON_REIMBURSEMENT"
+    settlement_status: Optional[str] = "SETTLED"
+    settled_at: Optional[datetime] = None
 
 
 class JointTransactionCreate(JointTransactionBase):
     """Esquema para registrar un gasto común."""
     uuid: Optional[str] = None
     joint_account_id: Optional[int] = None
+    paid_by: Optional[str] = "COMMON"
+    settlement_mechanism: Optional[str] = "COMMON_REIMBURSEMENT"
+    settlement_status: Optional[str] = None
+    settled_at: Optional[datetime] = None
 
     @model_validator(mode="after")
     def validate_destination_assigned(self) -> "JointTransactionCreate":
@@ -301,6 +328,13 @@ class JointTransactionCreate(JointTransactionBase):
             )
         if self.uuid is None:
             self.uuid = str(uuid.uuid4())
+        if self.paid_by in ("MEMBER_A", "MEMBER_B"):
+            if self.settlement_status is None:
+                self.settlement_status = "PENDING"
+        else:
+            if self.settlement_status is None:
+                self.settlement_status = "SETTLED"
+                self.settled_at = datetime.now(timezone.utc)
         return self
 
 
@@ -313,6 +347,7 @@ class JointTransactionResponse(JointTransactionBase):
     joint_account_id: int
     created_at: datetime
     updated_at: datetime
+    sinking_fund_deduction: float = 0.0
 
 
 # ==========================================
@@ -403,3 +438,32 @@ class JointAnnualSummaryResponse(BaseModel):
     effort_rate_pct: float
     health_status: HealthStatus
     monthly_metrics: list[dict[str, Any]] = []
+
+
+# ==========================================
+# ESQUEMAS DE LIQUIDACIÓN Y REEMBOLSO (FASE 7.3)
+# ==========================================
+
+class CommonReimbursementSummary(BaseModel):
+    """Resumen de deudas del fondo común hacia los miembros."""
+    owes_member_a: float = 0.0
+    owes_member_b: float = 0.0
+    total_common_debt: float = 0.0
+
+
+class DirectSettlementSummary(BaseModel):
+    """Resumen de deudas directas entre miembros (Bizum)."""
+    member_b_owes_member_a: float = 0.0
+    member_a_owes_member_b: float = 0.0
+    net_debtor: Optional[str] = None
+    net_creditor: Optional[str] = None
+    net_amount: float = 0.0
+
+
+class JointSettlementSummaryResponse(BaseModel):
+    """Respuesta consolidada de saldos pendientes de reembolso y liquidación."""
+    common_reimbursement: CommonReimbursementSummary
+    direct_settlement: DirectSettlementSummary
+    unsettled_count: int = 0
+    unsettled_transactions: list[JointTransactionResponse] = []
+

@@ -766,3 +766,83 @@ def test_sync_events_detail_and_retry_errors(db_session: Session, temp_sync_dir:
     assert details_after["error_count"] == 0
     assert details_after["processed_count"] >= 2
 
+
+
+def test_transaction_settlement_sync(temp_sync_dir: str, db_session: Session):
+    """Verifica que los atributos de liquidación y reembolso de transacciones se propaguen y actualicen vía sync."""
+    repo = SQLiteRepository(db_session)
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Settlement Sync",
+            cohabitation_stage=CohabitationStage.COHABITATION,
+            split_mode=SplitMode.EQUAL_50_50,
+            contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+            member_a_reference_income=2500.0,
+            member_b_reference_income=2200.0,
+        )
+    )
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    inbox_path = Path(temp_sync_dir) / "inbox"
+    tx_uuid = str(uuid.uuid4())
+
+    # 1. Llega transacción adelantada por MEMBER_A en estado PENDING
+    evt_pending = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "TRANSACTION",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-04T10:00:00Z",
+        "payload": {
+            "uuid": tx_uuid,
+            "date": "2026-11-04",
+            "amount": 75.0,
+            "description": "Ferretería bombillas",
+            "subcategory_name": "Mantenimiento y Reparaciones del Hogar",
+            "created_by_profile": "MEMBER_A",
+            "paid_by": "MEMBER_A",
+            "settlement_mechanism": "COMMON_REIMBURSEMENT",
+            "settlement_status": "PENDING",
+        },
+    }
+    with open(inbox_path / "evt_pending.json", "w", encoding="utf-8") as f:
+        json.dump(evt_pending, f)
+
+    res1 = service.process_inbox(db_session)
+    assert res1["processed_count"] == 1
+
+    tx_db = db_session.query(JointTransaction).filter_by(uuid=tx_uuid).first()
+    assert tx_db is not None
+    assert tx_db.paid_by == "MEMBER_A"
+    assert tx_db.settlement_status == "PENDING"
+    assert tx_db.settlement_mechanism == "COMMON_REIMBURSEMENT"
+
+    # 2. Llega evento de liquidación con settlement_status=SETTLED
+    evt_settled = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "TRANSACTION",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-04T10:05:00Z",
+        "payload": {
+            "uuid": tx_uuid,
+            "date": "2026-11-04",
+            "amount": 75.0,
+            "description": "Ferretería bombillas",
+            "subcategory_name": "Mantenimiento y Reparaciones del Hogar",
+            "created_by_profile": "MEMBER_A",
+            "paid_by": "MEMBER_A",
+            "settlement_mechanism": "COMMON_REIMBURSEMENT",
+            "settlement_status": "SETTLED",
+            "settled_at": "2026-11-04T10:05:00Z",
+        },
+    }
+    with open(inbox_path / "evt_settled.json", "w", encoding="utf-8") as f:
+        json.dump(evt_settled, f)
+
+    res2 = service.process_inbox(db_session)
+    assert res2["processed_count"] == 1
+
+    db_session.refresh(tx_db)
+    assert tx_db.settlement_status == "SETTLED"
+    assert tx_db.settled_at is not None

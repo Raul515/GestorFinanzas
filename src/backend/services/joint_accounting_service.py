@@ -432,12 +432,17 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
             'Hucha de Amortizacion': fund_name,
             'Deduccion Hucha (EUR)': round(float(t.sinking_fund_deduction or 0.0), 2),
             'Registrado Por': str(t.created_by_profile),
+            'Medio de Pago': str(getattr(t, 'paid_by', 'COMMON') or 'COMMON'),
+            'Modalidad Liquidacion': str(getattr(t, 'settlement_mechanism', 'COMMON_REIMBURSEMENT') or ''),
+            'Estado Reembolso': str(getattr(t, 'settlement_status', 'SETTLED') or 'SETTLED'),
+            'Fecha Liquidacion': t.settled_at.isoformat() if getattr(t, 'settled_at', None) else '',
         })
     df_tx = pd.DataFrame(tx_rows)
     if df_tx.empty:
         df_tx = pd.DataFrame(columns=[
             'ID', 'UUID', 'Fecha', 'Concepto', 'Categoria', 'Subcategoria',
-            'Importe (EUR)', 'Hucha de Amortizacion', 'Deduccion Hucha (EUR)', 'Registrado Por'
+            'Importe (EUR)', 'Hucha de Amortizacion', 'Deduccion Hucha (EUR)', 'Registrado Por',
+            'Medio de Pago', 'Modalidad Liquidacion', 'Estado Reembolso', 'Fecha Liquidacion'
         ])
 
     # 2. Aportaciones del Hogar
@@ -494,3 +499,113 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
 
     return output.getvalue()
 
+
+
+def calculate_settlement_summary(
+    transactions: List[Any], account: Optional[Any] = None
+) -> Dict[str, Any]:
+    """Calcula las deudas y saldos pendientes de reembolso para gastos adelantados con tarjeta personal.
+
+    Soporta modalidad híbrida:
+    - Reembolso desde la Cuenta Común (el fondo común adeuda el 100% al miembro pagador).
+    - Liquidación directa entre miembros (Bizum/transferencia según ratio de reparto acordado).
+    """
+    # Determinar ratios de contribución/reparto
+    ratio_a = 0.5
+    ratio_b = 0.5
+    if account:
+        split_mode = str(getattr(account, "split_mode", "EQUAL_50_50"))
+        if split_mode == "PROPORTIONAL_INCOME":
+            inc_a = float(getattr(account, "member_a_reference_income", 0.0) or 0.0)
+            inc_b = float(getattr(account, "member_b_reference_income", 0.0) or 0.0)
+            tot_inc = inc_a + inc_b
+            if tot_inc > 0:
+                ratio_a = inc_a / tot_inc
+                ratio_b = inc_b / tot_inc
+        else:
+            pct_a = float(getattr(account, "member_a_contribution_pct", 50.0) or 50.0)
+            pct_b = float(getattr(account, "member_b_contribution_pct", 50.0) or 50.0)
+            tot_pct = pct_a + pct_b
+            if tot_pct > 0:
+                ratio_a = pct_a / tot_pct
+                ratio_b = pct_b / tot_pct
+
+    owes_member_a = 0.0
+    owes_member_b = 0.0
+    b_owes_a = 0.0
+    a_owes_b = 0.0
+    unsettled_list = []
+
+    for tx in transactions:
+        paid_by = getattr(tx, "paid_by", None)
+        if isinstance(paid_by, dict):
+            paid_by = paid_by.get("paid_by")
+        elif hasattr(paid_by, "value"):
+            paid_by = paid_by.value
+        paid_by = str(paid_by or "COMMON")
+
+        status = getattr(tx, "settlement_status", None)
+        if isinstance(status, dict):
+            status = status.get("settlement_status")
+        elif hasattr(status, "value"):
+            status = status.value
+        status = str(status or ("PENDING" if paid_by in ("MEMBER_A", "MEMBER_B") else "SETTLED"))
+
+        if status == "PENDING" and paid_by in ("MEMBER_A", "MEMBER_B"):
+            unsettled_list.append(tx)
+            amount = float(getattr(tx, "amount", 0.0) or 0.0)
+
+            mechanism = getattr(tx, "settlement_mechanism", None)
+            if hasattr(mechanism, "value"):
+                mechanism = mechanism.value
+            mechanism = str(mechanism or "COMMON_REIMBURSEMENT")
+
+            if mechanism == "DIRECT_MEMBER_SETTLEMENT":
+                if paid_by == "MEMBER_A":
+                    b_owes_a += amount * ratio_b
+                else:
+                    a_owes_b += amount * ratio_a
+            else:
+                # COMMON_REIMBURSEMENT
+                if paid_by == "MEMBER_A":
+                    owes_member_a += amount
+                else:
+                    owes_member_b += amount
+
+    owes_member_a = round(owes_member_a, 2)
+    owes_member_b = round(owes_member_b, 2)
+    total_common_debt = round(owes_member_a + owes_member_b, 2)
+
+    b_owes_a = round(b_owes_a, 2)
+    a_owes_b = round(a_owes_b, 2)
+    diff = round(b_owes_a - a_owes_b, 2)
+
+    if diff > 0.001:
+        net_debtor = "MEMBER_B"
+        net_creditor = "MEMBER_A"
+        net_amount = diff
+    elif diff < -0.001:
+        net_debtor = "MEMBER_A"
+        net_creditor = "MEMBER_B"
+        net_amount = round(abs(diff), 2)
+    else:
+        net_debtor = None
+        net_creditor = None
+        net_amount = 0.0
+
+    return {
+        "common_reimbursement": {
+            "owes_member_a": owes_member_a,
+            "owes_member_b": owes_member_b,
+            "total_common_debt": total_common_debt,
+        },
+        "direct_settlement": {
+            "member_b_owes_member_a": b_owes_a,
+            "member_a_owes_member_b": a_owes_b,
+            "net_debtor": net_debtor,
+            "net_creditor": net_creditor,
+            "net_amount": net_amount,
+        },
+        "unsettled_count": len(unsettled_list),
+        "unsettled_transactions": unsettled_list,
+    }

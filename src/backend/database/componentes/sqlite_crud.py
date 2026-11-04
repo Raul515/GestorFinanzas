@@ -796,6 +796,24 @@ class SQLiteRepository(IRepository):
         if hasattr(profile_val, "value"):
             profile_val = profile_val.value
 
+        paid_by_val = data.get("paid_by")
+        if hasattr(paid_by_val, "value"):
+            paid_by_val = paid_by_val.value
+        elif not paid_by_val:
+            paid_by_val = "COMMON"
+
+        settlement_mechanism_val = data.get("settlement_mechanism")
+        if hasattr(settlement_mechanism_val, "value"):
+            settlement_mechanism_val = settlement_mechanism_val.value
+
+        settlement_status_val = data.get("settlement_status")
+        if hasattr(settlement_status_val, "value"):
+            settlement_status_val = settlement_status_val.value
+        elif not settlement_status_val:
+            settlement_status_val = "PENDING" if paid_by_val in ("MEMBER_A", "MEMBER_B") else "SETTLED"
+
+        settled_at_val = data.get("settled_at")
+
         db_tx = joint_model.JointTransaction(
             uuid=data.get("uuid") or str(uuid.uuid4()),
             joint_account_id=1,
@@ -805,6 +823,10 @@ class SQLiteRepository(IRepository):
             joint_subcategory_id=data.get("joint_subcategory_id"),
             joint_sinking_fund_id=data.get("joint_sinking_fund_id"),
             created_by_profile=str(profile_val),
+            paid_by=str(paid_by_val),
+            settlement_mechanism=str(settlement_mechanism_val) if settlement_mechanism_val else None,
+            settlement_status=str(settlement_status_val),
+            settled_at=settled_at_val,
         )
 
         # Si el gasto proviene de una hucha de amortización, descontar únicamente el saldo disponible acumulado
@@ -820,6 +842,48 @@ class SQLiteRepository(IRepository):
         self.db.commit()
         self.db.refresh(db_tx)
         return db_tx
+
+    def settle_joint_transaction(self, tx_id: int) -> Optional[joint_model.JointTransaction]:
+        """Marca una transacción conjunta pendiente como liquidada/reembolsada."""
+        tx = self.get_joint_transaction(tx_id)
+        if not tx:
+            return None
+        tx.settlement_status = "SETTLED"
+        tx.settled_at = datetime.datetime.now(datetime.timezone.utc)
+        self.db.commit()
+        self.db.refresh(tx)
+        return tx
+
+    def settle_all_joint_transactions(self) -> List[joint_model.JointTransaction]:
+        """Marca todas las transacciones conjuntas pendientes como liquidadas/reembolsadas."""
+        unsettled = (
+            self.db.query(joint_model.JointTransaction)
+            .filter(
+                joint_model.JointTransaction.joint_account_id == 1,
+                joint_model.JointTransaction.settlement_status == "PENDING",
+            )
+            .all()
+        )
+        now = datetime.datetime.now(datetime.timezone.utc)
+        for tx in unsettled:
+            tx.settlement_status = "SETTLED"
+            tx.settled_at = now
+        self.db.commit()
+        for tx in unsettled:
+            self.db.refresh(tx)
+        return unsettled
+
+    def get_unsettled_joint_transactions(self) -> List[joint_model.JointTransaction]:
+        """Obtiene todas las transacciones con liquidación pendiente."""
+        return (
+            self.db.query(joint_model.JointTransaction)
+            .filter(
+                joint_model.JointTransaction.joint_account_id == 1,
+                joint_model.JointTransaction.settlement_status == "PENDING",
+            )
+            .order_by(joint_model.JointTransaction.date.desc())
+            .all()
+        )
 
     def delete_joint_transaction(self, tx_id: int) -> Optional[str]:
         """Elimina una transacción y retorna su UUID para emitir el tombstone de sincronización."""

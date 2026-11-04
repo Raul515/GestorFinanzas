@@ -54,6 +54,18 @@ def init_db():
             if j_tx_cols and "sinking_fund_deduction" not in j_tx_cols:
                 conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN sinking_fund_deduction REAL DEFAULT 0.0")
                 conn.commit()
+            if j_tx_cols and "paid_by" not in j_tx_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN paid_by TEXT DEFAULT 'COMMON'")
+                conn.commit()
+            if j_tx_cols and "settlement_mechanism" not in j_tx_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN settlement_mechanism TEXT DEFAULT 'COMMON_REIMBURSEMENT'")
+                conn.commit()
+            if j_tx_cols and "settlement_status" not in j_tx_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN settlement_status TEXT DEFAULT 'SETTLED'")
+                conn.commit()
+            if j_tx_cols and "settled_at" not in j_tx_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_transactions ADD COLUMN settled_at TIMESTAMP")
+                conn.commit()
 
             cursor_j_cb = conn.exec_driver_sql("PRAGMA table_info(joint_monthly_contributions)")
             j_cb_cols = [row[1] for row in cursor_j_cb.fetchall()]

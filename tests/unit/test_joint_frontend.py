@@ -351,3 +351,54 @@ def test_api_client_export_and_sync_detail_endpoints():
         assert res_retry is not None
         assert res_retry["retried_count"] == 1
 
+
+
+def test_api_client_settlement_endpoints():
+    """Valida los métodos de API client para liquidación y reembolso de gastos adelantados (Fase 7.3)."""
+    # 1. get_joint_settlement_summary
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "common_reimbursement": {
+                "owes_member_a": 120.0,
+                "owes_member_b": 0.0,
+                "total_common_debt": 120.0,
+            },
+            "direct_settlement": {
+                "member_b_owes_member_a": 50.0,
+                "member_a_owes_member_b": 0.0,
+                "net_debtor": "MEMBER_B",
+                "net_creditor": "MEMBER_A",
+                "net_amount": 50.0,
+            },
+            "unsettled_count": 2,
+            "unsettled_transactions": [],
+        }
+        mock_get.return_value = mock_resp
+
+        summary = api_client.get_joint_settlement_summary()
+        assert summary is not None
+        assert summary["unsettled_count"] == 2
+        assert summary["common_reimbursement"]["total_common_debt"] == 120.0
+        assert summary["direct_settlement"]["net_amount"] == 50.0
+
+    # 2. settle_joint_transaction
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": 10, "settlement_status": "SETTLED"}
+        mock_post.return_value = mock_resp
+
+        ok = api_client.settle_joint_transaction(10)
+        assert ok is True
+
+    # 3. settle_all_joint_transactions
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"id": 10, "settlement_status": "SETTLED"}, {"id": 11, "settlement_status": "SETTLED"}]
+        mock_post.return_value = mock_resp
+
+        ok_all = api_client.settle_all_joint_transactions()
+        assert ok_all is True

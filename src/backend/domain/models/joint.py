@@ -150,6 +150,10 @@ class JointTransaction(Base):
         ForeignKey("joint_sinking_funds.id", ondelete="SET NULL"), nullable=True
     )
     sinking_fund_deduction: Mapped[float] = mapped_column(Float, default=0.0)
+    paid_by: Mapped[str] = mapped_column(String(20), default="COMMON")
+    settlement_mechanism: Mapped[Optional[str]] = mapped_column(String(30), default="COMMON_REIMBURSEMENT", nullable=True)
+    settlement_status: Mapped[str] = mapped_column(String(20), default="SETTLED")
+    settled_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     created_by_profile: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
