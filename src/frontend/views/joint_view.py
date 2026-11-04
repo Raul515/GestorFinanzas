@@ -254,11 +254,12 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
         unsafe_allow_html=True,
     )
 
-    # 4 Pestañas Principales
-    tab_resumen, tab_meses, tab_huchas, tab_config = st.tabs([
+    # 5 Pestañas Principales
+    tab_resumen, tab_meses, tab_huchas, tab_buscador, tab_config = st.tabs([
         "📊 Resumen Anual del Hogar",
         "📅 12 Meses del Hogar",
         "🎯 Huchas de Amortización",
+        "🔍 Buscador de Gastos",
         "⚙️ Configuración del Hogar y Sincronización",
     ])
 
@@ -270,6 +271,9 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
 
     with tab_huchas:
         _render_tab_huchas(account=account)
+
+    with tab_buscador:
+        _render_tab_buscador_gastos(account=account, selected_year=selected_year)
 
     with tab_config:
         _render_tab_configuracion(account=account, sync_status=sync_status)
@@ -1092,7 +1096,232 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
 
 
 # =====================================================================
-# TAB 4: CONFIGURACIÓN Y SINCRONIZACIÓN
+# TAB 4: BUSCADOR GLOBAL Y FILTRO MULTICRITERIO DE GASTOS COMUNES
+# =====================================================================
+
+def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> None:
+    """
+    Buscador global y filtro multicriterio sobre el histórico de gastos comunes.
+    Permite filtrar por concepto, rango de fechas, subcategoría, imputación (corriente vs hucha),
+    pagador, estado de liquidación y rango de importes, mostrando KPIs agregados y exportación a CSV.
+    """
+    st.subheader("🔍 Buscador Global y Auditoría de Gastos Comunes")
+    st.caption("Localiza y filtra transacciones del hogar en cualquier rango de fechas o categoría.")
+
+    # 1. Obtener catálogos para los filtros
+    subcategories_all = api_client.get_joint_subcategories()
+    subcat_map = {s["name"]: s["id"] for s in subcategories_all}
+    subcat_names = ["Todas las subcategorías"] + sorted(list(subcat_map.keys()))
+
+    funds_all = api_client.get_joint_sinking_funds()
+    funds_dict = {f["id"]: f["name"] for f in funds_all}
+    subcat_dict = {s["id"]: s["name"] for s in subcategories_all}
+
+    member_a = account.get("member_a_name", "Miembro A")
+    member_b = account.get("member_b_name", "Miembro B")
+
+    # 2. Formulario de Filtros
+    with st.expander("🛠️ Parámetros de Búsqueda y Filtros", expanded=True):
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            query_val = st.text_input(
+                "Concepto / Descripción",
+                placeholder="Ej. Mercadona, Seguro, Farmacia, IKEA...",
+                key="joint_search_query",
+            )
+        with col2:
+            start_date_val = st.date_input(
+                "Fecha Desde",
+                value=date(selected_year, 1, 1),
+                key="joint_search_start_date",
+            )
+        with col3:
+            end_date_val = st.date_input(
+                "Fecha Hasta",
+                value=date(selected_year, 12, 31),
+                key="joint_search_end_date",
+            )
+
+        col4, col5, col6, col7 = st.columns(4)
+        with col4:
+            selected_subcat_name = st.selectbox(
+                "Subcategoría",
+                options=subcat_names,
+                index=0,
+                key="joint_search_subcat",
+            )
+        with col5:
+            imputation_opts = ["Todas", "Solo Gastos Corrientes", "Solo Imputados a Hucha"]
+            selected_imputation = st.selectbox(
+                "Tipo de Imputación",
+                options=imputation_opts,
+                index=0,
+                key="joint_search_imputation",
+            )
+        with col6:
+            payer_opts = ["Todos", "💳 Fondo Común", f"👤 {member_a}", f"👤 {member_b}"]
+            selected_payer = st.selectbox(
+                "Pagado Por",
+                options=payer_opts,
+                index=0,
+                key="joint_search_payer",
+            )
+        with col7:
+            settle_opts = ["Todos", "🟢 Directos / Liquidados", "🟡 Pendientes de Reembolso"]
+            selected_settle = st.selectbox(
+                "Estado de Reembolso",
+                options=settle_opts,
+                index=0,
+                key="joint_search_settlement",
+            )
+
+        col8, col9, col10 = st.columns([1, 1, 2])
+        with col8:
+            min_amt_val = st.number_input(
+                "Importe Mínimo (€)",
+                min_value=0.0,
+                value=0.0,
+                step=10.0,
+                key="joint_search_min_amt",
+            )
+        with col9:
+            max_amt_val = st.number_input(
+                "Importe Máximo (€, 0 = sin límite)",
+                min_value=0.0,
+                value=0.0,
+                step=10.0,
+                key="joint_search_max_amt",
+            )
+        with col10:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            st.button("🔎 Buscar Transacciones", key="btn_apply_joint_search", use_container_width=True)
+
+    # 3. Mapeo de parámetros para la consulta
+    subcat_id = subcat_map.get(selected_subcat_name) if selected_subcat_name != "Todas las subcategorías" else None
+
+    is_sinking_fund: Optional[bool] = None
+    if selected_imputation == "Solo Gastos Corrientes":
+        is_sinking_fund = False
+    elif selected_imputation == "Solo Imputados a Hucha":
+        is_sinking_fund = True
+
+    paid_by_param: Optional[str] = None
+    if selected_payer == "💳 Fondo Común":
+        paid_by_param = "COMMON"
+    elif selected_payer == f"👤 {member_a}":
+        paid_by_param = "MEMBER_A"
+    elif selected_payer == f"👤 {member_b}":
+        paid_by_param = "MEMBER_B"
+
+    settle_param: Optional[str] = None
+    if selected_settle == "🟢 Directos / Liquidados":
+        settle_param = "SETTLED"
+    elif selected_settle == "🟡 Pendientes de Reembolso":
+        settle_param = "PENDING"
+
+    min_amt = float(min_amt_val) if min_amt_val > 0 else None
+    max_amt = float(max_amt_val) if max_amt_val > 0 else None
+
+    # 4. Ejecución de la búsqueda
+    start_str = start_date_val.isoformat() if start_date_val else None
+    end_str = end_date_val.isoformat() if end_date_val else None
+
+    results = api_client.search_joint_transactions(
+        start_date=start_str,
+        end_date=end_str,
+        query=query_val.strip() if query_val else None,
+        joint_subcategory_id=subcat_id,
+        paid_by=paid_by_param,
+        settlement_status=settle_param,
+        is_sinking_fund=is_sinking_fund,
+        min_amount=min_amt,
+        max_amount=max_amt,
+    )
+
+    st.markdown("---")
+
+    # 5. Visualización de Resultados
+    if not results:
+        st.info("ℹ️ No se han encontrado gastos que coincidan con los filtros seleccionados.")
+        return
+
+    # Métricas agregadas
+    total_spent = sum(float(tx.get("amount", 0.0)) for tx in results)
+    count_tx = len(results)
+    avg_ticket = total_spent / count_tx if count_tx > 0 else 0.0
+    common_spent = sum(float(tx.get("amount", 0.0)) for tx in results if tx.get("paid_by") == "COMMON")
+    member_a_spent = sum(float(tx.get("amount", 0.0)) for tx in results if tx.get("paid_by") == "MEMBER_A")
+    member_b_spent = sum(float(tx.get("amount", 0.0)) for tx in results if tx.get("paid_by") == "MEMBER_B")
+
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("Total Gastado Encontrado", f"{total_spent:,.2f} €")
+    kpi2.metric("Nº de Transacciones", f"{count_tx}")
+    kpi3.metric("Ticket Medio", f"{avg_ticket:,.2f} €")
+    kpi4.metric(
+        "Desglose por Pagador",
+        f"Común: {common_spent:,.0f}€ | {member_a}: {member_a_spent:,.0f}€ | {member_b}: {member_b_spent:,.0f}€",
+    )
+
+    # Construir tabla
+    table_rows = []
+    for tx in results:
+        subcat_lbl = subcat_dict.get(tx.get("joint_subcategory_id"), "—")
+        fund_lbl = funds_dict.get(tx.get("joint_sinking_fund_id"), "Gasto Corriente")
+        if tx.get("joint_sinking_fund_id"):
+            fund_lbl = f"🎯 Hucha: {fund_lbl}"
+
+        paid_by_val = tx.get("paid_by") or "COMMON"
+        if paid_by_val == "MEMBER_A":
+            paid_lbl = f"👤 {member_a}"
+        elif paid_by_val == "MEMBER_B":
+            paid_lbl = f"👤 {member_b}"
+        else:
+            paid_lbl = "💳 Cuenta Común"
+
+        status_val = tx.get("settlement_status")
+        if paid_by_val == "COMMON":
+            status_lbl = "🟢 Directo"
+        elif status_val == "PENDING":
+            mech_val = tx.get("settlement_mechanism")
+            mech_short = "Bizum" if mech_val == "DIRECT_MEMBER_SETTLEMENT" else "Cta. Común"
+            status_lbl = f"🟡 Pendiente ({mech_short})"
+        else:
+            status_lbl = "🟢 Reembolsado"
+
+        table_rows.append({
+            "Fecha": tx.get("date"),
+            "Concepto / Descripción": tx.get("description"),
+            "Subcategoría": subcat_lbl,
+            "Imputación": fund_lbl,
+            "Pagado Por": paid_lbl,
+            "Estado Reembolso": status_lbl,
+            "Importe (€)": f"{float(tx.get('amount', 0.0)):,.2f} €",
+            "Importe_Num": float(tx.get("amount", 0.0)),
+        })
+
+    df_results = pd.DataFrame(table_rows)
+    display_cols = ["Fecha", "Concepto / Descripción", "Subcategoría", "Imputación", "Pagado Por", "Estado Reembolso", "Importe (€)"]
+    st.dataframe(df_results[display_cols], use_container_width=True, hide_index=True)
+
+    # Descarga a CSV
+    csv_export_cols = ["Fecha", "Concepto / Descripción", "Subcategoría", "Imputación", "Pagado Por", "Estado Reembolso", "Importe_Num"]
+    df_export = df_results[csv_export_cols].rename(columns={"Importe_Num": "Importe"})
+    csv_bytes = df_export.to_csv(index=False).encode("utf-8-sig")
+
+    start_export_str = start_date_val.strftime("%Y%m%d") if start_date_val else "inicio"
+    end_export_str = end_date_val.strftime("%Y%m%d") if end_date_val else "fin"
+    st.download_button(
+        label="📥 Descargar Resultados en CSV (.csv)",
+        data=csv_bytes,
+        file_name=f"gastos_comunes_{start_export_str}_{end_export_str}.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key="btn_download_search_csv",
+    )
+
+
+# =====================================================================
+# TAB 5: CONFIGURACIÓN Y SINCRONIZACIÓN
 # =====================================================================
 
 def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, Any]) -> None:
@@ -1289,3 +1518,139 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                     st.rerun()
                 else:
                     st.error("❌ Error al purgar la cuenta conjunta en el servidor.")
+
+
+# =====================================================================
+# BANNER ASISTIDO DE APORTACIONES CRUZADAS EN PERFIL PERSONAL (FASE 7.5)
+# =====================================================================
+
+def _render_personal_assisted_contribution_banner(year: int) -> None:
+    """Monitor de Aportaciones Cruzadas en el Perfil Personal (Fase 7.5).
+
+    Evalúa el estado de las aportaciones del mes actual para ambos miembros del hogar:
+    - Si ambos han cumplido su cuota: auto-ocultación limpia (no muestra banner).
+    - Si el usuario local está pendiente: banner con input y botón en 1-clic para asentar su parte,
+      con cabecera del estado cruzado de ambos miembros.
+    - Si el usuario local ya aportó pero la pareja está pendiente: banner informativo compacto de una sola línea.
+    """
+    today = date.today()
+    curr_month_str = f"{today.year}-{today.month:02d}"
+    curr_month_name = MESES_ES[today.month - 1] if 1 <= today.month <= 12 else str(today.month)
+
+    try:
+        account = api_client.get_joint_account()
+        if not account:
+            return
+
+        loc_profile = account.get("local_profile", "MEMBER_A")
+        remote_profile = "MEMBER_B" if loc_profile == "MEMBER_A" else "MEMBER_A"
+
+        local_name = (
+            account.get("member_a_name", "Miembro A")
+            if loc_profile == "MEMBER_A"
+            else account.get("member_b_name", "Miembro B")
+        )
+        remote_name = (
+            account.get("member_b_name", "Miembro B")
+            if loc_profile == "MEMBER_A"
+            else account.get("member_a_name", "Miembro A")
+        )
+
+        contributions = api_client.get_joint_contributions(year=today.year, month=curr_month_str)
+
+        # Calcular importes ya aportados en el mes
+        contrib_local = sum(
+            float(c.get("amount", 0.0)) for c in contributions if c.get("contributor_profile") == loc_profile
+        )
+        contrib_remote = sum(
+            float(c.get("amount", 0.0)) for c in contributions if c.get("contributor_profile") == remote_profile
+        )
+
+        # Obtener cuotas objetivo sugeridas según estrategia
+        calc = api_client.get_joint_contribution_calculation()
+        if calc:
+            target_local = (
+                float(calc.get("member_a_contribution", 500.0))
+                if loc_profile == "MEMBER_A"
+                else float(calc.get("member_b_contribution", 500.0))
+            )
+            target_remote = (
+                float(calc.get("member_b_contribution", 500.0))
+                if loc_profile == "MEMBER_A"
+                else float(calc.get("member_a_contribution", 500.0))
+            )
+        else:
+            ref_inc_loc = (
+                float(account.get("member_a_reference_income", 2000.0))
+                if loc_profile == "MEMBER_A"
+                else float(account.get("member_b_reference_income", 2000.0))
+            )
+            ref_inc_rem = (
+                float(account.get("member_b_reference_income", 2000.0))
+                if loc_profile == "MEMBER_A"
+                else float(account.get("member_a_reference_income", 2000.0))
+            )
+            target_local = round(ref_inc_loc * 0.4, 2) if ref_inc_loc > 0 else 500.0
+            target_remote = round(ref_inc_rem * 0.4, 2) if ref_inc_rem > 0 else 500.0
+
+        is_local_complete = (contrib_local >= target_local and target_local > 0) or (contrib_local > 0 and target_local <= 0)
+        is_remote_complete = (contrib_remote >= target_remote and target_remote > 0) or (contrib_remote > 0 and target_remote <= 0)
+
+        # CASO 1: Ambos miembros han completado su aportación -> Auto-ocultación limpia
+        if is_local_complete and is_remote_complete:
+            return
+
+        # Texto del estado de la pareja
+        if is_remote_complete:
+            remote_status_txt = f"✅ {contrib_remote:,.2f} € aportados"
+        else:
+            rem_remote = max(0.0, target_remote - contrib_remote)
+            remote_status_txt = f"⏳ {rem_remote:,.2f} € pendientes"
+
+        # CASO 2: El usuario local ya completó su cuota pero la pareja sigue pendiente
+        if is_local_complete:
+            local_status_txt = f"✅ {contrib_local:,.2f} € aportados"
+            st.info(
+                f"ℹ️ **Economía del Hogar ({curr_month_name} {today.year})**: "
+                f"Tú ({local_name}: {local_status_txt}) | "
+                f"Pareja ({remote_name}: {remote_status_txt})."
+            )
+            return
+
+        # CASO 3: El usuario local tiene saldo pendiente -> Banner con formulario de asiento
+        rem_local = max(0.0, target_local - contrib_local)
+        local_status_txt = f"⏳ {rem_local:,.2f} € pendientes"
+        default_input = rem_local if rem_local > 0 else target_local
+
+        st.info(
+            f"🔔 **Aportación al Hogar ({curr_month_name} {today.year})**: "
+            f"Tú ({local_name}: {local_status_txt}) | "
+            f"Pareja ({remote_name}: {remote_status_txt})."
+        )
+
+        col_b1, col_b2 = st.columns([3, 1])
+        with col_b1:
+            contrib_amount = st.number_input(
+                f"Importe aportación de {local_name} (€)",
+                min_value=1.0,
+                value=max(1.0, float(default_input)),
+                step=25.0,
+                key="assisted_contrib_input",
+            )
+        with col_b2:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
+                payload = {
+                    "month": curr_month_str,
+                    "amount": float(contrib_amount),
+                    "contributor_profile": loc_profile,
+                    "contribution_date": today.isoformat(),
+                }
+                res = api_client.asentar_aportacion_asistida(payload)
+                if res:
+                    st.success("✅ Aportación transferida y registrada en tu cuenta personal y conjunta.")
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo asentar la aportación.")
+    except Exception as e:
+        logger.warning("No se pudo comprobar la aportación asistida: %s", e)

@@ -28,7 +28,7 @@ try:
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
-    from frontend.views.joint_view import render_joint_view
+    from frontend.views.joint_view import render_joint_view, _render_personal_assisted_contribution_banner
     from frontend.views.backup_view import render_backup_view
     from frontend.views.updater_view import render_updater_view
 except ImportError:
@@ -41,7 +41,7 @@ except ImportError:
         render_monthly_guidelines_expander,
         render_annual_guidelines_expander,
     )
-    from views.joint_view import render_joint_view  # type: ignore
+    from views.joint_view import render_joint_view, _render_personal_assisted_contribution_banner  # type: ignore
     from views.backup_view import render_backup_view  # type: ignore
     from views.updater_view import render_updater_view  # type: ignore
 
@@ -72,143 +72,6 @@ MESES_NOMBRES = [
     "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ]
-
-
-def _render_personal_assisted_contribution_banner(year: int) -> None:
-    """Monitor de Aportaciones Cruzadas en el Perfil Personal (Fase 7.5).
-
-    Evalúa el estado de las aportaciones del mes actual para ambos miembros del hogar:
-    - Si ambos han cumplido su cuota: auto-ocultación limpia (no muestra banner).
-    - Si el usuario local está pendiente: banner con input y botón en 1-clic para asentar su parte,
-      con cabecera del estado cruzado de ambos miembros.
-    - Si el usuario local ya aportó pero la pareja está pendiente: banner informativo compacto de una sola línea.
-    """
-    today = date.today()
-    curr_month_str = f"{today.year}-{today.month:02d}"
-    curr_month_name = MESES_NOMBRES[today.month - 1] if 1 <= today.month <= 12 else str(today.month)
-
-    try:
-        account = api_client.get_joint_account()
-        if not account:
-            return
-
-        loc_profile = account.get("local_profile", "MEMBER_A")
-        remote_profile = "MEMBER_B" if loc_profile == "MEMBER_A" else "MEMBER_A"
-
-        local_name = (
-            account.get("member_a_name", "Miembro A")
-            if loc_profile == "MEMBER_A"
-            else account.get("member_b_name", "Miembro B")
-        )
-        remote_name = (
-            account.get("member_b_name", "Miembro B")
-            if loc_profile == "MEMBER_A"
-            else account.get("member_a_name", "Miembro A")
-        )
-
-        contributions = api_client.get_joint_contributions(year=today.year, month=curr_month_str)
-
-        # Calcular importes ya aportados en el mes
-        contrib_local = sum(
-            float(c.get("amount", 0.0)) for c in contributions if c.get("contributor_profile") == loc_profile
-        )
-        contrib_remote = sum(
-            float(c.get("amount", 0.0)) for c in contributions if c.get("contributor_profile") == remote_profile
-        )
-
-        # Obtener cuotas objetivo sugeridas según estrategia
-        calc = api_client.get_joint_contribution_calculation()
-        if calc:
-            target_local = (
-                float(calc.get("member_a_contribution", 500.0))
-                if loc_profile == "MEMBER_A"
-                else float(calc.get("member_b_contribution", 500.0))
-            )
-            target_remote = (
-                float(calc.get("member_b_contribution", 500.0))
-                if loc_profile == "MEMBER_A"
-                else float(calc.get("member_a_contribution", 500.0))
-            )
-        else:
-            ref_inc_loc = (
-                float(account.get("member_a_reference_income", 2000.0))
-                if loc_profile == "MEMBER_A"
-                else float(account.get("member_b_reference_income", 2000.0))
-            )
-            ref_inc_rem = (
-                float(account.get("member_b_reference_income", 2000.0))
-                if loc_profile == "MEMBER_A"
-                else float(account.get("member_a_reference_income", 2000.0))
-            )
-            target_local = round(ref_inc_loc * 0.4, 2) if ref_inc_loc > 0 else 500.0
-            target_remote = round(ref_inc_rem * 0.4, 2) if ref_inc_rem > 0 else 500.0
-
-        is_local_complete = (contrib_local >= target_local and target_local > 0) or (contrib_local > 0 and target_local <= 0)
-        is_remote_complete = (contrib_remote >= target_remote and target_remote > 0) or (contrib_remote > 0 and target_remote <= 0)
-
-        # CASO 1: Ambos miembros han completado su aportación -> Auto-ocultación limpia
-        if is_local_complete and is_remote_complete:
-            return
-
-        # Texto del estado de la pareja
-        if is_remote_complete:
-            remote_status_txt = f"✅ {contrib_remote:,.2f} € aportados"
-        elif contrib_remote > 0:
-            diff_rem = max(0.0, target_remote - contrib_remote)
-            remote_status_txt = f"🟡 {contrib_remote:,.2f} € aportados (faltan {diff_rem:,.2f} €)"
-        else:
-            remote_status_txt = f"⏳ {target_remote:,.2f} € pendientes"
-
-        # CASO 2: Usuario local ya aportó, pero la pareja sigue pendiente -> Banner informativo compacto
-        if is_local_complete and not is_remote_complete:
-            st.info(
-                f"ℹ️ **Economía del Hogar ({curr_month_name} {today.year})**: "
-                f"Tú ({local_name}: ✅ {contrib_local:,.2f} € aportados) | "
-                f"Pareja ({remote_name}: {remote_status_txt})."
-            )
-            return
-
-        # CASO 3: Usuario local aún tiene pendiente su aportación
-        rem_local = max(0.0, target_local - contrib_local)
-        default_input = rem_local if rem_local > 0 else target_local
-
-        if contrib_local > 0:
-            local_status_txt = f"🟡 {contrib_local:,.2f} € aportados (faltan {rem_local:,.2f} €)"
-        else:
-            local_status_txt = f"⏳ {target_local:,.2f} € pendientes"
-
-        st.info(
-            f"🔔 **Aportación al Hogar ({curr_month_name} {today.year})**: "
-            f"Tú ({local_name}: {local_status_txt}) | "
-            f"Pareja ({remote_name}: {remote_status_txt})."
-        )
-
-        col_b1, col_b2 = st.columns([3, 1])
-        with col_b1:
-            contrib_amount = st.number_input(
-                f"Importe aportación de {local_name} (€)",
-                min_value=1.0,
-                value=max(1.0, float(default_input)),
-                step=25.0,
-                key="assisted_contrib_input",
-            )
-        with col_b2:
-            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
-                payload = {
-                    "month": curr_month_str,
-                    "amount": float(contrib_amount),
-                    "contributor_profile": loc_profile,
-                    "contribution_date": today.isoformat(),
-                }
-                res = api_client.asentar_aportacion_asistida(payload)
-                if res:
-                    st.success("✅ Aportación transferida y registrada en tu cuenta personal y conjunta.")
-                    st.rerun()
-                else:
-                    st.error("❌ No se pudo asentar la aportación.")
-    except Exception as e:
-        logger.warning("No se pudo comprobar la aportación asistida: %s", e)
 
 
 if context_mode == "👥 Economía del Hogar (Cuenta Conjunta)":

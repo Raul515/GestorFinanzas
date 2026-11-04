@@ -399,14 +399,52 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 
 ---
 
+### Fase 7.6: Buscador Global y Filtro Multicriterio de Gastos Comunes
+
+- **Objetivo**: Proporcionar una herramienta de búsqueda y auditoría analítica sobre todo el histórico de transacciones del hogar sin tener que navegar mes a mes.
+- **Alcance Funcional y Arquitectura**:
+  1. **Capa Backend (Consultas Multicriterio en `SQLiteRepository`)**:
+     - Método `search_joint_transactions(start_date, end_date, query, subcategory_id, paid_by, settlement_status, is_sinking_fund, min_amount, max_amount) -> list[JointTransaction]` con filtros dinámicos combinados (`and_`), insensible a mayúsculas/minúsculas en concepto y notas.
+  2. **Capa API REST (`src/backend/api/routers/joint.py`)**:
+     - Endpoint `GET /joint/transactions/search` con parámetros query opcionales, retornando `list[JointTransactionResponse]`.
+  3. **Capa Cliente Frontend (`src/frontend/api_client.py`)**:
+     - Método `search_joint_transactions(...)` con manejo seguro de parámetros de red y logging estructurado.
+  4. **Capa de Presentación en Streamlit (`src/frontend/views/joint_view.py`)**:
+     - Nueva 5ª pestaña independiente: `🔍 Buscador de Gastos`.
+     - Formulario con filtros avanzados:
+       - Concepto / Texto libre.
+       - Rango de fechas (desde / hasta, por defecto el año corriente pero ampliable a todo el histórico).
+       - Desplegable de Subcategoría (`Todas` o subcategoría conjunta específica).
+       - Imputación (`Todos`, `Solo gastos corrientes`, `Solo imputados a Hucha`).
+       - Pagador (`Todos`, `Fondo Común`, `MEMBER_A`, `MEMBER_B`).
+       - Estado de Liquidación (`Todos`, `Pendiente de Reembolso`, `Liquidado / Directo`).
+       - Rango de importes (`Mínimo €` y `Máximo €`).
+     - Tarjetas métricas KPI de agregación rápida sobre los resultados encontrados:
+       - Total gastado en el filtro (€).
+       - Número de operaciones encontradas.
+       - Ticket medio por operación (€).
+       - Desglose de gasto por pagador (Fondo Común vs David vs Raquel).
+     - Tabla interactiva con formato visual limpio y botón para exportar resultados filtrados a CSV.
+- **Archivos a crear/modificar**:
+  - `src/backend/database/sqlite_crud.py` [MODIFICADO: Método `search_joint_transactions()`].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoint `GET /joint/transactions/search`].
+  - `src/frontend/api_client.py` [MODIFICADO: Método `search_joint_transactions()`].
+  - `src/frontend/views/joint_view.py` [MODIFICADO: 5ª pestaña y función `_render_tab_buscador_gastos()`].
+  - `tests/unit/test_joint_accounting_service.py` [MODIFICADO: Pruebas unitarias del buscador].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Prueba de integración de búsqueda].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas de cliente y buscador frontend].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_accounting_service.py tests/integration/test_joint_api.py tests/unit/test_joint_frontend.py
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando, filtrado multicriterio instantáneo sobre el histórico, cálculo fiel de métricas de agregación y exportación a CSV funcional.
+
+---
+
 ### Registro de Nuevas Mejoras Futuras Identificadas (Ordenadas por Prioridad e Impacto)
 
-Tras la formalización de la Fase 7.5, se retienen las siguientes 2 posibles ampliaciones futuras:
+Tras la formalización de la Fase 7.6, se retiene la siguiente mejora futura:
 
-1. **Prioridad 1 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
-   - *Problema en la vida real*: Buscar un gasto específico (ej. "IKEA", "Seguro Hogar", "Veterinario") a lo largo del año requiere revisar los 12 meses uno a uno o inspeccionar la hoja de cálculo exportada.
-   - *Solución*: Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
-
-2. **Prioridad 2 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
+1. **Prioridad 1 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
    - *Problema en la vida real*: El saldo de tesorería de la app es puramente contable (`aportaciones - gastos`). Pequeños descuadres bancarios (comisiones de mantenimiento de 0,50 €, intereses a favor de céntimos o redondeos) hacen que el saldo bancario real no coincida al céntimo.
    - *Solución*: Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.

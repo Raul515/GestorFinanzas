@@ -717,3 +717,93 @@ def test_joint_sinking_fund_transfer_api_flow(client: TestClient):
         },
     )
     assert fail_resp.status_code == 400
+
+
+def test_joint_transactions_search_endpoint(client: TestClient):
+    """Valida el endpoint de búsqueda global y filtrado multicriterio GET /joint/transactions/search (Fase 7.6)."""
+    # 1. Configurar cuenta conjunta
+    setup_payload = {
+        "household_name": "Casa Búsqueda API",
+        "member_a_name": "Carlos",
+        "member_b_name": "Elena",
+        "cohabitation_stage": "COHABITATION",
+        "contribution_strategy": "INCOME_PERCENTAGE",
+        "split_mode": "EQUAL_50_50",
+        "member_a_reference_income": 2200.0,
+        "member_b_reference_income": 1800.0,
+        "local_profile": "MEMBER_A",
+    }
+    client.post("/joint/setup", json=setup_payload)
+
+    # 2. Registrar subcategoría y transacciones
+    subcats = client.get("/joint/subcategories").json()
+    subcat_id = subcats[0]["id"] if subcats else None
+
+    # Transacción 1: Compra supermercado común
+    tx1_resp = client.post(
+        "/joint/transactions",
+        json={
+            "date": "2026-03-10",
+            "amount": 85.50,
+            "description": "Compra Carrefour Semanal",
+            "joint_subcategory_id": subcat_id,
+            "created_by_profile": "MEMBER_A",
+            "paid_by": "COMMON",
+            "settlement_status": "SETTLED",
+        },
+    )
+    assert tx1_resp.status_code == 201
+
+    # Transacción 2: Farmacia adelantada por MEMBER_A
+    tx2_resp = client.post(
+        "/joint/transactions",
+        json={
+            "date": "2026-04-12",
+            "amount": 24.00,
+            "description": "Farmacia jarabe Elena",
+            "joint_subcategory_id": subcat_id,
+            "created_by_profile": "MEMBER_A",
+            "paid_by": "MEMBER_A",
+            "settlement_mechanism": "DIRECT_MEMBER_SETTLEMENT",
+            "settlement_status": "PENDING",
+        },
+    )
+    assert tx2_resp.status_code == 201
+
+    # 3. Búsqueda por texto (query)
+    resp_text = client.get("/joint/transactions/search", params={"query": "carrefour"})
+    assert resp_text.status_code == 200
+    res_text = resp_text.json()
+    assert len(res_text) == 1
+    assert "Carrefour" in res_text[0]["description"]
+
+    # 4. Filtrado por pagador y estado
+    resp_payer = client.get(
+        "/joint/transactions/search",
+        params={"paid_by": "MEMBER_A", "settlement_status": "PENDING"},
+    )
+    assert resp_payer.status_code == 200
+    res_payer = resp_payer.json()
+    assert len(res_payer) == 1
+    assert res_payer[0]["paid_by"] == "MEMBER_A"
+    assert res_payer[0]["amount"] == 24.00
+
+    # 5. Filtrado por rango de fechas
+    resp_dates = client.get(
+        "/joint/transactions/search",
+        params={"start_date": "2026-04-01", "end_date": "2026-04-30"},
+    )
+    assert resp_dates.status_code == 200
+    res_dates = resp_dates.json()
+    assert len(res_dates) == 1
+    assert res_dates[0]["description"] == "Farmacia jarabe Elena"
+
+    # 6. Filtrado por rango de importes
+    resp_amt = client.get(
+        "/joint/transactions/search",
+        params={"min_amount": 50.0, "max_amount": 100.0},
+    )
+    assert resp_amt.status_code == 200
+    res_amt = resp_amt.json()
+    assert len(res_amt) == 1
+    assert res_amt[0]["amount"] == 85.50

@@ -456,7 +456,7 @@ def test_api_client_sinking_fund_transfer_endpoints():
 
 def test_cross_contribution_monitor_both_completed():
     """Escenario 1: Ambos han cubierto su cuota mensual -> Auto-ocultación total (sin banner)."""
-    from frontend import app
+    from frontend.views import joint_view
 
     account = {
         "local_profile": "MEMBER_A",
@@ -469,17 +469,17 @@ def test_cross_contribution_monitor_both_completed():
         {"contributor_profile": "MEMBER_B", "amount": 400.0},
     ]
 
-    with patch.object(app.api_client, "get_joint_account", return_value=account), \
-         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
-         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+    with patch.object(joint_view.api_client, "get_joint_account", return_value=account), \
+         patch.object(joint_view.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(joint_view.api_client, "get_joint_contributions", return_value=contributions), \
          patch("streamlit.info") as mock_info:
-        app._render_personal_assisted_contribution_banner(2026)
+        joint_view._render_personal_assisted_contribution_banner(2026)
         mock_info.assert_not_called()
 
 
 def test_cross_contribution_monitor_local_completed_remote_pending():
     """Escenario 2: Usuario local ya aportó, pareja pendiente -> Banner informativo compacto de 1 línea."""
-    from frontend import app
+    from frontend.views import joint_view
 
     account = {
         "local_profile": "MEMBER_A",
@@ -491,12 +491,12 @@ def test_cross_contribution_monitor_local_completed_remote_pending():
         {"contributor_profile": "MEMBER_A", "amount": 600.0},
     ]
 
-    with patch.object(app.api_client, "get_joint_account", return_value=account), \
-         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
-         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+    with patch.object(joint_view.api_client, "get_joint_account", return_value=account), \
+         patch.object(joint_view.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(joint_view.api_client, "get_joint_contributions", return_value=contributions), \
          patch("streamlit.info") as mock_info, \
          patch("streamlit.button") as mock_button:
-        app._render_personal_assisted_contribution_banner(2026)
+        joint_view._render_personal_assisted_contribution_banner(2026)
         mock_info.assert_called_once()
         info_text = mock_info.call_args[0][0]
         assert "David: ✅ 600.00 € aportados" in info_text
@@ -507,7 +507,7 @@ def test_cross_contribution_monitor_local_completed_remote_pending():
 
 def test_cross_contribution_monitor_both_pending():
     """Escenario 3: Ambos miembros pendientes -> Banner de acción local con estado cruzado en cabecera."""
-    from frontend import app
+    from frontend.views import joint_view
 
     account = {
         "local_profile": "MEMBER_A",
@@ -517,14 +517,14 @@ def test_cross_contribution_monitor_both_pending():
     calc = {"member_a_contribution": 600.0, "member_b_contribution": 400.0}
     contributions = []
 
-    with patch.object(app.api_client, "get_joint_account", return_value=account), \
-         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
-         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+    with patch.object(joint_view.api_client, "get_joint_account", return_value=account), \
+         patch.object(joint_view.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(joint_view.api_client, "get_joint_contributions", return_value=contributions), \
          patch("streamlit.info") as mock_info, \
          patch("streamlit.columns", return_value=(MagicMock(), MagicMock())), \
          patch("streamlit.number_input", return_value=600.0), \
          patch("streamlit.button", return_value=False) as mock_button:
-        app._render_personal_assisted_contribution_banner(2026)
+        joint_view._render_personal_assisted_contribution_banner(2026)
         mock_info.assert_called_once()
         info_text = mock_info.call_args[0][0]
         assert "David: ⏳ 600.00 € pendientes" in info_text
@@ -534,7 +534,7 @@ def test_cross_contribution_monitor_both_pending():
 
 def test_cross_contribution_monitor_local_pending_remote_completed():
     """Escenario 4: Pareja ya aportó, usuario local pendiente -> Banner de acción local con pareja en verde."""
-    from frontend import app
+    from frontend.views import joint_view
 
     account = {
         "local_profile": "MEMBER_A",
@@ -546,16 +546,118 @@ def test_cross_contribution_monitor_local_pending_remote_completed():
         {"contributor_profile": "MEMBER_B", "amount": 400.0},
     ]
 
-    with patch.object(app.api_client, "get_joint_account", return_value=account), \
-         patch.object(app.api_client, "get_joint_contribution_calculation", return_value=calc), \
-         patch.object(app.api_client, "get_joint_contributions", return_value=contributions), \
+    with patch.object(joint_view.api_client, "get_joint_account", return_value=account), \
+         patch.object(joint_view.api_client, "get_joint_contribution_calculation", return_value=calc), \
+         patch.object(joint_view.api_client, "get_joint_contributions", return_value=contributions), \
          patch("streamlit.info") as mock_info, \
          patch("streamlit.columns", return_value=(MagicMock(), MagicMock())), \
          patch("streamlit.number_input", return_value=600.0), \
          patch("streamlit.button", return_value=False) as mock_button:
-        app._render_personal_assisted_contribution_banner(2026)
+        joint_view._render_personal_assisted_contribution_banner(2026)
         mock_info.assert_called_once()
         info_text = mock_info.call_args[0][0]
         assert "David: ⏳ 600.00 € pendientes" in info_text
         assert "Raquel: ✅ 400.00 € aportados" in info_text
         mock_button.assert_called_once()
+
+
+# =====================================================================
+# 4. PRUEBAS DEL BUSCADOR GLOBAL Y FILTRO MULTICRITERIO (FASE 7.6)
+# =====================================================================
+
+def test_api_client_search_joint_transactions():
+    """Valida la llamada del cliente frontend para el buscador global multicriterio."""
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [
+            {"id": 1, "description": "Compra Mercadona", "amount": 100.0, "paid_by": "COMMON"}
+        ]
+        mock_get.return_value = mock_resp
+
+        results = api_client.search_joint_transactions(
+            query="Mercadona",
+            start_date="2026-01-01",
+            end_date="2026-12-31",
+            paid_by="COMMON",
+            settlement_status="SETTLED",
+            min_amount=50.0,
+            max_amount=150.0,
+        )
+
+        assert len(results) == 1
+        assert results[0]["description"] == "Compra Mercadona"
+        mock_get.assert_called_once()
+        args, kwargs = mock_get.call_args
+        params = kwargs.get("params", {})
+        assert params["query"] == "Mercadona"
+        assert params["start_date"] == "2026-01-01"
+        assert params["end_date"] == "2026-12-31"
+        assert params["paid_by"] == "COMMON"
+        assert params["settlement_status"] == "SETTLED"
+        assert params["min_amount"] == 50.0
+        assert params["max_amount"] == 150.0
+
+    # Error de red
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = requests.exceptions.ConnectionError("Refused")
+        assert api_client.search_joint_transactions() == []
+
+
+def test_render_tab_buscador_gastos_empty():
+    """Verifica que el buscador muestra info amigable cuando no hay resultados."""
+    from frontend.views import joint_view
+
+    account = {"member_a_name": "David", "member_b_name": "Raquel"}
+
+    with patch.object(joint_view.api_client, "get_joint_subcategories", return_value=[]), \
+         patch.object(joint_view.api_client, "get_joint_sinking_funds", return_value=[]), \
+         patch.object(joint_view.api_client, "search_joint_transactions", return_value=[]), \
+         patch("streamlit.info") as mock_info, \
+         patch("streamlit.expander", return_value=MagicMock()), \
+         patch("streamlit.columns", side_effect=lambda spec: tuple(MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec)))):
+        joint_view._render_tab_buscador_gastos(account=account, selected_year=2026)
+        mock_info.assert_called_once()
+        assert "No se han encontrado gastos" in mock_info.call_args[0][0]
+
+
+def test_render_tab_buscador_gastos_with_results():
+    """Verifica que el buscador calcula KPIs, dibuja la tabla y ofrece descarga CSV con resultados."""
+    from frontend.views import joint_view
+
+    account = {"member_a_name": "David", "member_b_name": "Raquel"}
+    mock_txs = [
+        {
+            "id": 1,
+            "date": "2026-03-15",
+            "description": "Compra Semanal",
+            "amount": 100.0,
+            "joint_subcategory_id": None,
+            "joint_sinking_fund_id": None,
+            "paid_by": "COMMON",
+            "settlement_status": "SETTLED",
+        },
+        {
+            "id": 2,
+            "date": "2026-04-10",
+            "description": "Farmacia",
+            "amount": 40.0,
+            "joint_subcategory_id": None,
+            "joint_sinking_fund_id": None,
+            "paid_by": "MEMBER_A",
+            "settlement_status": "PENDING",
+            "settlement_mechanism": "DIRECT_MEMBER_SETTLEMENT",
+        },
+    ]
+
+    with patch.object(joint_view.api_client, "get_joint_subcategories", return_value=[]), \
+         patch.object(joint_view.api_client, "get_joint_sinking_funds", return_value=[]), \
+         patch.object(joint_view.api_client, "search_joint_transactions", return_value=mock_txs), \
+         patch("streamlit.dataframe") as mock_df, \
+         patch("streamlit.download_button") as mock_dl, \
+         patch("streamlit.expander", return_value=MagicMock()), \
+         patch("streamlit.columns", side_effect=lambda spec: tuple(MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec)))):
+        joint_view._render_tab_buscador_gastos(account=account, selected_year=2026)
+        mock_df.assert_called_once()
+        mock_dl.assert_called_once()
+        assert mock_dl.call_args[1]["mime"] == "text/csv"

@@ -852,6 +852,51 @@ class SQLiteRepository(IRepository):
 
         return query.order_by(joint_model.JointTransaction.date.desc()).all()
 
+    def search_joint_transactions(
+        self,
+        start_date: Optional[datetime.date] = None,
+        end_date: Optional[datetime.date] = None,
+        query_text: Optional[str] = None,
+        joint_subcategory_id: Optional[int] = None,
+        paid_by: Optional[str] = None,
+        settlement_status: Optional[str] = None,
+        is_sinking_fund: Optional[bool] = None,
+        min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None,
+    ) -> List[joint_model.JointTransaction]:
+        """Búsqueda global y filtrado multicriterio de transacciones del hogar."""
+        q = self.db.query(joint_model.JointTransaction).filter(
+            joint_model.JointTransaction.joint_account_id == 1
+        )
+        if start_date:
+            q = q.filter(joint_model.JointTransaction.date >= start_date)
+        if end_date:
+            q = q.filter(joint_model.JointTransaction.date <= end_date)
+        if query_text and query_text.strip():
+            term = f"%{query_text.strip()}%"
+            q = q.filter(joint_model.JointTransaction.description.ilike(term))
+        if joint_subcategory_id is not None:
+            q = q.filter(joint_model.JointTransaction.joint_subcategory_id == joint_subcategory_id)
+        if paid_by and paid_by != "ALL":
+            q = q.filter(joint_model.JointTransaction.paid_by == paid_by)
+        if settlement_status and settlement_status != "ALL":
+            q = q.filter(joint_model.JointTransaction.settlement_status == settlement_status)
+        if is_sinking_fund is True:
+            q = q.filter(joint_model.JointTransaction.joint_sinking_fund_id.is_not(None))
+        elif is_sinking_fund is False:
+            q = q.filter(joint_model.JointTransaction.joint_sinking_fund_id.is_(None))
+        if min_amount is not None:
+            q = q.filter(joint_model.JointTransaction.amount >= min_amount)
+        if max_amount is not None:
+            q = q.filter(joint_model.JointTransaction.amount <= max_amount)
+
+        return (
+            q.order_by(
+                joint_model.JointTransaction.date.desc(),
+                joint_model.JointTransaction.id.desc(),
+            ).all()
+        )
+
     def get_joint_transaction(self, tx_id: int) -> Optional[joint_model.JointTransaction]:
         """Obtiene una transacción conjunta por su ID primario."""
         return (

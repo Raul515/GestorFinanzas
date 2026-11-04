@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Any, Dict
+import datetime
 from backend.domain.schemas import categories as cat_schema, budgets as budget_schema, transactions as trans_schema
 
 
@@ -266,6 +267,22 @@ class IJointRepository(ABC):
     @abstractmethod
     def get_joint_transactions(self, year: Optional[int] = None, month: Optional[str] = None) -> List[Any]:
         """Obtiene las transacciones conjuntas registradas."""
+        pass
+
+    @abstractmethod
+    def search_joint_transactions(
+        self,
+        start_date: Optional[datetime.date] = None,
+        end_date: Optional[datetime.date] = None,
+        query_text: Optional[str] = None,
+        joint_subcategory_id: Optional[int] = None,
+        paid_by: Optional[str] = None,
+        settlement_status: Optional[str] = None,
+        is_sinking_fund: Optional[bool] = None,
+        min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None,
+    ) -> List[Any]:
+        """Búsqueda global y filtrado multicriterio de transacciones del hogar."""
         pass
 
     @abstractmethod

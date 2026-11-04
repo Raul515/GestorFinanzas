@@ -627,6 +627,34 @@ def get_joint_transactions(
     return [schemas.JointTransactionResponse.model_validate(t) for t in repo.get_joint_transactions(year=year, month=month)]
 
 
+@router.get("/transactions/search", response_model=List[schemas.JointTransactionResponse])
+def search_joint_transactions(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    query: Optional[str] = None,
+    joint_subcategory_id: Optional[int] = None,
+    paid_by: Optional[str] = None,
+    settlement_status: Optional[str] = None,
+    is_sinking_fund: Optional[bool] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    repo: SQLiteRepository = Depends(get_repo),
+) -> List[schemas.JointTransactionResponse]:
+    """Búsqueda global y filtrado multicriterio de transacciones del hogar."""
+    txs = repo.search_joint_transactions(
+        start_date=start_date,
+        end_date=end_date,
+        query_text=query,
+        joint_subcategory_id=joint_subcategory_id,
+        paid_by=paid_by,
+        settlement_status=settlement_status,
+        is_sinking_fund=is_sinking_fund,
+        min_amount=min_amount,
+        max_amount=max_amount,
+    )
+    return [schemas.JointTransactionResponse.model_validate(t) for t in txs]
+
+
 @router.post("/transactions", response_model=schemas.JointTransactionResponse, status_code=status.HTTP_201_CREATED)
 def create_joint_transaction(
     tx_create: schemas.JointTransactionCreate,

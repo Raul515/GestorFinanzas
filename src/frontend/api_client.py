@@ -995,6 +995,51 @@ def get_joint_transactions(year: Optional[int] = None, month: Optional[str] = No
     return []
 
 
+def search_joint_transactions(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    query: Optional[str] = None,
+    joint_subcategory_id: Optional[int] = None,
+    paid_by: Optional[str] = None,
+    settlement_status: Optional[str] = None,
+    is_sinking_fund: Optional[bool] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Busca y filtra transacciones del hogar por criterios múltiples."""
+    url = f"{API_URL}/joint/transactions/search"
+    params: Dict[str, Any] = {}
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+    if query:
+        params["query"] = query
+    if joint_subcategory_id is not None:
+        params["joint_subcategory_id"] = joint_subcategory_id
+    if paid_by and paid_by != "ALL":
+        params["paid_by"] = paid_by
+    if settlement_status and settlement_status != "ALL":
+        params["settlement_status"] = settlement_status
+    if is_sinking_fund is not None:
+        params["is_sinking_fund"] = is_sinking_fund
+    if min_amount is not None:
+        params["min_amount"] = min_amount
+    if max_amount is not None:
+        params["max_amount"] = max_amount
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en search_joint_transactions (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en search_joint_transactions en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en search_joint_transactions(): %s", e)
+    return []
+
+
 def create_joint_transaction(payload: dict) -> Optional[Dict[str, Any]]:
     """Registra un nuevo gasto común del hogar."""
     url = f"{API_URL}/joint/transactions"

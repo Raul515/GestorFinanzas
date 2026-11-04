@@ -676,3 +676,104 @@ def test_sqlite_repository_sinking_fund_transfer(db_session: Session):
                 amount=50.0,
             )
         )
+
+
+def test_sqlite_repository_search_joint_transactions(db_session):
+    """Valida la búsqueda global y filtrado multicriterio en SQLiteRepository (Fase 7.6)."""
+    from backend.database.componentes.sqlite_crud import SQLiteRepository
+    from backend.domain.models import joint as joint_model
+
+    repo = SQLiteRepository(db_session)
+    from backend.domain.schemas.joint import JointAccountSetupRequest, CohabitationStage, ContributionStrategy, SplitMode, ProfileIdentifier
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Test Buscador",
+            member_a_name="David",
+            member_b_name="Raquel",
+            cohabitation_stage=CohabitationStage.COHABITATION,
+            contribution_strategy=ContributionStrategy.INCOME_PERCENTAGE,
+            split_mode=SplitMode.EQUAL_50_50,
+            member_a_reference_income=2000.0,
+            member_b_reference_income=2000.0,
+            local_profile=ProfileIdentifier.MEMBER_A,
+        )
+    )
+
+    fund = joint_model.JointSinkingFund(
+        joint_account_id=1,
+        name="Vacaciones",
+        target_amount=1000.0,
+        current_balance=200.0,
+        status="ACTIVE",
+    )
+    db_session.add(fund)
+    db_session.commit()
+    db_session.refresh(fund)
+
+    subcats = repo.get_joint_subcategories()
+    subcat = subcats[0]
+
+    # Insertar 3 transacciones con características diferentes
+    tx1 = joint_model.JointTransaction(
+        joint_account_id=1,
+        date=date(2026, 2, 10),
+        amount=120.0,
+        description="Compra semanal Mercadona",
+        joint_subcategory_id=subcat.id,
+        created_by_profile="MEMBER_A",
+        paid_by="COMMON",
+        settlement_status="SETTLED",
+    )
+    tx2 = joint_model.JointTransaction(
+        joint_account_id=1,
+        date=date(2026, 3, 15),
+        amount=50.0,
+        description="Cena adelanto David",
+        joint_subcategory_id=subcat.id,
+        created_by_profile="MEMBER_A",
+        paid_by="MEMBER_A",
+        settlement_mechanism="DIRECT_MEMBER_SETTLEMENT",
+        settlement_status="PENDING",
+    )
+    tx3 = joint_model.JointTransaction(
+        joint_account_id=1,
+        date=date(2026, 7, 20),
+        amount=300.0,
+        description="Hotel playa vuelo",
+        joint_sinking_fund_id=fund.id,
+        created_by_profile="MEMBER_A",
+        paid_by="COMMON",
+        settlement_status="SETTLED",
+    )
+    db_session.add_all([tx1, tx2, tx3])
+    db_session.commit()
+
+    # 1. Búsqueda por texto (insensible a mayúsculas)
+    res_text = repo.search_joint_transactions(query_text="mercadona")
+    assert len(res_text) == 1
+    assert res_text[0].description == "Compra semanal Mercadona"
+
+    # 2. Filtrado por rango de fechas
+    res_date = repo.search_joint_transactions(
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 12, 31),
+    )
+    assert len(res_date) == 2  # tx2 y tx3
+
+    # 3. Filtrado por pagador y estado de reembolso
+    res_payer = repo.search_joint_transactions(paid_by="MEMBER_A", settlement_status="PENDING")
+    assert len(res_payer) == 1
+    assert res_payer[0].id == tx2.id
+
+    # 4. Filtrado por imputación a hucha
+    res_fund = repo.search_joint_transactions(is_sinking_fund=True)
+    assert len(res_fund) == 1
+    assert res_fund[0].id == tx3.id
+
+    res_corriente = repo.search_joint_transactions(is_sinking_fund=False)
+    assert len(res_corriente) == 2
+
+    # 5. Filtrado por importe mínimo y máximo
+    res_amount = repo.search_joint_transactions(min_amount=100.0, max_amount=200.0)
+    assert len(res_amount) == 1
+    assert res_amount[0].id == tx1.id
