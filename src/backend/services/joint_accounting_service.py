@@ -416,11 +416,16 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
     """
     import io
     import pandas as pd
-    from backend.domain.models.joint import JointTransaction, JointMonthlyContribution, JointSinkingFund
+    from sqlalchemy.orm import joinedload
+    from backend.domain.models.joint import JointTransaction, JointMonthlyContribution, JointSinkingFund, JointSubcategory
 
-    # 1. Gastos Comunes
+    # 1. Gastos Comunes (RF-12: optimizado con joinedload para evitar N+1 queries)
     txs = (
         db.query(JointTransaction)
+        .options(
+            joinedload(JointTransaction.joint_subcategory).joinedload(JointSubcategory.joint_category),
+            joinedload(JointTransaction.joint_sinking_fund),
+        )
         .filter(JointTransaction.joint_account_id == household_id)
         .order_by(JointTransaction.date.desc(), JointTransaction.id.desc())
         .all()

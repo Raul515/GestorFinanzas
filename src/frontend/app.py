@@ -180,13 +180,14 @@ if modulo_personal == "📊 Presupuesto y Meses":
         if not categorias:
             st.info("La base de datos está vacía o el backend no está corriendo. Revisa que FastAPI esté funcionando.")
         else:
-            # Recolectar datos de los 12 meses
+            # Recolectar datos de los 12 meses (RF-10: Caching en RAM TTL 120s para suprimir 24 llamadas HTTP redundantes)
+            cached_annual = api_client.get_annual_summary_data(year_selected)
             anual_data = {m: {cat['nombre']: {"presupuesto": 0.0, "real": 0.0} for cat in categorias} for m in range(1, 13)}
         
             for m in range(1, 13):
-                mes_key = f"{year_selected}-{m:02d}"
-                presupuestos_m = api_client.get_presupuestos(mes_key)
-                transacciones_m = api_client.get_transacciones(mes_key)
+                m_info = cached_annual.get(m, {})
+                presupuestos_m = m_info.get("presupuestos", [])
+                transacciones_m = m_info.get("transacciones", [])
             
                 for cat in categorias:
                     cat_subcats = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
@@ -1477,7 +1478,7 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
                     st.success(f"¡Análisis de {active_ticker} actualizado con éxito!")
                 else:
                     st.error(f"No se pudieron refrescar los datos para '{active_ticker}'. Comprueba el ticker y mercado.")
-        elif analizar_clicked or f"deepdive_data_{active_ticker}" not in st.session_state:
+        elif analizar_clicked:
             with st.spinner(f"Cargando diagnóstico financiero para {active_ticker}..."):
                 data = api_client.get_deepdive_analysis(active_ticker)
                 if data:
@@ -1877,6 +1878,12 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
                 "⚖️ **Descargo Legal (Disclaimer)**: Esta herramienta de diagnóstico y la síntesis generada por IA "
                 "tienen carácter exclusivamente formativo e informativo. No constituyen recomendación de compra o venta "
                 "ni asesoramiento financiero regulado. Los rendimientos pasados no garantizan rentabilidades futuras."
+            )
+        else:
+            st.info(
+                "💡 Introduce un ticker (ej. `ITX.MC`, `SAN.MC`, `AAPL`) o selecciona una empresa de tu Watchlist "
+                "y pulsa **[🔍 Analizar]** para cargar su diagnóstico fundamental en profundidad bajo demanda.",
+                icon="ℹ️"
             )
 
 

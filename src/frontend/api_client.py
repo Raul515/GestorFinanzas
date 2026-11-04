@@ -164,6 +164,23 @@ def get_transacciones(mes=None):
         logger.error("Error inesperado en get_transacciones(): %s", e)
     return []
 
+@st.cache_data(ttl=120, show_spinner=False)
+def get_annual_summary_data(year: int) -> Dict[int, Dict[str, Any]]:
+    """
+    RF-10: Recolecta y cachea en memoria RAM (TTL 120s) los presupuestos y transacciones
+    de los 12 meses del año para el Resumen Anual, eliminando 24 llamadas HTTP redundantes en cada rerun.
+    """
+    annual_data: Dict[int, Dict[str, Any]] = {}
+    for m in range(1, 13):
+        mes_key = f"{year}-{m:02d}"
+        presupuestos_m = get_presupuestos(mes_key)
+        transacciones_m = get_transacciones(mes_key)
+        annual_data[m] = {
+            "presupuestos": presupuestos_m or [],
+            "transacciones": transacciones_m or [],
+        }
+    return annual_data
+
 
 def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
     url = f"{API_URL}/transactions/"
@@ -176,6 +193,7 @@ def create_transaccion(fecha, subcategoria_id, cantidad, concepto):
     try:
         response = _session.post(url, json=data, timeout=10)
         if response.status_code == 200:
+            clear_annual_cache()
             res = response.json()
             if "date" in res and "fecha" not in res:
                 res["fecha"] = res["date"]
@@ -203,6 +221,7 @@ def delete_transaction(transaction_id: int) -> bool:
     try:
         response = _session.delete(url, timeout=10)
         if response.status_code == 200:
+            clear_annual_cache()
             logger.info("Transacción %s eliminada exitosamente en el backend", transaction_id)
             return True
         logger.error(
@@ -233,6 +252,7 @@ def save_presupuestos_bulk(presupuestos_list):
     try:
         response = _session.post(url, json=payload, timeout=10)
         if response.status_code == 200:
+            clear_annual_cache()
             res = response.json()
             if isinstance(res, list):
                 for p in res:
@@ -1103,6 +1123,7 @@ def create_joint_transaction(payload: dict) -> Optional[Dict[str, Any]]:
     try:
         response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            clear_joint_cache()
             return response.json()
         logger.warning("Fallo en create_joint_transaction (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1118,6 +1139,7 @@ def delete_joint_transaction(tx_id: int) -> bool:
     try:
         response = _session.delete(url, timeout=10)
         if response.status_code == 200:
+            clear_joint_cache()
             return True
         logger.warning("Fallo en delete_joint_transaction (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1213,6 +1235,7 @@ def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
     try:
         response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            clear_joint_cache()
             return response.json()
         logger.warning("Fallo en asentar_aportacion_asistida (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1228,6 +1251,7 @@ def delete_joint_contribution(contribution_id: int) -> bool:
     try:
         response = _session.delete(url, timeout=10)
         if response.status_code == 200:
+            clear_joint_cache()
             return True
         logger.warning("Fallo en delete_joint_contribution (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1359,6 +1383,7 @@ def resend_joint_invitation() -> bool:
     return False
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def export_joint_excel() -> Optional[bytes]:
     """Descarga el archivo Excel estructurado (.xlsx) con los datos consolidados del hogar."""
     url = f"{API_URL}/joint/export/excel"
@@ -1713,12 +1738,21 @@ def clear_market_cache() -> None:
         logger.debug("Error limpiando caché de mercado: %s", exc)
 
 
+def clear_annual_cache() -> None:
+    """RF-10: Invalida la caché del resumen anual consolidado."""
+    try:
+        get_annual_summary_data.clear()
+    except Exception as exc:
+        logger.debug("Error limpiando caché de resumen anual: %s", exc)
+
+
 def clear_joint_cache() -> None:
-    """Invalida la caché de entidades de cuenta conjunta (huchas y subcategorías)."""
+    """Invalida la caché de entidades de cuenta conjunta (huchas, subcategorías y exportación Excel)."""
     try:
         get_joint_categories.clear()
         get_joint_subcategories.clear()
         get_joint_sinking_funds.clear()
+        export_joint_excel.clear()
     except Exception as exc:
         logger.debug("Error limpiando caché de cuenta conjunta: %s", exc)
 

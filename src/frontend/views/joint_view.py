@@ -313,16 +313,14 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
     with col_rh1:
         st.subheader(f"Resumen Consolidado del Hogar - Año {selected_year}")
     with col_rh2:
-        excel_anual = api_client.export_joint_excel()
-        if excel_anual:
-            st.download_button(
-                label="📥 Exportar a Excel (.xlsx)",
-                data=excel_anual,
-                file_name=f"finanzas_hogar_{selected_year}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width="stretch",
-                key=f"download_excel_annual_{selected_year}",
-            )
+        st.download_button(
+            label="📥 Exportar a Excel (.xlsx)",
+            data=lambda: api_client.export_joint_excel() or b"",
+            file_name=f"finanzas_hogar_{selected_year}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            width="stretch",
+            key=f"download_excel_annual_{selected_year}",
+        )
 
     annual_summary = api_client.get_joint_annual_summary(year=selected_year)
     if not annual_summary:
@@ -647,6 +645,8 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
                 chosen_subcat_id = None
                 chosen_fund_id = None
+                selected_fund_obj = None
+                confirm_overdraft = False
 
                 if charge_type == "Necesidad Común del Hogar":
                     if subcat_map:
@@ -1513,16 +1513,14 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
         "Descarga un archivo Excel (.xlsx) estructurado con 3 pestañas conteniendo el histórico completo de "
         "gastos comunes, aportaciones de los miembros y estado de las huchas de amortización."
     )
-    excel_cfg = api_client.export_joint_excel()
-    if excel_cfg:
-        st.download_button(
-            label="📥 Descargar Datos del Hogar en Excel (.xlsx)",
-            data=excel_cfg,
-            file_name=f"finanzas_hogar_completo.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            width="content",
-            key="download_excel_config_tab",
-        )
+    st.download_button(
+        label="📥 Descargar Datos del Hogar en Excel (.xlsx)",
+        data=lambda: api_client.export_joint_excel() or b"",
+        file_name=f"finanzas_hogar_completo.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        width="content",
+        key="download_excel_config_tab",
+    )
 
     st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
     with st.expander("⚙️ Parámetros de la Cuenta Conjunta", expanded=False):
