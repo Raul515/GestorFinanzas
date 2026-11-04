@@ -64,7 +64,7 @@ def render_backup_view() -> None:
         with col_rb1:
             st.caption(f"Instantánea previa detectada: {latest_safety_snapshot}")
         with col_rb2:
-            if st.button("↩️ Deshacer Restauración", key="btn_rollback_banner", type="primary", use_container_width=True):
+            if st.button("↩️ Deshacer Restauración", key="btn_rollback_banner", type="primary", width="stretch"):
                 with st.spinner("Revirtiendo base de datos al estado previo..."):
                     res = api_client.rollback_restore()
                     if res and res.get("success"):
@@ -133,7 +133,7 @@ def render_backup_view() -> None:
             st.session_state["backup_download_filename"] = None
 
         if st.session_state["backup_download_bytes"] is None:
-            if st.button("📥 Generar Copia Descargable (.db)", key="btn_prep_download", use_container_width=True, type="primary"):
+            if st.button("📥 Generar Copia Descargable (.db)", key="btn_prep_download", width="stretch", type="primary"):
                 with st.spinner("Generando copia atómica en caliente con sqlite3.backup..."):
                     dl_result = api_client.download_backup_bytes()
                     if dl_result:
@@ -152,10 +152,10 @@ def render_backup_view() -> None:
                 file_name=dl_filename,
                 mime="application/x-sqlite3",
                 key="btn_download_backup",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             )
-            if st.button("🔄 Generar Otra Descarga Nueva", key="btn_reset_download", use_container_width=True):
+            if st.button("🔄 Generar Otra Descarga Nueva", key="btn_reset_download", width="stretch"):
                 st.session_state["backup_download_bytes"] = None
                 st.session_state["backup_download_filename"] = None
                 st.rerun()
@@ -168,7 +168,7 @@ def render_backup_view() -> None:
             placeholder="ej. antes_de_cerrar_ano.db",
             key="input_custom_backup_name",
         )
-        if st.button("📸 Crear Instantánea Ahora", key="btn_create_local_snapshot", use_container_width=True):
+        if st.button("📸 Crear Instantánea Ahora", key="btn_create_local_snapshot", width="stretch"):
             with st.spinner("Generando instantánea en caliente con sqlite3.backup..."):
                 created = api_client.create_backup(custom_name=custom_name.strip() if custom_name else None)
                 if created:
@@ -238,7 +238,7 @@ def render_backup_view() -> None:
             key="slider_keep_copies",
         )
 
-        if st.button("💾 Guardar Configuración de Programación", key="btn_save_schedule", use_container_width=True):
+        if st.button("💾 Guardar Configuración de Programación", key="btn_save_schedule", width="stretch"):
             updated = api_client.update_backup_schedule(
                 enabled=enabled_toggle,
                 frequency_days=selected_days,
@@ -289,7 +289,7 @@ def render_backup_view() -> None:
         # Inspección previa con session_state
         val_key = f"val_cache_{uploaded_file.name}_{len(file_bytes)}"
         with col_up2:
-            if st.button("🔍 Inspeccionar y Validar Copia", key="btn_inspect_upload", use_container_width=True):
+            if st.button("🔍 Inspeccionar y Validar Copia", key="btn_inspect_upload", width="stretch"):
                 with st.spinner("Inspeccionando integridad SQLite y tablas contables..."):
                     val_res = api_client.validate_backup_upload(file_bytes, uploaded_file.name)
                     st.session_state[val_key] = val_res
@@ -354,10 +354,10 @@ def render_backup_view() -> None:
                 with col_b3:
                     st.write(f"📦 {b.get('file_size_formatted', '')}")
                 with col_b4:
-                    with st.popover("🔄 Restaurar", use_container_width=True):
+                    with st.popover("🔄 Restaurar", width="stretch"):
                         st.markdown(f"**¿Restaurar instantánea `{b.get('filename')}`?**")
                         st.caption("Se sobrescribirá la base activa tras generar automáticamente una copia de seguridad previa.")
-                        if st.button("Confirmar Restauración", key=f"btn_pop_res_{b.get('filename')}", type="primary", use_container_width=True):
+                        if st.button("Confirmar Restauración", key=f"btn_pop_res_{b.get('filename')}", type="primary", width="stretch"):
                             with st.spinner(f"Restaurando {b.get('filename')}..."):
                                 res = api_client.restore_backup_local(b.get("filename"))
                                 if res and res.get("success"):
@@ -366,10 +366,10 @@ def render_backup_view() -> None:
                                 else:
                                     st.error(res.get("message") if res else "Fallo al restaurar")
                 with col_b5:
-                    with st.popover("🗑️ Borrar", use_container_width=True):
+                    with st.popover("🗑️ Borrar", width="stretch"):
                         st.markdown(f"**¿Eliminar copia `{b.get('filename')}`?**")
                         st.caption("Esta acción eliminará definitivamente el archivo de la carpeta de respaldos.")
-                        if st.button("Confirmar Eliminación", key=f"btn_pop_del_{b.get('filename')}", type="primary", use_container_width=True):
+                        if st.button("Confirmar Eliminación", key=f"btn_pop_del_{b.get('filename')}", type="primary", width="stretch"):
                             if api_client.delete_backup_local(b.get("filename")):
                                 st.success(f"Copia `{b.get('filename')}` eliminada.")
                                 st.rerun()

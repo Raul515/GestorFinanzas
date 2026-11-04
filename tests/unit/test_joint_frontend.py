@@ -604,8 +604,27 @@ def test_api_client_search_joint_transactions():
         assert api_client.search_joint_transactions() == []
 
 
+def test_render_tab_buscador_gastos_unsearched():
+    """Verifica que el buscador no muestra advertencias ni resultados si aún no se ha usado."""
+    from frontend.views import joint_view
+
+    account = {"member_a_name": "David", "member_b_name": "Raquel"}
+
+    with patch.object(joint_view.api_client, "get_joint_subcategories", return_value=[]), \
+         patch.object(joint_view.api_client, "get_joint_sinking_funds", return_value=[]), \
+         patch.object(joint_view.api_client, "search_joint_transactions") as mock_search, \
+         patch("streamlit.info") as mock_info, \
+         patch("streamlit.button", return_value=False), \
+         patch("streamlit.session_state", {}), \
+         patch("streamlit.expander", return_value=MagicMock()), \
+         patch("streamlit.columns", side_effect=lambda spec: tuple(MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec)))):
+        joint_view._render_tab_buscador_gastos(account=account, selected_year=2026)
+        mock_info.assert_not_called()
+        mock_search.assert_not_called()
+
+
 def test_render_tab_buscador_gastos_empty():
-    """Verifica que el buscador muestra info amigable cuando no hay resultados."""
+    """Verifica que el buscador muestra info amigable cuando se busca y no hay resultados."""
     from frontend.views import joint_view
 
     account = {"member_a_name": "David", "member_b_name": "Raquel"}
@@ -614,6 +633,8 @@ def test_render_tab_buscador_gastos_empty():
          patch.object(joint_view.api_client, "get_joint_sinking_funds", return_value=[]), \
          patch.object(joint_view.api_client, "search_joint_transactions", return_value=[]), \
          patch("streamlit.info") as mock_info, \
+         patch("streamlit.button", return_value=True), \
+         patch("streamlit.session_state", {"joint_search_active": True}), \
          patch("streamlit.expander", return_value=MagicMock()), \
          patch("streamlit.columns", side_effect=lambda spec: tuple(MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec)))):
         joint_view._render_tab_buscador_gastos(account=account, selected_year=2026)
@@ -655,9 +676,12 @@ def test_render_tab_buscador_gastos_with_results():
          patch.object(joint_view.api_client, "search_joint_transactions", return_value=mock_txs), \
          patch("streamlit.dataframe") as mock_df, \
          patch("streamlit.download_button") as mock_dl, \
+         patch("streamlit.button", return_value=True), \
+         patch("streamlit.session_state", {"joint_search_active": True}), \
          patch("streamlit.expander", return_value=MagicMock()), \
          patch("streamlit.columns", side_effect=lambda spec: tuple(MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec)))):
         joint_view._render_tab_buscador_gastos(account=account, selected_year=2026)
         mock_df.assert_called_once()
         mock_dl.assert_called_once()
         assert mock_dl.call_args[1]["mime"] == "text/csv"
+

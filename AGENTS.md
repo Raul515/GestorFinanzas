@@ -75,12 +75,17 @@ Verifica siempre los cambios utilizando el entorno virtual local oficial (`venv`
   # Fusionar a develop al finalizar la spec
   git checkout develop
   git merge feat/spec-XXX-nombre
-  git branch -d feat/spec-XXX-nombre
   ```
 - **Ejecutar Pruebas de la Fase / Especificación Activa**:
   ```powershell
   .\venv\Scripts\pytest -v tests/unit/test_<modulo>.py tests/integration/test_<modulo>.py
   ```
+
+  ### Reglas de ejecución de tests
+  - Los tests de integración (`tests/integration/`) requieren acceso a red local (`localhost` / `127.0.0.1`) debido a `TestClient`.
+  - Ejecutar siempre los comandos de `pytest` fuera del sandbox restringido de red, o solicitar explícitamente permisos de red local (`network: host`/`local`) antes de lanzar la suite de integración.
+  - Usar un timeout explícito para evitar bloqueos si un socket no responde.
+  
 - **Comprobación de Sintaxis Python**:
   ```powershell
   .\venv\Scripts\python -m compileall src tests

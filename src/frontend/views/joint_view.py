@@ -85,7 +85,7 @@ def _render_zero_state_wizard() -> None:
             """,
             unsafe_allow_html=True,
         )
-        if st.button("✨ Unirse a este Hogar en 1-Clic", type="primary", use_container_width=True, key="btn_accept_inv"):
+        if st.button("✨ Unirse a este Hogar en 1-Clic", type="primary", width="stretch", key="btn_accept_inv"):
             with st.spinner("Conectando con la cuenta conjunta de tu pareja..."):
                 res_acc = api_client.accept_joint_invitation()
                 if res_acc:
@@ -164,7 +164,7 @@ def _render_zero_state_wizard() -> None:
                 "(Alquiler/Hipoteca, Supermercado, Luz, Agua, Seguros del Hogar, etc.) y se habilitará la sincronización Syncthing."
             )
 
-            submitted = st.form_submit_button("🚀 Iniciar y Activar Cuenta Conjunta", use_container_width=True)
+            submitted = st.form_submit_button("🚀 Iniciar y Activar Cuenta Conjunta", width="stretch")
             if submitted:
                 if not account_name.strip() or not member_a_name.strip() or not member_b_name.strip():
                     st.error("Por favor completa los nombres requeridos.")
@@ -299,7 +299,7 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
                 data=excel_anual,
                 file_name=f"finanzas_hogar_{selected_year}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
                 key=f"download_excel_annual_{selected_year}",
             )
 
@@ -464,7 +464,7 @@ def _render_tab_resumen_anual(selected_year: int, account: Dict[str, Any]) -> No
             )
             .properties(height=300)
         )
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
     else:
         st.info("Aún no hay transacciones suficientes registradas en el año para generar la gráfica comparativa.")
 
@@ -554,7 +554,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
         with col_s3:
             st.write("")
-            if st.button(f"💸 Liquidar Todo ({unsettled_n} pendientes)", use_container_width=True, key=f"btn_settle_all_{selected_month_name}"):
+            if st.button(f"💸 Liquidar Todo ({unsettled_n} pendientes)", width="stretch", key=f"btn_settle_all_{selected_month_name}"):
                 ok_settle = api_client.settle_all_joint_transactions()
                 if ok_settle:
                     st.success("✅ Todos los gastos adelantados han sido liquidados y reembolsados.")
@@ -608,7 +608,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 )
                 st.caption(f"Mes imputado: **{month_str}**")
 
-            cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", use_container_width=True)
+            cb_submitted = st.form_submit_button("💾 Confirmar Asiento de Aportación", width="stretch")
             if cb_submitted:
                 payload_cb = {
                     "month": month_str,
@@ -725,7 +725,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         help="Elige cómo se compensará el gasto adelantado.",
                     )
 
-            tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", use_container_width=True)
+            tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", width="stretch")
             if tx_submitted:
                 if not tx_desc.strip():
                     st.error("Por favor introduce una descripción del gasto.")
@@ -774,7 +774,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                 "Importe (€)": f"{cb.get('amount', 0.0):,.2f} €",
             })
         df_cb = pd.DataFrame(contrib_rows)
-        st.dataframe(df_cb[["Fecha", "Aportante", "Mes Aplicado", "Importe (€)"]], use_container_width=True)
+        st.dataframe(df_cb[["Fecha", "Aportante", "Mes Aplicado", "Importe (€)"]], width="stretch")
 
         with st.expander("🗑️ Revertir una Aportación"):
             cb_to_delete = st.selectbox(
@@ -843,7 +843,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
             })
 
         df_tx = pd.DataFrame(table_rows)
-        st.dataframe(df_tx[["Fecha", "Descripción", "Subcategoría", "Hucha Imputada", "Pagado Por", "Reembolso", "Importe (€)"]], use_container_width=True)
+        st.dataframe(df_tx[["Fecha", "Descripción", "Subcategoría", "Hucha Imputada", "Pagado Por", "Reembolso", "Importe (€)"]], width="stretch")
 
         # Acciones de liquidación de gastos adelantados pendientes
         unsettled_in_table = [r for r in table_rows if r["_raw"].get("settlement_status") == "PENDING" and r["_raw"].get("paid_by") in ("MEMBER_A", "MEMBER_B")]
@@ -915,7 +915,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                 monthly_target = st.number_input("Aportación Mensual Sugerida (€)", min_value=0.0, value=50.0, step=10.0)
                 target_date = st.date_input("Fecha Objetivo (Opcional)", value=None)
 
-            fund_created = st.form_submit_button("🎯 Crear Hucha de Amortización", use_container_width=True)
+            fund_created = st.form_submit_button("🎯 Crear Hucha de Amortización", width="stretch")
             if fund_created:
                 if not fund_name.strip():
                     st.error("Por favor introduce un nombre para la hucha.")
@@ -988,7 +988,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
 
                     tr_notes = st.text_input("Motivo / Notas del Traspaso (Opcional)", placeholder="Ej. Reasignación de viaje cancelado a revisión coche")
 
-                tr_submitted = st.form_submit_button("↔️ Confirmar Traspaso de Saldo", use_container_width=True)
+                tr_submitted = st.form_submit_button("↔️ Confirmar Traspaso de Saldo", width="stretch")
                 if tr_submitted:
                     if not dest_id:
                         st.error("Debes seleccionar una hucha de destino activa válida.")
@@ -1036,7 +1036,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                 st.caption(f"Progreso: {pct * 100:.1f}% | Mensual sugerido: {f.get('monthly_target_amount', 0.0):,.2f} €")
 
         # Acciones de edición / eliminación
-        with st.expander("⚙️ Administrar o Eliminar Huchas"):
+        with st.expander("⚙️ Administrar Huchas"):
             fund_to_manage = st.selectbox(
                 "Selecciona hucha para editar o eliminar",
                 options=[f["id"] for f in funds],
@@ -1045,7 +1045,8 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
             selected_f = next((f for f in funds if f["id"] == fund_to_manage), None)
 
             if selected_f:
-                col_e1, col_e2 = st.columns(2)
+                other_funds = [of for of in funds if of["id"] != selected_f["id"]]
+                col_e1, col_e2 = st.columns(2, gap="medium", vertical_alignment="bottom")
                 with col_e1:
                     new_f_balance = st.number_input(
                         "Ajustar Saldo Directo (€)",
@@ -1053,21 +1054,27 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                         step=25.0,
                         key="edit_fund_bal",
                     )
-                    if st.button("Guardar Saldo", key="btn_save_f_bal"):
-                        api_client.update_joint_sinking_fund(selected_f["id"], {"current_balance": new_f_balance})
-                        st.success("Saldo actualizado.")
-                        st.rerun()
-
                 with col_e2:
-                    other_funds = [of for of in funds if of["id"] != selected_f["id"]]
                     realloc_target = None
                     if other_funds:
                         realloc_target = st.selectbox(
                             "Reasignar saldo a otra hucha al eliminar (opcional)",
                             options=[None] + [of["id"] for of in other_funds],
                             format_func=lambda k: "No reasignar" if k is None else next((of["name"] for of in other_funds if of["id"] == k), str(k)),
+                            key="realloc_fund_select",
                         )
-                    if st.button("🗑️ Eliminar Hucha", key="btn_del_fund"):
+                    else:
+                        st.caption("ℹ️ Sin otras huchas disponibles para reasignar saldo.")
+
+                col_btn1, col_btn2 = st.columns(2, gap="medium")
+                with col_btn1:
+                    if st.button("💾 Guardar Saldo", key="btn_save_f_bal", width="stretch"):
+                        api_client.update_joint_sinking_fund(selected_f["id"], {"current_balance": new_f_balance})
+                        st.success("Saldo actualizado.")
+                        st.rerun()
+
+                with col_btn2:
+                    if st.button("🗑️ Eliminar Hucha", key="btn_del_fund", type="secondary", width="stretch"):
                         ok = api_client.delete_joint_sinking_fund(selected_f["id"], reallocate_to_fund_id=realloc_target)
                         if ok:
                             st.success("Hucha eliminada exitosamente.")
@@ -1092,7 +1099,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                         "Registrado Por": p_name,
                     })
                 df_tr = pd.DataFrame(tr_rows)
-                st.dataframe(df_tr, use_container_width=True)
+                st.dataframe(df_tr, width="stretch")
 
 
 # =====================================================================
@@ -1194,7 +1201,18 @@ def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> 
             )
         with col10:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.button("🔎 Buscar Transacciones", key="btn_apply_joint_search", use_container_width=True)
+            search_clicked = st.button("🔎 Buscar Transacciones", key="btn_apply_joint_search", width="stretch")
+
+    # Control de ejecución del buscador
+    if "joint_search_active" not in st.session_state:
+        st.session_state["joint_search_active"] = False
+
+    if search_clicked:
+        st.session_state["joint_search_active"] = True
+
+    # Si aún no se ha usado el buscador, no ejecutar consulta ni mostrar mensaje de 'no encontrado'
+    if not st.session_state["joint_search_active"]:
+        return
 
     # 3. Mapeo de parámetros para la consulta
     subcat_id = subcat_map.get(selected_subcat_name) if selected_subcat_name != "Todas las subcategorías" else None
@@ -1301,7 +1319,7 @@ def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> 
 
     df_results = pd.DataFrame(table_rows)
     display_cols = ["Fecha", "Concepto / Descripción", "Subcategoría", "Imputación", "Pagado Por", "Estado Reembolso", "Importe (€)"]
-    st.dataframe(df_results[display_cols], use_container_width=True, hide_index=True)
+    st.dataframe(df_results[display_cols], width="stretch", hide_index=True)
 
     # Descarga a CSV
     csv_export_cols = ["Fecha", "Concepto / Descripción", "Subcategoría", "Imputación", "Pagado Por", "Estado Reembolso", "Importe_Num"]
@@ -1315,7 +1333,7 @@ def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> 
         data=csv_bytes,
         file_name=f"gastos_comunes_{start_export_str}_{end_export_str}.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
         key="btn_download_search_csv",
     )
 
@@ -1347,7 +1365,7 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🔄 Procesar Bandeja de Entrada Ahora (Inbox)", use_container_width=True):
+        if st.button("🔄 Procesar Bandeja de Entrada Ahora (Inbox)", width="stretch"):
             with st.spinner("Procesando deltas entrantes de Syncthing..."):
                 res = api_client.trigger_process_inbox()
                 processed = res.get("processed_count", 0)
@@ -1355,7 +1373,7 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                 st.success(f"Procesamiento finalizado. Eventos aplicados: {processed}, Ignorados por idempotencia: {ignored}.")
                 st.rerun()
     with col_btn2:
-        if st.button("📤 Reenviar Invitación a mi Pareja", use_container_width=True):
+        if st.button("📤 Reenviar Invitación a mi Pareja", width="stretch"):
             with st.spinner("Regenerando invitación del hogar en Outbox..."):
                 if api_client.resend_joint_invitation():
                     st.success("¡Invitación regenerada en Outbox! Syncthing la enviará a tu pareja.")
@@ -1379,23 +1397,25 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                 err_c = sync_detail.get("error_count", 0)
                 st.metric("Eventos en Error", err_c, delta="⚠️ Requiere atención" if err_c > 0 else None, delta_color="inverse")
 
-            col_act1, col_act2 = st.columns(2)
-            with col_act1:
-                if st.button("🔄 Sincronizar Ahora (Forzar Inbox)", key="btn_sync_now_viewer", use_container_width=True):
-                    with st.spinner("Procesando deltas de entrada..."):
-                        res_s = api_client.trigger_process_inbox()
-                        st.toast("Sincronización procesada.")
-                        st.rerun()
-            with col_act2:
-                if err_c > 0:
-                    if st.button("🔁 Reintentar Eventos en Error", key="btn_retry_errors_viewer", type="primary", use_container_width=True):
-                        with st.spinner("Reintentando eventos en error..."):
-                            res_r = api_client.retry_joint_sync_errors()
-                            cnt = res_r.get("retried_count", 0) if res_r else 0
-                            st.success(f"Se han reintentado {cnt} eventos.")
-                            st.rerun()
+            if st.button(
+                "🔄 Sincronizar Ahora (Forzar Inbox)",
+                key="btn_sync_now_viewer",
+                width="stretch",
+                help="Fuerza el escaneo y procesamiento inmediato de los ficheros de cambio recibidos en la bandeja de entrada (inbox/) de Syncthing, aplicando al instante los movimientos de tu pareja sin esperar al ciclo automático.",
+            ):
+                with st.spinner("Procesando deltas de entrada..."):
+                    res_s = api_client.trigger_process_inbox()
+                    st.toast("Sincronización procesada.")
+                    st.rerun()
 
             if err_c > 0:
+                if st.button("🔁 Reintentar Eventos en Error", key="btn_retry_errors_viewer", type="primary", width="stretch"):
+                    with st.spinner("Reintentando eventos en error..."):
+                        res_r = api_client.retry_joint_sync_errors()
+                        cnt = res_r.get("retried_count", 0) if res_r else 0
+                        st.success(f"Se han reintentado {cnt} eventos.")
+                        st.rerun()
+
                 st.markdown("#### ⚠️ Eventos en Error")
                 for ef in sync_detail.get("error_events", []):
                     st.error(f"**Archivo**: `{ef.get('filename')}`\n\n```\n{ef.get('preview')}\n```")
@@ -1403,7 +1423,39 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
             st.markdown("#### 📋 Últimos Eventos Procesados")
             proc_evs = sync_detail.get("processed_events", [])
             if proc_evs:
-                st.dataframe(proc_evs, use_container_width=True)
+                entity_map = {
+                    "TRANSACTION": "Gasto Común",
+                    "CONTRIBUTION": "Aportación",
+                    "SINKING_FUND": "Hucha de Amortización",
+                    "SINKING_FUND_TRANSFER": "Traspaso entre Huchas",
+                    "SUBCATEGORY": "Subcategoría",
+                    "ACCOUNT": "Configuración Hogar",
+                    "SETTLEMENT": "Liquidación",
+                }
+                action_map = {
+                    "UPSERT": "Guardar / Modificar",
+                    "DELETE": "Eliminar",
+                }
+                formatted_events = []
+                for ev in proc_evs:
+                    raw_ent = ev.get("entity_type", "")
+                    raw_act = ev.get("action", "")
+                    raw_ts = ev.get("timestamp_utc", "")
+                    formatted_ts = "—"
+                    if raw_ts:
+                        try:
+                            clean_iso = raw_ts.replace("Z", "+00:00")
+                            dt_val = datetime.fromisoformat(clean_iso)
+                            formatted_ts = dt_val.strftime("%d/%m/%Y %H:%M:%S")
+                        except Exception:
+                            formatted_ts = raw_ts[:19].replace("T", " ")
+                    formatted_events.append({
+                        "Tipo": entity_map.get(raw_ent, raw_ent),
+                        "Acción": action_map.get(raw_act, raw_act),
+                        "Fecha": formatted_ts,
+                    })
+                df_evs = pd.DataFrame(formatted_events)
+                st.dataframe(df_evs[["Tipo", "Acción", "Fecha"]], width="stretch", hide_index=True)
             else:
                 st.caption("No hay eventos archivados en processed/ aún.")
 
@@ -1421,65 +1473,64 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
             data=excel_cfg,
             file_name=f"finanzas_hogar_completo.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=False,
+            width="content",
             key="download_excel_config_tab",
         )
 
     st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
-    st.markdown("### Parámetros de la Cuenta Conjunta")
+    with st.expander("⚙️ Parámetros de la Cuenta Conjunta", expanded=False):
+        with st.form("edit_joint_account_form"):
+            new_acc_name = st.text_input("Nombre del Hogar", value=account.get("household_name") or account.get("account_name", ""))
 
-    with st.form("edit_joint_account_form"):
-        new_acc_name = st.text_input("Nombre del Hogar", value=account.get("household_name") or account.get("account_name", ""))
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                new_mem_a = st.text_input("Nombre Miembro A", value=account.get("member_a_name", "Miembro A"))
+                new_inc_a = st.number_input(
+                    "Salario de Referencia Miembro A (€)",
+                    min_value=0.0,
+                    value=float(account.get("member_a_reference_income") or account.get("member_a_estimated_income", 0.0)),
+                    step=50.0,
+                )
 
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            new_mem_a = st.text_input("Nombre Miembro A", value=account.get("member_a_name", "Miembro A"))
-            new_inc_a = st.number_input(
-                "Salario de Referencia Miembro A (€)",
-                min_value=0.0,
-                value=float(account.get("member_a_reference_income") or account.get("member_a_estimated_income", 0.0)),
-                step=50.0,
-            )
+            with col_p2:
+                new_mem_b = st.text_input("Nombre Miembro B", value=account.get("member_b_name", "Miembro B"))
+                new_inc_b = st.number_input(
+                    "Salario de Referencia Miembro B (€)",
+                    min_value=0.0,
+                    value=float(account.get("member_b_reference_income") or account.get("member_b_estimated_income", 0.0)),
+                    step=50.0,
+                )
 
-        with col_p2:
-            new_mem_b = st.text_input("Nombre Miembro B", value=account.get("member_b_name", "Miembro B"))
-            new_inc_b = st.number_input(
-                "Salario de Referencia Miembro B (€)",
-                min_value=0.0,
-                value=float(account.get("member_b_reference_income") or account.get("member_b_estimated_income", 0.0)),
-                step=50.0,
-            )
+            col_p3, col_p4 = st.columns(2)
+            with col_p3:
+                current_split = account.get("split_mode", "EQUAL_50_50")
+                split_idx = 0 if "50" in str(current_split) else 1
+                new_split_choice = st.selectbox("Modo de Reparto", ["Al 50% cada uno (EQUAL_50_50)", "Proporcional a Ingresos Netos (INCOME_PROPORTIONAL)"], index=split_idx)
+                new_split = "EQUAL_50_50" if "50%" in new_split_choice else "INCOME_PROPORTIONAL"
 
-        col_p3, col_p4 = st.columns(2)
-        with col_p3:
-            current_split = account.get("split_mode", "EQUAL_50_50")
-            split_idx = 0 if "50" in str(current_split) else 1
-            new_split_choice = st.selectbox("Modo de Reparto", ["Al 50% cada uno (EQUAL_50_50)", "Proporcional a Ingresos Netos (INCOME_PROPORTIONAL)"], index=split_idx)
-            new_split = "EQUAL_50_50" if "50%" in new_split_choice else "INCOME_PROPORTIONAL"
+            with col_p4:
+                current_cohab = account.get("cohabitation_stage", "PRE_COHABITATION")
+                cohab_idx = 0 if "PRE" in str(current_cohab) or "DATING" in str(current_cohab) else 1
+                new_cohab_choice = st.selectbox("Etapa de Convivencia", ["Pre-Convivencia / Viviendo Separados (PRE_COHABITATION)", "Convivencia Plena / Compartiendo Hogar (COHABITATION)"], index=cohab_idx)
+                new_cohab = "PRE_COHABITATION" if "Pre" in new_cohab_choice else "COHABITATION"
 
-        with col_p4:
-            current_cohab = account.get("cohabitation_stage", "PRE_COHABITATION")
-            cohab_idx = 0 if "PRE" in str(current_cohab) or "DATING" in str(current_cohab) else 1
-            new_cohab_choice = st.selectbox("Etapa de Convivencia", ["Pre-Convivencia / Viviendo Separados (PRE_COHABITATION)", "Convivencia Plena / Compartiendo Hogar (COHABITATION)"], index=cohab_idx)
-            new_cohab = "PRE_COHABITATION" if "Pre" in new_cohab_choice else "COHABITATION"
-
-        acc_saved = st.form_submit_button("💾 Guardar Cambios de Configuración", use_container_width=True)
-        if acc_saved:
-            payload_acc = {
-                "household_name": new_acc_name.strip(),
-                "member_a_name": new_mem_a.strip(),
-                "member_b_name": new_mem_b.strip(),
-                "member_a_reference_income": float(new_inc_a),
-                "member_b_reference_income": float(new_inc_b),
-                "split_mode": new_split,
-                "cohabitation_stage": new_cohab,
-            }
-            res_upd = api_client.update_joint_account(payload_acc)
-            if res_upd:
-                st.success("✅ Configuración del hogar actualizada correctamente.")
-                st.rerun()
-            else:
-                st.error("❌ Error al actualizar los parámetros de la cuenta conjunta.")
+            acc_saved = st.form_submit_button("💾 Guardar Cambios de Configuración", width="stretch")
+            if acc_saved:
+                payload_acc = {
+                    "household_name": new_acc_name.strip(),
+                    "member_a_name": new_mem_a.strip(),
+                    "member_b_name": new_mem_b.strip(),
+                    "member_a_reference_income": float(new_inc_a),
+                    "member_b_reference_income": float(new_inc_b),
+                    "split_mode": new_split,
+                    "cohabitation_stage": new_cohab,
+                }
+                res_upd = api_client.update_joint_account(payload_acc)
+                if res_upd:
+                    st.success("✅ Configuración del hogar actualizada correctamente.")
+                    st.rerun()
+                else:
+                    st.error("❌ Error al actualizar los parámetros de la cuenta conjunta.")
 
     st.markdown("<hr style='margin: 30px 0 20px 0; border: 0; border-top: 1px solid #7f1d1d;'>", unsafe_allow_html=True)
     with st.expander("🚨 Zona de Peligro: Desactivar Cuenta Conjunta y Regresar a Estado Cero"):
@@ -1508,7 +1559,7 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
             "🗑️ Desactivar Cuenta Conjunta y Volver al Estado Cero",
             type="primary",
             disabled=not confirm_reset,
-            use_container_width=True,
+            width="stretch",
             key="btn_danger_reset",
         ):
             with st.spinner("Purgando cuenta conjunta y limpiando sincronización..."):
@@ -1639,7 +1690,7 @@ def _render_personal_assisted_contribution_banner(year: int) -> None:
             )
         with col_b2:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", use_container_width=True):
+            if st.button("💳 Asentar en 1-Clic", key="btn_asentar_asistida_banner", width="stretch"):
                 payload = {
                     "month": curr_month_str,
                     "amount": float(contrib_amount),

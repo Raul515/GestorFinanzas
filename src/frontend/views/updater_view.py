@@ -73,7 +73,7 @@ def render_updater_view() -> None:
         with col_rb1:
             st.caption("La instantánea previa preserva la versión estable anterior del código y dependencias.")
         with col_rb2:
-            if st.button("↩️ Deshacer Actualización", key="btn_rollback_code_banner", type="primary", use_container_width=True):
+            if st.button("↩️ Deshacer Actualización", key="btn_rollback_code_banner", type="primary", width="stretch"):
                 with st.spinner("Restaurando versión previa de código..."):
                     res_rb = api_client.rollback_system_update()
                     if res_rb and res_rb.get("success"):
@@ -120,7 +120,7 @@ def render_updater_view() -> None:
 
     col_btn1, col_btn2 = st.columns([1, 3])
     with col_btn1:
-        check_clicked = st.button("🔍 Buscar Actualizaciones", key="btn_check_updates", use_container_width=True)
+        check_clicked = st.button("🔍 Buscar Actualizaciones", key="btn_check_updates", width="stretch")
 
     if check_clicked:
         with st.spinner("Consultando GitHub API..."):

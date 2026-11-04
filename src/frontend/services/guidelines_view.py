@@ -247,13 +247,13 @@ def render_monthly_guidelines_expander(
                 st.markdown("<div style='margin-top: -6px; margin-bottom: 8px;'></div>", unsafe_allow_html=True)
                 _, rev_center, _ = st.columns([1.2, 1.6, 1.2])
                 with rev_center:
-                    with st.popover("↩️ Deshacer Estrategia", help="Revierte la estrategia aplicada eliminando transacciones vinculadas y restaurando saldos", use_container_width=True):
+                    with st.popover("↩️ Deshacer Estrategia", help="Revierte la estrategia aplicada eliminando transacciones vinculadas y restaurando saldos", width="stretch"):
                         st.markdown("##### ⚠️ ¿Deshacer Estrategia?")
                         st.warning(
                             "¿Estás seguro de que deseas deshacer la estrategia aplicada? "
                             "Se revertirán las transacciones generadas y el saldo del Fondo de Emergencia volverá a su estado anterior."
                         )
-                        if st.button("Sí, deshacer estrategia", key=f"btn_revert_strat_confirm_{m_key}_{g_idx}", type="primary", use_container_width=True):
+                        if st.button("Sí, deshacer estrategia", key=f"btn_revert_strat_confirm_{m_key}_{g_idx}", type="primary", width="stretch"):
                             if api_client:
                                 res = api_client.revert_guideline_strategy(month_key=m_key, scenario_type=scen_type)
                                 if res and res.get("success"):
