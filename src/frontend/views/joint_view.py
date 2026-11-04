@@ -26,6 +26,23 @@ MESES_ES = [
 ]
 
 
+def _format_date_es(d_val: Any) -> str:
+    """Formatea cualquier fecha a estándar español DD/MM/AAAA."""
+    if not d_val:
+        return "—"
+    s = str(d_val).strip()
+    if not s or s == "—":
+        return "—"
+    try:
+        clean = s.split("T")[0]
+        parts = clean.split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    except Exception:
+        pass
+    return s
+
+
 def render_joint_view(selected_year: int) -> None:
     """Punto de entrada principal para la pantalla de Economía del Hogar (Cuenta Conjunta)."""
     status = api_client.get_joint_status()
@@ -590,7 +607,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                         st.warning("No hay huchas activas. La aportación se ingresará en la tesorería general.")
 
                 cb_amount = st.number_input("Importe a Aportar (€)", min_value=1.0, value=100.0, step=25.0)
-                cb_date = st.date_input("Fecha de Aportación", value=date.today(), key=f"cb_date_{selected_month_name}")
+                cb_date = st.date_input("Fecha de Aportación", value=date.today(), format="DD/MM/YYYY", key=f"cb_date_{selected_month_name}")
 
             with col_c2:
                 local_prof = account.get("local_profile", "MEMBER_A")
@@ -656,7 +673,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
             with col_f1:
                 tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Billetes de avión, Factura Luz...")
                 tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
-                tx_date = st.date_input("Fecha", value=date.today())
+                tx_date = st.date_input("Fecha", value=date.today(), format="DD/MM/YYYY")
 
             with col_f2:
                 chosen_subcat_id = None
@@ -768,7 +785,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
             )
             contrib_rows.append({
                 "ID": cb.get("id"),
-                "Fecha": cb.get("contribution_date"),
+                "Fecha": _format_date_es(cb.get("contribution_date")),
                 "Aportante": p_name,
                 "Mes Aplicado": cb.get("month"),
                 "Importe (€)": f"{cb.get('amount', 0.0):,.2f} €",
@@ -832,7 +849,7 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
             table_rows.append({
                 "ID": tx.get("id"),
-                "Fecha": tx.get("date"),
+                "Fecha": _format_date_es(tx.get("date")),
                 "Descripción": tx.get("description"),
                 "Subcategoría": subcat_lbl,
                 "Hucha Imputada": fund_lbl,
@@ -913,7 +930,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
             with col_f2:
                 current_balance = st.number_input("Saldo Inicial Acumulado (€)", min_value=0.0, value=0.0, step=25.0)
                 monthly_target = st.number_input("Aportación Mensual Sugerida (€)", min_value=0.0, value=50.0, step=10.0)
-                target_date = st.date_input("Fecha Objetivo (Opcional)", value=None)
+                target_date = st.date_input("Fecha Objetivo (Opcional)", value=None, format="DD/MM/YYYY")
 
             fund_created = st.form_submit_button("🎯 Crear Hucha de Amortización", width="stretch")
             if fund_created:
@@ -1091,7 +1108,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                     p_profile = tr.get("created_by_profile")
                     p_name = account.get("member_a_name", "Miembro A") if p_profile == "MEMBER_A" else account.get("member_b_name", "Miembro B")
                     tr_rows.append({
-                        "Fecha": tr.get("date"),
+                        "Fecha": _format_date_es(tr.get("date")),
                         "Origen": tr.get("source_fund_name") or f"Hucha #{tr.get('source_fund_id')}",
                         "Destino": tr.get("target_fund_name") or f"Hucha #{tr.get('target_fund_id')}",
                         "Importe (€)": f"{float(tr.get('amount', 0.0)):,.2f} €",
@@ -1307,7 +1324,7 @@ def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> 
             status_lbl = "🟢 Reembolsado"
 
         table_rows.append({
-            "Fecha": tx.get("date"),
+            "Fecha": _format_date_es(tx.get("date")),
             "Concepto / Descripción": tx.get("description"),
             "Subcategoría": subcat_lbl,
             "Imputación": fund_lbl,

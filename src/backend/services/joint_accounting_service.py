@@ -9,6 +9,18 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 import uuid
 
+def _format_date_excel(d_val: Any) -> str:
+    """Formatea fechas para exportación a Excel en estándar DD/MM/AAAA."""
+    if not d_val:
+        return ""
+    if hasattr(d_val, "strftime"):
+        return d_val.strftime("%d/%m/%Y")
+    s = str(d_val).strip()
+    parts = s.split("T")[0].split("-")
+    if len(parts) == 3:
+        return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    return s
+
 from backend.domain.schemas.joint import (
     CohabitationStage,
     ContributionStrategy,
@@ -424,7 +436,7 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
         tx_rows.append({
             'ID': t.id,
             'UUID': t.uuid or '',
-            'Fecha': t.date.isoformat() if hasattr(t.date, 'isoformat') else str(t.date),
+            'Fecha': _format_date_excel(t.date),
             'Concepto': t.description,
             'Categoria': cat_name,
             'Subcategoria': subcat_name,
@@ -435,7 +447,7 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
             'Medio de Pago': str(getattr(t, 'paid_by', 'COMMON') or 'COMMON'),
             'Modalidad Liquidacion': str(getattr(t, 'settlement_mechanism', 'COMMON_REIMBURSEMENT') or ''),
             'Estado Reembolso': str(getattr(t, 'settlement_status', 'SETTLED') or 'SETTLED'),
-            'Fecha Liquidacion': t.settled_at.isoformat() if getattr(t, 'settled_at', None) else '',
+            'Fecha Liquidacion': t.settled_at.strftime('%d/%m/%Y %H:%M:%S') if getattr(t, 'settled_at', None) else '',
         })
     df_tx = pd.DataFrame(tx_rows)
     if df_tx.empty:
@@ -457,7 +469,7 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
         contrib_rows.append({
             'ID': c.id,
             'UUID': c.uuid or '',
-            'Fecha': c.contribution_date.isoformat() if hasattr(c.contribution_date, 'isoformat') else str(c.contribution_date),
+            'Fecha': _format_date_excel(c.contribution_date),
             'Mes': c.month,
             'Miembro': str(c.contributor_profile),
             'Importe (EUR)': round(float(c.amount), 2),

@@ -47,6 +47,30 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+def _format_datetime_es(raw: Any) -> str:
+    """Formatea strings de fecha y hora ISO a estándar español DD/MM/AAAA HH:MM."""
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    try:
+        clean = s.replace("Z", "").split(".")[0]
+        if "T" in clean:
+            d_part, t_part = clean.split("T")
+        elif " " in clean:
+            d_part, t_part = clean.split(" ")
+        else:
+            d_part, t_part = clean, ""
+        d_p = d_part.split("-")
+        if len(d_p) == 3:
+            res = f"{d_p[2]}/{d_p[1]}/{d_p[0]}"
+            if t_part:
+                res += f" {t_part[:5]}"
+            return res
+    except Exception:
+        pass
+    return s[:16].replace("T", " ")
+
+
 st.set_page_config(page_title="Gestor Finanzas", layout="wide")
 
 # Load CSS
@@ -1020,7 +1044,7 @@ with tab_radar:
         st.info("No se pudieron cargar los indicadores macroeconómicos. Pulsa '🔄 Actualizar Radar' para sincronizar con los proveedores.")
     else:
         cached_tag = "📦 Desde caché local (24h)" if macro_data.get("is_cached") else "⚡ Datos en vivo"
-        fetch_time = macro_data.get("fetched_at", "")[:16].replace("T", " ")
+        fetch_time = _format_datetime_es(macro_data.get("fetched_at", ""))
         st.caption(f"{cached_tag} | Captura: {fetch_time} | {macro_data.get('source_notes', '')}")
 
         indicators_by_id = {ind["id"]: ind for ind in macro_data.get("indicators", [])}
@@ -1143,7 +1167,7 @@ with tab_radar:
                 source = n.get("source", "Fuente pública")
                 link = n.get("link", "#")
                 pub = n.get("published_at")
-                pub_txt = f" • {pub[:16].replace('T', ' ')}" if pub else ""
+                pub_txt = f" • {_format_datetime_es(pub)}" if pub else ""
 
                 # Tarjeta visual de la noticia
                 with st.container():
