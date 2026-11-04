@@ -328,22 +328,62 @@ El presente plan correctivo se ejecutará estrictamente por fases de severidad t
 
 ---
 
+### Fase 7.4: Traspaso Directo y Rebalanceo entre Huchas de Amortización con Historial de Trazabilidad
+
+- **Objetivo**: Permitir el rebalanceo atómico de fondos entre metas de ahorro (huchas de amortización) sin distorsionar la tesorería de gastos del hogar, soportando origen flexible (cualquier hucha con saldo > 0, activa o archivada) hacia destino activo, con registro inmutable de auditoría y propagación bidireccional vía deltas Syncthing.
+- **Detalle de Funcionalidades**:
+  1. **Modelo ORM y Esquemas de Auditoría**:
+     - Nuevo modelo `JointSinkingFundTransfer` (`id`, `uuid`, `joint_account_id`, `source_fund_id`, `target_fund_id`, `amount`, `date`, `notes`, `created_by_profile`, `created_at`) con constraints (`amount > 0`, `source_fund_id != target_fund_id`).
+     - Esquemas Pydantic `JointSinkingFundTransferCreate` y `JointSinkingFundTransferResponse`.
+     - Migración defensiva en `sqlite_db.py` (`CREATE TABLE IF NOT EXISTS joint_sinking_fund_transfers`).
+  2. **Persistencia y Lógica de Negocio Desacoplada**:
+     - Método `transfer_sinking_fund_balance(source_id, target_id, amount, date, notes, profile)` en `sqlite_crud.py` que ejecuta en una única transacción atómica:
+       - Validación de saldo suficiente en la hucha origen (`source.current_balance >= amount`).
+       - Validación de hucha destino activa.
+       - Descuento de origen e incremento de destino (`source -= amount`, `target += amount`).
+       - Inserción del registro de trazabilidad en `joint_sinking_fund_transfers`.
+  3. **Endpoints REST FastAPI**:
+     - `POST /joint/sinking-funds/transfer`: Ejecuta el traspaso, persiste la traza y emite los 3 deltas de sincronización outbox (`SINKING_FUND (UPSERT)` origen, `SINKING_FUND (UPSERT)` destino, y `SINKING_FUND_TRANSFER (UPSERT)`).
+     - `GET /joint/sinking-funds/transfers`: Consulta el historial cronológico de traspasos y rebalanceos realizados.
+  4. **Sincronización P2P**:
+     - Soporte para entidad `SINKING_FUND_TRANSFER` en `JointSyncService` para almacenar el apunte de auditoría en la réplica remota con idempotencia por UUID, además de la actualización de saldos LWW de ambas huchas.
+  5. **Interfaz de Usuario en Streamlit**:
+     - En pestaña *🎯 Huchas de Amortización*:
+       - Expander interactivo: `[↔️ Traspasar Saldo entre Huchas]` con selector de origen (indicando saldo disponible), selector de destino (huchas activas), input numérico (máximo el saldo de origen), campo opcional de motivo y botón de confirmación.
+       - Expander/Sección de consulta: `📜 Historial de Rebalanceos entre Huchas` mostrando tabla con Fecha, Hucha Origen, Hucha Destino, Importe, Motivo y Autor.
+- **Archivos a crear/modificar**:
+  - `src/backend/domain/models/joint.py` [MODIFICADO: Modelo `JointSinkingFundTransfer`].
+  - `src/backend/domain/schemas/joint.py` [MODIFICADO: Esquemas `JointSinkingFundTransferCreate` y `Response`, y enum `SyncEntityType.SINKING_FUND_TRANSFER`].
+  - `src/backend/database/componentes/sqlite_db.py` [MODIFICADO: Migración defensiva de tabla `joint_sinking_fund_transfers`].
+  - `src/backend/database/componentes/sqlite_crud.py` [MODIFICADO: Métodos `transfer_sinking_fund_balance()` y `get_sinking_fund_transfers()`].
+  - `src/backend/services/joint_sync_service.py` [MODIFICADO: Manejo de entidad `SINKING_FUND_TRANSFER` en inbox].
+  - `src/backend/api/routers/joint.py` [MODIFICADO: Endpoints `/joint/sinking-funds/transfer` y `/joint/sinking-funds/transfers`].
+  - `src/frontend/api_client.py` [MODIFICADO: Métodos cliente `transfer_joint_sinking_fund()` y `get_joint_sinking_fund_transfers()`].
+  - `src/frontend/views/joint_view.py` [MODIFICADO: Formulario de traspaso e historial de rebalanceos en pestaña Huchas].
+  - `tests/unit/test_joint_accounting_service.py` [MODIFICADO: Pruebas unitarias de persistencia y transferencias].
+  - `tests/unit/test_joint_sync_service.py` [MODIFICADO: Pruebas de sincronización de rebalanceos].
+  - `tests/unit/test_joint_frontend.py` [MODIFICADO: Pruebas de cliente frontend].
+  - `tests/integration/test_joint_api.py` [MODIFICADO: Pruebas de integración del endpoint de transferencia].
+- **Puerta de Verificación**:
+  ```powershell
+  .\venv\Scripts\pytest -v tests/unit/test_joint_* tests/integration/test_joint_*
+  ```
+- **Criterio de Aceptación**: 100% de las pruebas pasando, mutación atómica rigurosa de saldos, registro de trazabilidad inmutable sin afección a la tesorería mensual del hogar y replicación simétrica certificada en ambos nodos Syncthing.
+
+---
+
 ### Registro de Nuevas Mejoras Futuras Identificadas (Ordenadas por Prioridad e Impacto)
 
-Tras la formalización de la Fase 7.3, se retienen las siguientes 4 posibles ampliaciones futuras ordenadas por impacto operativo:
+Tras la formalización de la Fase 7.4, se retienen las siguientes 3 posibles ampliaciones futuras:
 
-1. **Prioridad 1 (ALTA): Traspaso Directo / Rebalanceo entre Huchas de Amortización**:
-   - *Problema en la vida real*: Si se cancela un viaje o surge una urgencia en el vehículo, la pareja necesita reasignar dinero acumulado en "Fondo Vacaciones" hacia "Fondo Coche". Actualmente, solo se puede hacer borrando una hucha con reasignación total o editando manualmente los saldos.
-   - *Solución*: Modal o expander en la pestaña *🎯 Huchas de Amortización*: `[↔️ Traspasar Saldo entre Huchas]` con selector de origen, destino e importe, generando los deltas `UPSERT` correspondientes para replicar el movimiento en ambos terminales.
-
-2. **Prioridad 2 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
+1. **Prioridad 1 (MEDIA-ALTA): Monitor de Aportaciones Cruzadas en el Perfil Personal**:
    - *Problema en la vida real*: El banner de aportación en el Perfil Personal se oculta o marca como completado cuando el usuario local aporta. Para comprobar si la pareja ya ha aportado su parte del mes, el usuario debe navegar explícitamente a "Economía del Hogar".
    - *Solución*: Un badge compacto en el banner personal: *"Noviembre: David (✅ Aportado: 600 €) | Raquel (⏳ Pendiente: 400 €)"*, ofreciendo visibilidad inmediata sin cambiar de pantalla.
 
-3. **Prioridad 3 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
+2. **Prioridad 2 (MEDIA): Buscador Global y Filtro Multicriterio de Gastos Comunes**:
    - *Problema en la vida real*: Buscar un gasto específico (ej. "IKEA", "Seguro Hogar", "Veterinario") a lo largo del año requiere revisar los 12 meses uno a uno o inspeccionar la hoja de cálculo exportada.
    - *Solución*: Un buscador interactivo con campo de texto libre, selector de rango de fechas y filtro por subcategoría / pagador para localizar transacciones en milisegundos.
 
-4. **Prioridad 4 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
+3. **Prioridad 3 (MEDIA-BAJA): Asiento de Ajuste por Conciliación Bancaria Real**:
    - *Problema en la vida real*: El saldo de tesorería de la app es puramente contable (`aportaciones - gastos`). Pequeños descuadres bancarios (comisiones de mantenimiento de 0,50 €, intereses a favor de céntimos o redondeos) hacen que el saldo bancario real no coincida al céntimo.
    - *Solución*: Un botón `[⚖️ Conciliar con Saldo Real]` donde el usuario introduce el saldo que ve en la app del banco (ej. 1.842,50 € frente a 1.840,00 €) y el sistema genera automáticamente un asiento de ajuste positivo o negativo justificado.

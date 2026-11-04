@@ -50,6 +50,7 @@ class SyncEntityType(str, Enum):
     SINKING_FUND = "SINKING_FUND"
     ACCOUNT = "ACCOUNT"
     SUBCATEGORY = "SUBCATEGORY"
+    SINKING_FUND_TRANSFER = "SINKING_FUND_TRANSFER"
 
 
 class HealthStatus(str, Enum):
@@ -467,3 +468,46 @@ class JointSettlementSummaryResponse(BaseModel):
     unsettled_count: int = 0
     unsettled_transactions: list[JointTransactionResponse] = []
 
+
+
+# ==========================================
+# ESQUEMAS DE TRASPASO ENTRE HUCHAS (FASE 7.4)
+# ==========================================
+
+class JointSinkingFundTransferCreate(BaseModel):
+    """Esquema para solicitar un traspaso de saldo entre huchas."""
+    source_fund_id: int
+    target_fund_id: int
+    amount: float = Field(gt=0.0)
+    date: Optional[date] = None
+    notes: Optional[str] = Field(default=None, max_length=255)
+    created_by_profile: Optional[ProfileIdentifier] = None
+    uuid: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_different_funds(self) -> "JointSinkingFundTransferCreate":
+        if self.source_fund_id == self.target_fund_id:
+            raise ValueError("La hucha de origen y la de destino deben ser distintas.")
+        if self.date is None:
+            self.date = date.today()
+        if self.uuid is None:
+            self.uuid = str(uuid.uuid4())
+        return self
+
+
+class JointSinkingFundTransferResponse(BaseModel):
+    """Esquema de respuesta para la traza de traspaso entre huchas."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    uuid: str
+    joint_account_id: int
+    source_fund_id: int
+    target_fund_id: int
+    source_fund_name: Optional[str] = None
+    target_fund_name: Optional[str] = None
+    amount: float
+    date: date
+    notes: Optional[str] = None
+    created_by_profile: str
+    created_at: datetime

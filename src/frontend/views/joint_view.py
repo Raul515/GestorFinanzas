@@ -932,6 +932,79 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                     else:
                         st.error("❌ No se pudo crear la hucha. Verifica que el nombre no esté duplicado.")
 
+    # Traspaso directo / Rebalanceo entre huchas (Fase 7.4)
+    eligible_sources = [f for f in funds if float(f.get("current_balance", 0.0)) > 0]
+    active_targets = [f for f in funds if f.get("status") == "ACTIVE"]
+
+    with st.expander("↔️ Traspasar Saldo entre Huchas (Rebalanceo)", expanded=False):
+        if not eligible_sources:
+            st.info("ℹ️ No hay huchas con saldo acumulado disponible para traspasar.")
+        elif len(funds) < 2:
+            st.info("ℹ️ Necesitas tener al menos dos huchas creadas para realizar un traspaso entre ellas.")
+        else:
+            with st.form("transfer_sinking_fund_form"):
+                col_tr1, col_tr2 = st.columns(2)
+                with col_tr1:
+                    src_id = st.selectbox(
+                        "Hucha de Origen (desde donde sale el saldo)",
+                        options=[f["id"] for f in eligible_sources],
+                        format_func=lambda fid: next(
+                            (f"{f['name']} (Disponible: {float(f.get('current_balance', 0.0)):,.2f} €)" for f in eligible_sources if f["id"] == fid),
+                            str(fid),
+                        ),
+                        key="sel_src_fund_transfer",
+                    )
+                    selected_src = next((f for f in eligible_sources if f["id"] == src_id), None)
+                    max_avail = float(selected_src.get("current_balance", 0.0)) if selected_src else 0.0
+
+                    tr_amount = st.number_input(
+                        "Importe a Traspasar (€)",
+                        min_value=0.01,
+                        max_value=max(max_avail, 0.01),
+                        value=min(50.0, max(max_avail, 0.01)),
+                        step=10.0,
+                        key="num_amount_fund_transfer",
+                    )
+
+                with col_tr2:
+                    dest_candidates = [f for f in active_targets if f["id"] != src_id]
+                    if not dest_candidates:
+                        st.warning("No hay otra hucha activa disponible como destino.")
+                        dest_id = None
+                    else:
+                        dest_id = st.selectbox(
+                            "Hucha de Destino (hacia donde entra el saldo)",
+                            options=[f["id"] for f in dest_candidates],
+                            format_func=lambda fid: next(
+                                (f"{f['name']} (Saldo actual: {float(f.get('current_balance', 0.0)):,.2f} €)" for f in dest_candidates if f["id"] == fid),
+                                str(fid),
+                            ),
+                            key="sel_dest_fund_transfer",
+                        )
+
+                    tr_notes = st.text_input("Motivo / Notas del Traspaso (Opcional)", placeholder="Ej. Reasignación de viaje cancelado a revisión coche")
+
+                tr_submitted = st.form_submit_button("↔️ Confirmar Traspaso de Saldo", use_container_width=True)
+                if tr_submitted:
+                    if not dest_id:
+                        st.error("Debes seleccionar una hucha de destino activa válida.")
+                    elif tr_amount <= 0 or tr_amount > max_avail:
+                        st.error(f"El importe debe ser mayor a 0 y no superar los {max_avail:,.2f} € disponibles.")
+                    else:
+                        payload_tr = {
+                            "source_fund_id": src_id,
+                            "target_fund_id": dest_id,
+                            "amount": float(tr_amount),
+                            "notes": tr_notes.strip() if tr_notes else None,
+                            "created_by_profile": account.get("local_profile", "MEMBER_A"),
+                        }
+                        res_tr = api_client.transfer_joint_sinking_fund(payload_tr)
+                        if res_tr:
+                            st.success(f"✅ Se han traspasado {tr_amount:,.2f} € con éxito y se han emitido los deltas de sincronización.")
+                            st.rerun()
+                        else:
+                            st.error("❌ No se pudo completar el traspaso de saldo.")
+
     st.markdown("### Mis Huchas Activas")
     if not funds:
         st.info("No tienes huchas de amortización activas todavía.")
@@ -997,6 +1070,25 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                             st.rerun()
                         else:
                             st.error("No se pudo eliminar la hucha.")
+
+        # Historial de Rebalanceos y Traspasos entre Huchas (Fase 7.4)
+        transfers_history = api_client.get_joint_sinking_fund_transfers(limit=50)
+        if transfers_history:
+            with st.expander(f"📜 Historial de Rebalanceos entre Huchas ({len(transfers_history)})", expanded=False):
+                tr_rows = []
+                for tr in transfers_history:
+                    p_profile = tr.get("created_by_profile")
+                    p_name = account.get("member_a_name", "Miembro A") if p_profile == "MEMBER_A" else account.get("member_b_name", "Miembro B")
+                    tr_rows.append({
+                        "Fecha": tr.get("date"),
+                        "Origen": tr.get("source_fund_name") or f"Hucha #{tr.get('source_fund_id')}",
+                        "Destino": tr.get("target_fund_name") or f"Hucha #{tr.get('target_fund_id')}",
+                        "Importe (€)": f"{float(tr.get('amount', 0.0)):,.2f} €",
+                        "Motivo / Notas": tr.get("notes") or "—",
+                        "Registrado Por": p_name,
+                    })
+                df_tr = pd.DataFrame(tr_rows)
+                st.dataframe(df_tr, use_container_width=True)
 
 
 # =====================================================================

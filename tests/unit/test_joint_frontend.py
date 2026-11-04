@@ -402,3 +402,49 @@ def test_api_client_settlement_endpoints():
 
         ok_all = api_client.settle_all_joint_transactions()
         assert ok_all is True
+
+
+def test_api_client_sinking_fund_transfer_endpoints():
+    """Valida los métodos de API client para rebalanceo y traspaso entre huchas (Fase 7.4)."""
+    # 1. transfer_joint_sinking_fund
+    with patch("requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {
+            "id": 1,
+            "uuid": "tr-uuid-1",
+            "source_fund_id": 1,
+            "target_fund_id": 2,
+            "amount": 100.0,
+            "date": "2026-11-04",
+            "notes": "Rebalanceo",
+        }
+        mock_post.return_value = mock_resp
+
+        res = api_client.transfer_joint_sinking_fund({
+            "source_fund_id": 1,
+            "target_fund_id": 2,
+            "amount": 100.0,
+        })
+        assert res is not None
+        assert res["amount"] == 100.0
+        assert res["source_fund_id"] == 1
+
+    # 2. get_joint_sinking_fund_transfers
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [
+            {
+                "id": 1,
+                "uuid": "tr-uuid-1",
+                "source_fund_name": "Vacaciones",
+                "target_fund_name": "Coche",
+                "amount": 100.0,
+            }
+        ]
+        mock_get.return_value = mock_resp
+
+        history = api_client.get_joint_sinking_fund_transfers()
+        assert len(history) == 1
+        assert history[0]["source_fund_name"] == "Vacaciones"

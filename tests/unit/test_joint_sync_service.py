@@ -22,11 +22,13 @@ from backend.domain.models.joint import (
     JointSinkingFund,
     JointSubcategory,
     JointTransaction,
+    JointSinkingFundTransfer,
 )
 from backend.domain.schemas.joint import (
     CohabitationStage,
     ContributionStrategy,
     JointAccountSetupRequest,
+    JointSinkingFundCreate,
     ProfileIdentifier,
     SplitMode,
     SyncAction,
@@ -846,3 +848,58 @@ def test_transaction_settlement_sync(temp_sync_dir: str, db_session: Session):
     db_session.refresh(tx_db)
     assert tx_db.settlement_status == "SETTLED"
     assert tx_db.settled_at is not None
+
+
+def test_sinking_fund_transfer_sync(temp_sync_dir: str, db_session: Session):
+    """Verifica que el evento de transferencia entre huchas se replique de forma idempotente vía sync."""
+    repo = SQLiteRepository(db_session)
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Transfer Sync",
+            cohabitation_stage=CohabitationStage.COHABITATION,
+            split_mode=SplitMode.EQUAL_50_50,
+            contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+            member_a_reference_income=2500.0,
+            member_b_reference_income=2200.0,
+        )
+    )
+
+    fund_a = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Fondo A", target_amount=1000.0, current_balance=500.0)
+    )
+    fund_b = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Fondo B", target_amount=1000.0, current_balance=200.0)
+    )
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    inbox_path = Path(temp_sync_dir) / "inbox"
+    t_uuid = str(uuid.uuid4())
+
+    evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SINKING_FUND_TRANSFER",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-04T11:00:00Z",
+        "payload": {
+            "uuid": t_uuid,
+            "source_fund_name": "Fondo A",
+            "target_fund_name": "Fondo B",
+            "amount": 100.0,
+            "date": "2026-11-04",
+            "notes": "Rebalanceo remoto",
+            "created_by_profile": "MEMBER_B",
+        },
+    }
+    with open(inbox_path / "evt_tr.json", "w", encoding="utf-8") as f:
+        json.dump(evt, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    tr_db = db_session.query(JointSinkingFundTransfer).filter_by(uuid=t_uuid).first()
+    assert tr_db is not None
+    assert tr_db.source_fund_id == fund_a.id
+    assert tr_db.target_fund_id == fund_b.id
+    assert tr_db.amount == 100.0
+    assert tr_db.notes == "Rebalanceo remoto"

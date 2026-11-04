@@ -757,6 +757,80 @@ class SQLiteRepository(IRepository):
         self.db.commit()
         return True
 
+    def transfer_sinking_fund_balance(
+        self, transfer_data: joint_schema.JointSinkingFundTransferCreate
+    ) -> joint_model.JointSinkingFundTransfer:
+        """Ejecuta un rebalanceo atómico de saldo entre dos huchas de amortización y registra la traza."""
+        if transfer_data.source_fund_id == transfer_data.target_fund_id:
+            raise ValueError("La hucha de origen y destino deben ser distintas.")
+
+        source = self.get_joint_sinking_fund(transfer_data.source_fund_id)
+        target = self.get_joint_sinking_fund(transfer_data.target_fund_id)
+
+        if not source:
+            raise ValueError(f"Hucha de origen con ID {transfer_data.source_fund_id} no encontrada.")
+        if not target:
+            raise ValueError(f"Hucha de destino con ID {transfer_data.target_fund_id} no encontrada.")
+        if target.status != "ACTIVE":
+            raise ValueError(f"La hucha de destino '{target.name}' debe encontrarse en estado ACTIVE.")
+
+        amt = round(float(transfer_data.amount), 2)
+        if amt <= 0:
+            raise ValueError("El importe a transferir debe ser mayor que 0.")
+
+        curr_src = round(float(source.current_balance), 2)
+        if curr_src < amt:
+            raise ValueError(
+                f"Saldo insuficiente en la hucha origen '{source.name}' ({curr_src:.2f} € disponibles vs {amt:.2f} € solicitados)."
+            )
+
+        source.current_balance = round(curr_src - amt, 2)
+        target.current_balance = round(float(target.current_balance) + amt, 2)
+
+        p_val = transfer_data.created_by_profile
+        if hasattr(p_val, "value"):
+            p_val = p_val.value
+        p_val = str(p_val or "MEMBER_A")
+
+        t_date = transfer_data.date
+        if isinstance(t_date, str):
+            t_date = datetime.date.fromisoformat(t_date)
+        elif not t_date:
+            t_date = datetime.date.today()
+
+        transfer = joint_model.JointSinkingFundTransfer(
+            uuid=transfer_data.uuid or str(uuid.uuid4()),
+            joint_account_id=1,
+            source_fund_id=source.id,
+            target_fund_id=target.id,
+            amount=amt,
+            date=t_date,
+            notes=transfer_data.notes,
+            created_by_profile=p_val,
+        )
+
+        self.db.add(transfer)
+        self.db.commit()
+        self.db.refresh(transfer)
+        self.db.refresh(source)
+        self.db.refresh(target)
+        return transfer
+
+    def get_joint_sinking_fund_transfers(
+        self, limit: int = 100
+    ) -> List[joint_model.JointSinkingFundTransfer]:
+        """Obtiene el historial cronológico de traspasos entre huchas."""
+        return (
+            self.db.query(joint_model.JointSinkingFundTransfer)
+            .filter(joint_model.JointSinkingFundTransfer.joint_account_id == 1)
+            .order_by(
+                joint_model.JointSinkingFundTransfer.date.desc(),
+                joint_model.JointSinkingFundTransfer.id.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
     def get_joint_transactions(
         self, year: Optional[int] = None, month: Optional[str] = None
     ) -> List[joint_model.JointTransaction]:

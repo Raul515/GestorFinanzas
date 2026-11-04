@@ -945,6 +945,36 @@ def delete_joint_sinking_fund(fund_id: int, reallocate_to_fund_id: Optional[int]
     return False
 
 
+def transfer_joint_sinking_fund(payload: dict) -> Optional[Dict[str, Any]]:
+    """Ejecuta un rebalanceo o traspaso directo de saldo entre huchas del hogar."""
+    url = f"{API_URL}/joint/sinking-funds/transfer"
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            return response.json()
+        logger.warning("Fallo en transfer_joint_sinking_fund (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en transfer_joint_sinking_fund en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en transfer_joint_sinking_fund(): %s", e)
+    return None
+
+
+def get_joint_sinking_fund_transfers(limit: int = 100) -> List[Dict[str, Any]]:
+    """Obtiene el historial de traspasos y rebalanceos entre huchas de amortización."""
+    url = f"{API_URL}/joint/sinking-funds/transfers"
+    try:
+        response = requests.get(url, params={"limit": limit}, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en get_joint_sinking_fund_transfers (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_sinking_fund_transfers en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_sinking_fund_transfers(): %s", e)
+    return []
+
+
 def get_joint_transactions(year: Optional[int] = None, month: Optional[str] = None) -> List[Dict[str, Any]]:
     """Obtiene los gastos del hogar registrados."""
     url = f"{API_URL}/joint/transactions"

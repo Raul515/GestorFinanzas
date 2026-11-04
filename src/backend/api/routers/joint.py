@@ -515,6 +515,104 @@ def delete_joint_sinking_fund(
     return {"deleted": True, "fund_id": fund_id}
 
 
+@router.post("/sinking-funds/transfer", response_model=schemas.JointSinkingFundTransferResponse, status_code=status.HTTP_201_CREATED)
+def transfer_joint_sinking_fund(
+    transfer_req: schemas.JointSinkingFundTransferCreate,
+    repo: SQLiteRepository = Depends(get_repo),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> schemas.JointSinkingFundTransferResponse:
+    """Ejecuta un traspaso/rebalanceo directo de saldo entre dos huchas de amortización del hogar."""
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cuenta conjunta no configurada.",
+        )
+
+    try:
+        transfer = repo.transfer_sinking_fund_balance(transfer_req)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    source_fund = repo.get_joint_sinking_fund(transfer.source_fund_id)
+    target_fund = repo.get_joint_sinking_fund(transfer.target_fund_id)
+
+    # Emitir deltas de actualización de saldo para ambas huchas
+    if source_fund:
+        sync_service.emit_event(
+            entity_type=schemas.SyncEntityType.SINKING_FUND,
+            action=schemas.SyncAction.UPSERT,
+            payload={
+                "name": source_fund.name,
+                "target_amount": source_fund.target_amount,
+                "current_balance": source_fund.current_balance,
+                "monthly_target_amount": source_fund.monthly_target_amount,
+                "allocation_percentage": source_fund.allocation_percentage,
+                "status": source_fund.status,
+                "priority": source_fund.priority,
+            },
+            origin_device_id=sync_service.local_device_id,
+        )
+
+    if target_fund:
+        sync_service.emit_event(
+            entity_type=schemas.SyncEntityType.SINKING_FUND,
+            action=schemas.SyncAction.UPSERT,
+            payload={
+                "name": target_fund.name,
+                "target_amount": target_fund.target_amount,
+                "current_balance": target_fund.current_balance,
+                "monthly_target_amount": target_fund.monthly_target_amount,
+                "allocation_percentage": target_fund.allocation_percentage,
+                "status": target_fund.status,
+                "priority": target_fund.priority,
+            },
+            origin_device_id=sync_service.local_device_id,
+        )
+
+    # Emitir delta de la transferencia para trazabilidad histórica en la réplica
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SINKING_FUND_TRANSFER,
+        action=schemas.SyncAction.UPSERT,
+        payload={
+            "uuid": transfer.uuid,
+            "source_fund_id": transfer.source_fund_id,
+            "source_fund_name": source_fund.name if source_fund else None,
+            "target_fund_id": transfer.target_fund_id,
+            "target_fund_name": target_fund.name if target_fund else None,
+            "amount": transfer.amount,
+            "date": transfer.date.isoformat() if hasattr(transfer.date, "isoformat") else str(transfer.date),
+            "notes": transfer.notes,
+            "created_by_profile": transfer.created_by_profile,
+        },
+        origin_device_id=sync_service.local_device_id,
+    )
+
+    resp = schemas.JointSinkingFundTransferResponse.model_validate(transfer)
+    if source_fund:
+        resp.source_fund_name = source_fund.name
+    if target_fund:
+        resp.target_fund_name = target_fund.name
+    return resp
+
+
+@router.get("/sinking-funds/transfers", response_model=List[schemas.JointSinkingFundTransferResponse])
+def get_joint_sinking_fund_transfers(
+    limit: int = Query(default=100, ge=1, le=500),
+    repo: SQLiteRepository = Depends(get_repo),
+) -> List[schemas.JointSinkingFundTransferResponse]:
+    """Obtiene el historial cronológico de traspasos y rebalanceos entre huchas."""
+    transfers = repo.get_joint_sinking_fund_transfers(limit=limit)
+    funds_all = {f.id: f.name for f in repo.get_joint_sinking_funds()}
+    result = []
+    for t in transfers:
+        item = schemas.JointSinkingFundTransferResponse.model_validate(t)
+        item.source_fund_name = funds_all.get(t.source_fund_id, f"Hucha #{t.source_fund_id}")
+        item.target_fund_name = funds_all.get(t.target_fund_id, f"Hucha #{t.target_fund_id}")
+        result.append(item)
+    return result
+
+
 # ==========================================
 # 4. TRANSACCIONES Y GASTOS DEL HOGAR
 # ==========================================

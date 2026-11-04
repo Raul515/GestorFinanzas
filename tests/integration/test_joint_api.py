@@ -644,3 +644,76 @@ def test_joint_settlement_api_flow(client: TestClient):
     assert s_data3["unsettled_count"] == 0
     assert s_data3["common_reimbursement"]["total_common_debt"] == 0.0
     assert s_data3["direct_settlement"]["net_amount"] == 0.0
+
+
+def test_joint_sinking_fund_transfer_api_flow(client: TestClient):
+    """Valida el flujo integral de traspaso y rebalanceo entre huchas vía API REST (Fase 7.4)."""
+    # 1. Configurar hogar
+    setup_resp = client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Casa Test Transfer Flow",
+            "cohabitation_stage": "COHABITATION",
+            "split_mode": "EQUAL_50_50",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "member_a_reference_income": 2500.0,
+            "member_b_reference_income": 2200.0,
+        },
+    )
+    assert setup_resp.status_code == 201
+
+    # 2. Crear dos huchas
+    f1_resp = client.post(
+        "/joint/sinking-funds",
+        json={"name": "Vacaciones Playa", "target_amount": 1000.0, "current_balance": 400.0, "status": "ACTIVE"},
+    )
+    assert f1_resp.status_code == 201
+    f1 = f1_resp.json()
+
+    f2_resp = client.post(
+        "/joint/sinking-funds",
+        json={"name": "Seguro Moto", "target_amount": 500.0, "current_balance": 100.0, "status": "ACTIVE"},
+    )
+    assert f2_resp.status_code == 201
+    f2 = f2_resp.json()
+
+    # 3. Traspaso exitoso de 150€ de f1 a f2
+    tr_resp = client.post(
+        "/joint/sinking-funds/transfer",
+        json={
+            "source_fund_id": f1["id"],
+            "target_fund_id": f2["id"],
+            "amount": 150.0,
+            "notes": "Rebalanceo viaje a seguro",
+        },
+    )
+    assert tr_resp.status_code == 201
+    tr_data = tr_resp.json()
+    assert tr_data["amount"] == 150.0
+    assert tr_data["source_fund_name"] == "Vacaciones Playa"
+    assert tr_data["target_fund_name"] == "Seguro Moto"
+
+    # Verificar saldos actualizados de ambas huchas
+    funds_after = client.get("/joint/sinking-funds").json()
+    f1_after = next(f for f in funds_after if f["id"] == f1["id"])
+    f2_after = next(f for f in funds_after if f["id"] == f2["id"])
+    assert f1_after["current_balance"] == 250.0
+    assert f2_after["current_balance"] == 250.0
+
+    # 4. Consultar historial de traspasos
+    history_resp = client.get("/joint/sinking-funds/transfers")
+    assert history_resp.status_code == 200
+    history = history_resp.json()
+    assert len(history) == 1
+    assert history[0]["notes"] == "Rebalanceo viaje a seguro"
+
+    # 5. Intentar traspasar más saldo del disponible arroja 400 Bad Request
+    fail_resp = client.post(
+        "/joint/sinking-funds/transfer",
+        json={
+            "source_fund_id": f1["id"],
+            "target_fund_id": f2["id"],
+            "amount": 300.0,  # Disponible: 250€
+        },
+    )
+    assert fail_resp.status_code == 400

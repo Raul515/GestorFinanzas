@@ -209,3 +209,28 @@ class JointAppliedSyncEvent(Base):
         DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
     )
 
+
+
+class JointSinkingFundTransfer(Base):
+    """Modelo ORM para el registro y auditoría de traspasos directos entre huchas de amortización."""
+    __tablename__ = "joint_sinking_fund_transfers"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_joint_transfer_amount_positive"),
+        CheckConstraint("source_fund_id != target_fund_id", name="ck_joint_transfer_diff_funds"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    joint_account_id: Mapped[int] = mapped_column(ForeignKey("joint_accounts.id"), default=1)
+    source_fund_id: Mapped[int] = mapped_column(ForeignKey("joint_sinking_funds.id", ondelete="CASCADE"), nullable=False)
+    target_fund_id: Mapped[int] = mapped_column(ForeignKey("joint_sinking_funds.id", ondelete="CASCADE"), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by_profile: Mapped[str] = mapped_column(String(20), default="MEMBER_A")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+    )
+
+    source_fund: Mapped["JointSinkingFund"] = relationship("JointSinkingFund", foreign_keys=[source_fund_id])
+    target_fund: Mapped["JointSinkingFund"] = relationship("JointSinkingFund", foreign_keys=[target_fund_id])

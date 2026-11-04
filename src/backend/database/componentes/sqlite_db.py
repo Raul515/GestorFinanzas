@@ -78,6 +78,24 @@ def init_db():
             if j_cb_cols and "sinking_fund_allocations" not in j_cb_cols:
                 conn.exec_driver_sql("ALTER TABLE joint_monthly_contributions ADD COLUMN sinking_fund_allocations TEXT")
                 conn.commit()
+
+            conn.exec_driver_sql("""
+                CREATE TABLE IF NOT EXISTS joint_sinking_fund_transfers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uuid VARCHAR(36) UNIQUE NOT NULL,
+                    joint_account_id INTEGER DEFAULT 1 REFERENCES joint_accounts(id),
+                    source_fund_id INTEGER NOT NULL REFERENCES joint_sinking_funds(id) ON DELETE CASCADE,
+                    target_fund_id INTEGER NOT NULL REFERENCES joint_sinking_funds(id) ON DELETE CASCADE,
+                    amount FLOAT NOT NULL,
+                    date DATE NOT NULL,
+                    notes VARCHAR(255),
+                    created_by_profile VARCHAR(20) DEFAULT 'MEMBER_A',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT ck_joint_transfer_amount_positive CHECK (amount > 0),
+                    CONSTRAINT ck_joint_transfer_diff_funds CHECK (source_fund_id != target_fund_id)
+                )
+            """)
+            conn.commit()
     except Exception as exc:
         logger.warning("Error comprobando/migrando columnas en SQLite: %s", exc)
 

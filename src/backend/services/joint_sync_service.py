@@ -23,6 +23,7 @@ from backend.domain.models.joint import (
     JointSinkingFund,
     JointSubcategory,
     JointTransaction,
+    JointSinkingFundTransfer,
 )
 from backend.domain.schemas.joint import (
     ProfileIdentifier,
@@ -270,6 +271,8 @@ class JointSyncService:
             self._apply_account_event(db, event)
         elif event.entity_type == SyncEntityType.SUBCATEGORY:
             self._apply_subcategory_event(db, event)
+        elif event.entity_type == SyncEntityType.SINKING_FUND_TRANSFER:
+            self._apply_sinking_fund_transfer_event(db, event)
         else:
             logger.warning("Tipo de entidad no manejada en sincronización: %s", event.entity_type)
 
@@ -318,6 +321,54 @@ class JointSyncService:
             if target_cat and subcat.joint_category_id != target_cat.id:
                 subcat.joint_category_id = target_cat.id
             logger.info("Subcategoría conjunta '%s' actualizada por evento remoto.", name)
+
+
+    def _apply_sinking_fund_transfer_event(self, db: Session, event: SyncEventPayload) -> None:
+        """Aplica registro de transferencia entre huchas con idempotencia por UUID."""
+        payload = event.payload
+        t_uuid = payload.get("uuid")
+        if not t_uuid:
+            raise ValueError("Payload de transferencia entre huchas sin campo 'uuid'.")
+
+        existing_t = db.query(JointSinkingFundTransfer).filter(JointSinkingFundTransfer.uuid == t_uuid).first()
+        if existing_t:
+            logger.info("Transferencia entre huchas ya aplicada (UUID %s), omitiendo.", t_uuid)
+            return
+
+        source_id = None
+        source_name = payload.get("source_fund_name")
+        if source_name:
+            sf = db.query(JointSinkingFund).filter(JointSinkingFund.joint_account_id == 1, JointSinkingFund.name == source_name).first()
+            if sf:
+                source_id = sf.id
+        if source_id is None and payload.get("source_fund_id"):
+            source_id = payload.get("source_fund_id")
+
+        target_id = None
+        target_name = payload.get("target_fund_name")
+        if target_name:
+            tf = db.query(JointSinkingFund).filter(JointSinkingFund.joint_account_id == 1, JointSinkingFund.name == target_name).first()
+            if tf:
+                target_id = tf.id
+        if target_id is None and payload.get("target_fund_id"):
+            target_id = payload.get("target_fund_id")
+
+        if not source_id or not target_id:
+            logger.warning("No se pudieron resolver las huchas para la transferencia %s.", t_uuid)
+            return
+
+        t_date = datetime.strptime(payload["date"], "%Y-%m-%d").date() if isinstance(payload["date"], str) else payload["date"]
+        new_transfer = JointSinkingFundTransfer(
+            uuid=t_uuid,
+            joint_account_id=1,
+            source_fund_id=source_id,
+            target_fund_id=target_id,
+            amount=float(payload["amount"]),
+            date=t_date,
+            notes=payload.get("notes"),
+            created_by_profile=payload.get("created_by_profile", "REMOTE"),
+        )
+        db.add(new_transfer)
 
     def _apply_account_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica eventos sobre la cuenta del hogar (ej. DELETE para reset remoto a Estado Cero)."""

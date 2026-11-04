@@ -19,6 +19,7 @@ from backend.domain.schemas.joint import (
     JointSinkingFundUpdate,
     JointTransactionCreate,
     JointMonthlyContributionCreate,
+    JointSinkingFundTransferCreate,
     ProfileIdentifier,
     SplitMode,
 )
@@ -608,3 +609,70 @@ def test_excel_export_includes_settlement_columns(db_session: Session):
     assert "Modalidad Liquidacion" in headers
     assert "Estado Reembolso" in headers
     assert "Fecha Liquidacion" in headers
+
+
+def test_sqlite_repository_sinking_fund_transfer(db_session: Session):
+    """Verifica el rebalanceo atómico de saldos entre huchas y el registro de auditoría (Fase 7.4)."""
+    repo = SQLiteRepository(db_session)
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Test Rebalanceo",
+            cohabitation_stage=CohabitationStage.COHABITATION,
+            contribution_strategy=ContributionStrategy.INCOME_PERCENTAGE,
+            split_mode=SplitMode.EQUAL_50_50,
+            member_a_reference_income=2500.0,
+            member_b_reference_income=2000.0,
+            local_profile=ProfileIdentifier.MEMBER_A,
+        )
+    )
+
+    fund_a = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Vacaciones", target_amount=1500.0, current_balance=500.0)
+    )
+    fund_b = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(name="Mantenimiento Coche", target_amount=800.0, current_balance=100.0)
+    )
+
+    # 1. Traspaso exitoso de 150€ de A a B
+    req = JointSinkingFundTransferCreate(
+        source_fund_id=fund_a.id,
+        target_fund_id=fund_b.id,
+        amount=150.0,
+        notes="Reasignación viaje a revisión taller",
+        created_by_profile=ProfileIdentifier.MEMBER_A,
+    )
+    transfer = repo.transfer_sinking_fund_balance(req)
+    assert transfer.id is not None
+    assert transfer.amount == 150.0
+
+    db_session.refresh(fund_a)
+    db_session.refresh(fund_b)
+    assert fund_a.current_balance == 350.0
+    assert fund_b.current_balance == 250.0
+
+    # 2. Consultar historial
+    history = repo.get_joint_sinking_fund_transfers()
+    assert len(history) == 1
+    assert history[0].source_fund_id == fund_a.id
+    assert history[0].target_fund_id == fund_b.id
+    assert history[0].amount == 150.0
+
+    # 3. Intentar transferir más del saldo disponible arroja ValueError
+    with pytest.raises(ValueError, match="Saldo insuficiente"):
+        repo.transfer_sinking_fund_balance(
+            JointSinkingFundTransferCreate(
+                source_fund_id=fund_a.id,
+                target_fund_id=fund_b.id,
+                amount=400.0,  # Disponible: 350€
+            )
+        )
+
+    # 4. Intentar transferir a la misma hucha arroja ValueError
+    with pytest.raises(ValueError, match="distintas"):
+        repo.transfer_sinking_fund_balance(
+            JointSinkingFundTransferCreate(
+                source_fund_id=fund_a.id,
+                target_fund_id=fund_a.id,
+                amount=50.0,
+            )
+        )
