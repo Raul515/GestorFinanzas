@@ -2,7 +2,7 @@ import streamlit as st
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
@@ -98,6 +98,106 @@ def get_subcategorias(categoria_id=None):
     except Exception as e:
         logger.error("Error inesperado en get_subcategorias(): %s", e)
     return []
+
+def create_subcategory(category_id: int, name: str) -> Optional[Dict[str, Any]]:
+    """
+    Crea una nueva subcategoría personal vinculada a una categoría padre.
+    Invalida reactivamente la caché de categorías y el resumen anual.
+    """
+    cleaned_name = name.strip() if name else ""
+    if not cleaned_name:
+        logger.warning("Intento de crear subcategoría personal con nombre vacío")
+        return None
+
+    url = f"{API_URL}/categories/subcategories/"
+    payload = {"category_id": category_id, "name": cleaned_name}
+    try:
+        response = _session.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            clear_categories_cache()
+            clear_annual_cache()
+            logger.info("Subcategoría personal '%s' creada con éxito", cleaned_name)
+            return response.json()
+        logger.warning("Fallo al crear subcategoría personal (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en create_subcategory en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_subcategory(): %s", e)
+    return None
+
+
+def update_subcategory(subcategory_id: int, name: str) -> Optional[Dict[str, Any]]:
+    """
+    Actualiza el nombre de una subcategoría personal existente.
+    Invalida reactivamente la caché de categorías y el resumen anual.
+    """
+    cleaned_name = name.strip() if name else ""
+    if not cleaned_name:
+        logger.warning("Intento de actualizar subcategoría %s con nombre vacío", subcategory_id)
+        return None
+
+    url = f"{API_URL}/categories/subcategories/{subcategory_id}"
+    payload = {"name": cleaned_name}
+    try:
+        response = _session.put(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            clear_categories_cache()
+            clear_annual_cache()
+            logger.info("Subcategoría personal %s renombrada a '%s'", subcategory_id, cleaned_name)
+            return response.json()
+        logger.warning("Fallo al actualizar subcategoría personal %s (%s): %s", subcategory_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en update_subcategory en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_subcategory(): %s", e)
+    return None
+
+
+def get_subcategory_usage(subcategory_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Consulta la auditoría contable de uso de una subcategoría personal (número de transacciones y presupuestos).
+    """
+    url = f"{API_URL}/categories/subcategories/{subcategory_id}/usage"
+    try:
+        response = _session.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar uso de subcategoría %s (%s): %s", subcategory_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_subcategory_usage en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_subcategory_usage(): %s", e)
+    return None
+
+
+def delete_subcategory(subcategory_id: int) -> Tuple[bool, str]:
+    """
+    Elimina físicamente una subcategoría personal si no tiene histórico contable asociado.
+    Retorna (True, mensaje) si se eliminó, o (False, detalle_error) si está bloqueada o falla.
+    """
+    url = f"{API_URL}/categories/subcategories/{subcategory_id}"
+    try:
+        response = _session.delete(url, timeout=10)
+        if response.status_code == 200:
+            clear_categories_cache()
+            clear_annual_cache()
+            logger.info("Subcategoría personal %s eliminada con éxito", subcategory_id)
+            return True, "Subcategoría eliminada con éxito."
+        elif response.status_code == 409:
+            err_msg = response.json().get("detail", "La subcategoría contiene registros vinculados y no puede eliminarse.")
+            logger.warning("Borrado bloqueado por dependencias en subcategoría %s: %s", subcategory_id, err_msg)
+            return False, err_msg
+        else:
+            err_msg = response.json().get("detail", response.text) if response.headers.get("content-type") == "application/json" else response.text
+            logger.warning("Error al eliminar subcategoría %s (%s): %s", subcategory_id, response.status_code, err_msg)
+            return False, f"Error del servidor ({response.status_code}): {err_msg}"
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_subcategory en %s: %s", url, e)
+        return False, f"Error de red o conexión: {e}"
+    except Exception as e:
+        logger.error("Error inesperado en delete_subcategory(): %s", e)
+        return False, f"Error inesperado: {e}"
+
 
 
 def get_presupuestos(mes):
@@ -937,6 +1037,119 @@ def get_joint_subcategories(category_id: Optional[int] = None) -> List[Dict[str,
     except Exception as e:
         logger.error("Error inesperado en get_joint_subcategories(): %s", e)
     return []
+
+def create_joint_subcategory(name: str, joint_category_id: int, monthly_budget: float = 0.0) -> Optional[Dict[str, Any]]:
+    """
+    Crea una nueva subcategoría de necesidades comunes del hogar y emite evento delta P2P.
+    Invalida reactivamente la caché de cuenta conjunta.
+    """
+    cleaned_name = name.strip() if name else ""
+    if not cleaned_name:
+        logger.warning("Intento de crear subcategoría del hogar con nombre vacío")
+        return None
+
+    url = f"{API_URL}/joint/subcategories"
+    payload = {
+        "name": cleaned_name,
+        "joint_category_id": joint_category_id,
+        "monthly_budget": float(monthly_budget or 0.0),
+    }
+    try:
+        response = _session.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            clear_joint_cache()
+            logger.info("Subcategoría del hogar '%s' creada con éxito", cleaned_name)
+            return response.json()
+        logger.warning("Fallo al crear subcategoría del hogar (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en create_joint_subcategory en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_joint_subcategory(): %s", e)
+    return None
+
+
+def update_joint_subcategory(
+    subcategory_id: int,
+    name: Optional[str] = None,
+    monthly_budget: Optional[float] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Actualiza el nombre o presupuesto mensual de una subcategoría común del hogar y propaga el cambio.
+    Invalida reactivamente la caché de cuenta conjunta.
+    """
+    url = f"{API_URL}/joint/subcategories/{subcategory_id}"
+    payload: Dict[str, Any] = {}
+    if name is not None:
+        cleaned_name = name.strip()
+        if not cleaned_name:
+            logger.warning("Intento de actualizar subcategoría del hogar %s con nombre vacío", subcategory_id)
+            return None
+        payload["name"] = cleaned_name
+    if monthly_budget is not None:
+        payload["monthly_budget"] = float(monthly_budget)
+
+    if not payload:
+        logger.warning("update_joint_subcategory invocado sin campos a actualizar")
+        return None
+
+    try:
+        response = _session.put(url, json=payload, timeout=10)
+        if response.status_code == 200:
+            clear_joint_cache()
+            logger.info("Subcategoría del hogar %s actualizada con éxito: %s", subcategory_id, payload)
+            return response.json()
+        logger.warning("Fallo al actualizar subcategoría del hogar %s (%s): %s", subcategory_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en update_joint_subcategory en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_joint_subcategory(): %s", e)
+    return None
+
+
+def get_joint_subcategory_usage(subcategory_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Consulta la auditoría contable de uso de una subcategoría común del hogar (transacciones vinculadas).
+    """
+    url = f"{API_URL}/joint/subcategories/{subcategory_id}/usage"
+    try:
+        response = _session.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar uso de subcategoría del hogar %s (%s): %s", subcategory_id, response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_joint_subcategory_usage en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_joint_subcategory_usage(): %s", e)
+    return None
+
+
+def delete_joint_subcategory(subcategory_id: int) -> Tuple[bool, str]:
+    """
+    Elimina físicamente una subcategoría del hogar y emite evento tombstone si no tiene transacciones asociadas.
+    Retorna (True, mensaje) si se eliminó, o (False, detalle_error) si está bloqueada o falla.
+    """
+    url = f"{API_URL}/joint/subcategories/{subcategory_id}"
+    try:
+        response = _session.delete(url, timeout=10)
+        if response.status_code == 200:
+            clear_joint_cache()
+            logger.info("Subcategoría del hogar %s eliminada con éxito", subcategory_id)
+            return True, "Subcategoría conjunta eliminada con éxito."
+        elif response.status_code == 409:
+            err_msg = response.json().get("detail", "La subcategoría contiene transacciones del hogar y no puede eliminarse.")
+            logger.warning("Borrado bloqueado por dependencias en subcategoría del hogar %s: %s", subcategory_id, err_msg)
+            return False, err_msg
+        else:
+            err_msg = response.json().get("detail", response.text) if response.headers.get("content-type") == "application/json" else response.text
+            logger.warning("Error al eliminar subcategoría del hogar %s (%s): %s", subcategory_id, response.status_code, err_msg)
+            return False, f"Error del servidor ({response.status_code}): {err_msg}"
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en delete_joint_subcategory en %s: %s", url, e)
+        return False, f"Error de red o conexión: {e}"
+    except Exception as e:
+        logger.error("Error inesperado en delete_joint_subcategory(): %s", e)
+        return False, f"Error inesperado: {e}"
+
 
 
 @st.cache_data(ttl=60, show_spinner=False)
