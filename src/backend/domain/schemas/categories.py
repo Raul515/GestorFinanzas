@@ -12,6 +12,19 @@ class SubcategoryCreate(SubcategoryBase):
     category_id: int
 
 
+class SubcategoryUpdate(BaseModel):
+    """Esquema para actualización del nombre de una subcategoría."""
+    name: str
+
+
+class SubcategoryUsage(BaseModel):
+    """Esquema con auditoría de uso de una subcategoría en transacciones y presupuestos."""
+    subcategory_id: int
+    transactions_count: int
+    budgets_count: int
+    can_delete: bool
+
+
 class Subcategory(SubcategoryBase):
     """Esquema de respuesta para subcategoría persistida."""
     model_config = ConfigDict(from_attributes=True)
@@ -37,4 +50,3 @@ class Category(CategoryBase):
 
     id: int
     subcategories: List[Subcategory] = []
-

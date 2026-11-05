@@ -384,19 +384,44 @@ def update_joint_subcategory(
     return schemas.JointSubcategoryResponse.model_validate(subcat)
 
 
+@router.get("/subcategories/{subcategory_id}/usage")
+def check_joint_subcategory_usage(
+    subcategory_id: int,
+    repo: SQLiteRepository = Depends(get_repo),
+) -> Dict[str, Any]:
+    """Comprueba el número de transacciones comunes que dependen de una subcategoría conjunta."""
+    subcat = repo.get_joint_subcategory(subcategory_id)
+    if not subcat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría conjunta no encontrada.")
+    return repo.check_joint_subcategory_usage(subcategory_id)
+
+
 @router.delete("/subcategories/{subcategory_id}")
 def delete_joint_subcategory(
     subcategory_id: int,
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
 ) -> Dict[str, Any]:
-    """Elimina una subcategoría de necesidades comunes y propaga el tombstone a la pareja."""
+    """Elimina una subcategoría de necesidades comunes y propaga el tombstone a la pareja si no tiene uso."""
     subcat = repo.get_joint_subcategory(subcategory_id)
     if not subcat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
 
+    usage = repo.check_joint_subcategory_usage(subcategory_id)
+    if not usage.get("can_delete", False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"No se puede eliminar la subcategoría conjunta '{subcat.name}': "
+                f"tiene {usage.get('transactions_count', 0)} transacciones del hogar vinculadas."
+            ),
+        )
+
     subcat_name = subcat.name
-    success = repo.delete_joint_subcategory(subcategory_id)
+    try:
+        success = repo.delete_joint_subcategory(subcategory_id)
+    except ValueError as v_err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(v_err))
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la subcategoría.")
 

@@ -20,13 +20,7 @@ def populate():
     db = SessionLocal()
 
 
-    # Comprobar si ya existen datos en la base de datos
-    if db.query(cat_model.Category).first():
-        print("La base de datos ya contiene datos.")
-        db.close()
-        return
-
-    print("Poblando datos iniciales según Excel...")
+    print("Verificando sembrado inicial idempotente de categorías...")
 
     cats = [
         {"name": "Ingresos Netos", "type": "ingreso"},
@@ -34,15 +28,6 @@ def populate():
         {"name": "Deseos y Estilo de vida", "type": "gasto"},
         {"name": "Ahorro e Inversión", "type": "ahorro"},
     ]
-
-    db_cats = []
-    for c in cats:
-        db_c = cat_model.Category(name=c["name"], type=c["type"])
-        db.add(db_c)
-        db_cats.append(db_c)
-    db.commit()
-
-    # Subcategorías (etiquetas de interfaz en español, columnas en inglés)
 
     ingresos = [
         "Salario NETO",
@@ -87,14 +72,26 @@ def populate():
         "Ahorro e Inversión": ahorro,
     }
 
-    for db_c in db_cats:
-        for s_name in subs_map[db_c.name]:
-            db_s = cat_model.Subcategory(name=s_name, category_id=db_c.id)
-            db.add(db_s)
+    for c in cats:
+        db_c = db.query(cat_model.Category).filter(cat_model.Category.name == c["name"]).first()
+        if not db_c:
+            db_c = cat_model.Category(name=c["name"], type=c["type"])
+            db.add(db_c)
+            db.commit()
+            db.refresh(db_c)
+
+        for s_name in subs_map.get(c["name"], []):
+            db_s = db.query(cat_model.Subcategory).filter(
+                cat_model.Subcategory.name == s_name,
+                cat_model.Subcategory.category_id == db_c.id
+            ).first()
+            if not db_s:
+                db_s = cat_model.Subcategory(name=s_name, category_id=db_c.id)
+                db.add(db_s)
 
     db.commit()
     db.close()
-    print("Datos iniciales insertados con éxito.")
+    print("Sembrado idempotente completado con éxito.")
 
 
 if __name__ == "__main__":

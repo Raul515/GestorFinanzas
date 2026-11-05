@@ -65,6 +65,49 @@ class SQLiteRepository(IRepository):
         self.db.refresh(db_item)
         return db_item
 
+    def update_subcategory(self, subcategory_id: int, name: str) -> Optional[cat_model.Subcategory]:
+        """Actualiza el nombre de una subcategoría contable personal."""
+        db_item = self.db.query(cat_model.Subcategory).filter(cat_model.Subcategory.id == subcategory_id).first()
+        if not db_item:
+            return None
+        cleaned_name = name.strip()
+        if not cleaned_name:
+            raise ValueError("El nombre de la subcategoría no puede estar vacío.")
+        db_item.name = cleaned_name
+        self.db.commit()
+        self.db.refresh(db_item)
+        return db_item
+
+    def check_subcategory_usage(self, subcategory_id: int) -> Dict[str, Any]:
+        """Comprueba el número de transacciones y presupuestos que dependen de una subcategoría."""
+        tx_count = self.db.query(trans_model.Transaction).filter(
+            trans_model.Transaction.subcategory_id == subcategory_id
+        ).count()
+        budgets_count = self.db.query(pres_model.MonthlyBudget).filter(
+            pres_model.MonthlyBudget.subcategory_id == subcategory_id
+        ).count()
+        return {
+            "subcategory_id": subcategory_id,
+            "transactions_count": tx_count,
+            "budgets_count": budgets_count,
+            "can_delete": (tx_count == 0 and budgets_count == 0),
+        }
+
+    def delete_subcategory(self, subcategory_id: int) -> bool:
+        """Elimina una subcategoría si no tiene transacciones ni presupuestos asociados."""
+        db_item = self.db.query(cat_model.Subcategory).filter(cat_model.Subcategory.id == subcategory_id).first()
+        if not db_item:
+            return False
+        usage = self.check_subcategory_usage(subcategory_id)
+        if not usage["can_delete"]:
+            raise ValueError(
+                f"No se puede eliminar la subcategoría '{db_item.name}': "
+                f"tiene {usage['transactions_count']} transacciones y {usage['budgets_count']} presupuestos vinculados."
+            )
+        self.db.delete(db_item)
+        self.db.commit()
+        return True
+
     # 2. Transacciones
     def get_transactions(self, month: Optional[str] = None) -> List[trans_model.Transaction]:
         """Obtiene las transacciones registradas, filtrando opcionalmente por mes (YYYY-MM)."""
@@ -684,11 +727,28 @@ class SQLiteRepository(IRepository):
         self.db.refresh(item)
         return item
 
+    def check_joint_subcategory_usage(self, subcategory_id: int) -> Dict[str, Any]:
+        """Comprueba el número de transacciones comunes que dependen de una subcategoría conjunta."""
+        tx_count = self.db.query(joint_model.JointTransaction).filter(
+            joint_model.JointTransaction.joint_subcategory_id == subcategory_id
+        ).count()
+        return {
+            "subcategory_id": subcategory_id,
+            "transactions_count": tx_count,
+            "can_delete": (tx_count == 0),
+        }
+
     def delete_joint_subcategory(self, subcategory_id: int) -> bool:
-        """Elimina una subcategoría de necesidades comunes."""
+        """Elimina una subcategoría de necesidades comunes si no tiene transacciones asociadas."""
         item = self.get_joint_subcategory(subcategory_id)
         if not item:
             return False
+        usage = self.check_joint_subcategory_usage(subcategory_id)
+        if not usage["can_delete"]:
+            raise ValueError(
+                f"No se puede eliminar la subcategoría conjunta '{item.name}': "
+                f"tiene {usage['transactions_count']} transacciones del hogar vinculadas."
+            )
         self.db.delete(item)
         self.db.commit()
         return True

@@ -27,6 +27,21 @@ class ICategoryRepository(ABC):
         """Crea una nueva subcategoría contable."""
         pass
 
+    @abstractmethod
+    def update_subcategory(self, subcategory_id: int, name: str) -> Any:
+        """Actualiza el nombre de una subcategoría contable."""
+        pass
+
+    @abstractmethod
+    def check_subcategory_usage(self, subcategory_id: int) -> Dict[str, Any]:
+        """Comprueba el uso de una subcategoría en transacciones y presupuestos."""
+        pass
+
+    @abstractmethod
+    def delete_subcategory(self, subcategory_id: int) -> bool:
+        """Elimina una subcategoría si no tiene transacciones ni presupuestos asociados."""
+        pass
+
     # Métodos alias para compatibilidad
     def get_categorias(self) -> List[Any]:
         return self.get_categories()
