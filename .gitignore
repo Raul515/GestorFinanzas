@@ -413,15 +413,36 @@ __marimo__/
 .streamlit/secrets.toml
 
 # DATOS DEL PROYECTO Y BASE DE DATOS LOCAL
-data/
-src/backend/data/
+/data/
+!src/backend/data/
+src/backend/data/*
+!src/backend/data/.gitkeep
 *.sqlite
 *.sqlite3
 *.db
+*.db-wal
+*.db-shm
+device_id.txt
+version.json
+installed_manifest.json
 
 # BUZÓN DE SINCRONIZACIÓN LOCAL-FIRST CON SYNCTHING (SPEC 010)
-sync/
-sync/**
+sync/*
+!sync/.gitkeep
+!sync/inbox/
+sync/inbox/*
+!sync/inbox/.gitkeep
+!sync/outbox/
+sync/outbox/*
+!sync/outbox/.gitkeep
+!sync/processed/
+sync/processed/*
+!sync/processed/.gitkeep
+!sync/error/
+sync/error/*
+!sync/error/.gitkeep
+.stfolder
+.stversions
 *.json.tmp
 
 # ==========================================
@@ -442,16 +463,16 @@ sync/**
 *secret*
 *credential*
 *.log*
-logs/
+logs/*
+!logs/.gitkeep
 .DS_Store
 Thumbs.db
 
 # GESTIÓN Y COPIAS DE SEGURIDAD (SPEC 011)
-backups/
+backups/*
+!backups/.gitkeep
 *.backup
 *.db.bak
-
-
 
 # ACTUALIZACIONES EN INTERFAZ OTA UPDATER (SPEC 012)
 tmp/

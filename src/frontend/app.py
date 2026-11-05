@@ -18,6 +18,12 @@ if FRONTEND_DIR not in sys.path:
     sys.path.insert(0, FRONTEND_DIR)
 
 try:
+    from backend.utils.env_setup import ensure_env_file
+    ensure_env_file()
+except Exception:
+    pass
+
+try:
     from frontend import api_client
 except ImportError:
     import api_client  # type: ignore

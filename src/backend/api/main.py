@@ -4,7 +4,12 @@ import logging
 import os
 import time
 from fastapi import FastAPI, Request
+from backend.utils.env_setup import ensure_env_file
 from backend.utils.logging_config import setup_logging
+from backend.init_db_data import populate
+
+# Asegurar entorno local .env antes de inicializar logging
+ensure_env_file()
 from backend.api.routers import (
     categories,
     budgets,
@@ -31,8 +36,9 @@ setup_logging(backend_log_file)
 logger = logging.getLogger("backend.api.main")
 logger.info("Inicializando servicio Backend FastAPI y base de datos")
 
-# Inicializar la base de datos
+# Inicializar la base de datos y catálogo estándar inicial de forma idempotente
 init_db()
+populate()
 
 
 async def run_periodic_backup_checker():

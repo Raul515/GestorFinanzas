@@ -241,8 +241,10 @@ pip install -r requirements/backend.txt
 pip install -r requirements/frontend.txt
 ```
 
-#### 4. Configurar variables de entorno
-Crea tu archivo `.env` a partir de la plantilla:
+#### 4. Configurar variables de entorno (Opcional - Zero-Config)
+El sistema incluye configuración automática *Plug & Play*: si inicias la aplicación sin haber creado el archivo `.env`, el backend lo generará automáticamente a partir de `.env.example` con valores seguros locales.
+
+Si deseas configurarlo manualmente con antelación:
 - **En Windows (PowerShell)**:
   ```powershell
   Copy-Item .env.example .env
@@ -251,19 +253,12 @@ Crea tu archivo `.env` a partir de la plantilla:
   ```bash
   cp .env.example .env
   ```
-*(Opcional: Abre `.env` y añade tu `GEMINI_API_KEY` si deseas habilitar los asistentes de IA).*
+*(Opcional: Abre `.env` y añade tu `GEMINI_API_KEY` si deseas habilitar los módulos de IA: Copiloto, Comité Asesor LangGraph y síntesis de noticias).*
 
-#### 5. Inicializar la base de datos local
-Crea el catálogo inicial de categorías y estructura en SQLite:
-- **En Windows (PowerShell)**:
-  ```powershell
-  $env:PYTHONPATH="src"
-  .\venv\Scripts\python src/backend/init_db_data.py
-  ```
-- **En macOS / Linux**:
-  ```bash
-  PYTHONPATH=src python3 src/backend/init_db_data.py
-  ```
+#### 5. Base de datos local (Auto-Sembrado)
+La base de datos SQLite (`src/backend/data/finanzas.db`) y su catálogo oficial de categorías (*Necesidades Básicas, Deseos, Ahorro e Inversión, Ingresos Netos*) se inicializan y siembran **automáticamente** de forma idempotente en cuanto arrancas el backend en el siguiente paso.
+
+*(Opcional: si deseas inicializarla manualmente antes de arrancar los servicios, puedes ejecutar `python src/backend/init_db_data.py`).*
 
 #### 6. Iniciar los Servicios
 Necesitarás dos terminales (ambas con el entorno `venv` activado):

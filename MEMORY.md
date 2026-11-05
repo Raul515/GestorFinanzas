@@ -123,6 +123,10 @@
 
 ---
 
+| **2026-11-05** | Optimización de Portabilidad y Onboarding Zero-Config (Clone & Run) | Auto-generación de `.env` desde `.env.example` si falta; auto-sembrado idempotente de categorías en SQLite al iniciar el backend; jerarquía de carpetas Syncthing (`sync/`), `logs/`, `backups/` y `data/` estructuradas con `.gitkeep` manteniendo blindaje 100% de datos privados en `.gitignore`; corrección de `AGENTS.md` a `backend.api.main:app`. |
+
+---
+
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.

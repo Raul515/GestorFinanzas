@@ -96,7 +96,7 @@ Verifica siempre los cambios utilizando el entorno virtual local oficial (`venv`
 - **Iniciar Backend (FastAPI)**:
   ```powershell
   $env:PYTHONPATH="src"
-  .\venv\Scripts\uvicorn backend.main:app --reload --port 8000
+  .\venv\Scripts\uvicorn backend.api.main:app --reload --port 8000
   ```
 - **Iniciar Frontend (Streamlit)**:
   ```powershell
