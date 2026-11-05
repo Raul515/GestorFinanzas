@@ -70,4 +70,16 @@ El objetivo de esta especificación es **erradicar todas las llamadas redundante
 - **RF-12 (Generación de Excel del Hogar Bajo Demanda y Carga Eager)**:
   - En `joint_view.py`, el archivo Excel solo debe generarse cuando el usuario pulse el botón de exportación o mediante caché de sesión.
   - En `generate_household_excel_export` (`joint_accounting_service.py`), la consulta de transacciones debe incorporar `joinedload()` para resolver relaciones en 1 sola consulta SQL.
+---
 
+## 4. Mejoras Técnicas Futuras de Rendimiento (Post-Spec 014)
+
+1. **Streaming en el Copiloto Patrimonial y Comité Asesor (Percepción de Latencia en IA)**:
+   - Implementar Server-Sent Events (SSE) en los endpoints de agentes en FastAPI y renderizado progresivo mediante `st.write_stream()` en Streamlit.
+   - Reduce el tiempo hasta el primer token (*Time-to-First-Token*) de ~5 segundos a < 500 ms, transformando la percepción de fluidez durante las respuestas extensas de Google Gemini.
+2. **Paginación y Virtualización en el Buscador Global de Gastos (`/joint/transactions/search`)**:
+   - Incorporar parámetros `limit` y `offset` (o paginación por cursor) en backend y controles de página en la vista de Streamlit.
+   - Previene la saturación de memoria y tiempos de transferencia ante históricos acumulados de más de 5.000 transacciones multianuales.
+3. **Pre-agregación y Downsampling de Series Temporales en Gráficos Altair**:
+   - En vistas analíticas y sparklines de cotizaciones o evolución multianual, pre-procesar y muestrear los datos en Python/Pandas antes de serializarlos al JSON de especificación Vega-Lite de Altair.
+   - Evita la sobrecarga del DOM del navegador y aligera drásticamente el renderizado interactivo en el cliente.

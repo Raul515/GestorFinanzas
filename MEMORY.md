@@ -163,6 +163,10 @@
     - *Fase 3 (Ciclo de Vida Streamlit & Lazy Loading)*: Aislamiento del bucle de 12 meses del Resumen Anual con TTL 120s (0 llamadas de red al gestionar gastos mensuales). Carga diferida en Deep Dive bajo demanda (requiere pulsar [🔍 Analizar]). Exportación de Excel en la Cuenta Conjunta diferida al clic del usuario (`data=lambda: ...`) con `@st.cache_data(ttl=300)`. Erradicación de N+1 queries en backend con `joinedload()`.
 
 16. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
+   - **Optimizaciones Avanzadas de Rendimiento y Streaming (Post-Spec 014)**:
+     - *Streaming de Respuestas de IA*: Implementación de SSE (Server-Sent Events) en endpoints de agentes (`/advisor`, `/copilot`) y consumo mediante `st.write_stream()` en Streamlit para reducir la latencia percibida (Time-to-First-Token < 500 ms) frente al actual modo por lotes.
+     - *Paginación en el Buscador Global de Gastos*: Incorporación de `limit` y `offset` en `/joint/transactions/search` para proteger la memoria RAM y el ancho de banda cuando los históricos familiares superen los miles de movimientos.
+     - *Downsampling en Gráficos Altair/Vega-Lite*: Pre-agregación de métricas y sparklines multianuales en Python para evitar transferir payloads pesados de JSON al DOM del navegador.
    - **Companion Móvil para Captura Rápida de Gastos ("Quick-Capture")**:
      - *Filosofía y Alcance*: Micro-aplicación móvil enfocada exclusivamente en la operativa transaccional rápida del día a día (anotar en 5 segundos un café, cena o supermercado, asignando categoría y si es personal o conjunto). Quedan excluidos del móvil los módulos pesados de IA (Radar Macroeconómico, Deep Dive, Screener y Comité Asesor), que se reservan para el ordenador.
      - *Diferenciación Técnica por Plataforma*:

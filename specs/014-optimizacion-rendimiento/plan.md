@@ -49,4 +49,10 @@ Fusión final: Merge en develop tras 100% de tests
   3. `src/frontend/views/joint_view.py` y `src/backend/services/joint_accounting_service.py`: Generación de Excel bajo demanda y optimización con `joinedload()`.
   4. Pruebas unitarias de frontend (`test_personal_ux_frontend.py`, `test_joint_ux_frontend.py`).
   5. Verificación de no regresión en la suite de pruebas.
+---
 
+## 3. Registro de Mejoras Futuras Identificadas (Post-Spec 014)
+
+- **Streaming de Respuestas IA**: SSE y `st.write_stream()` para Copiloto y Comité Asesor (TTFT < 500 ms).
+- **Paginación en Buscador de Gastos**: Parámetros `limit` y `offset` para tablas masivas multianuales.
+- **Downsampling en Gráficos**: Agregación previa de puntos de datos en Python para series temporales de Altair/Vega-Lite.
