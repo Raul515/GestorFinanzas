@@ -777,3 +777,67 @@ def test_sqlite_repository_search_joint_transactions(db_session):
     res_amount = repo.search_joint_transactions(min_amount=100.0, max_amount=200.0)
     assert len(res_amount) == 1
     assert res_amount[0].id == tx1.id
+
+
+def test_completed_sinking_fund_excluded_from_contributions():
+    """
+    Verifica que si una hucha de amortización activa ya ha alcanzado su objetivo (current_balance >= target_amount):
+    - Su cuota mensual no se sume a sinking_funds_target.
+    - Su asignación en fund_allocations sea 0.00 €.
+    - Si otra hucha no está completada, mantenga su cuota normal.
+    """
+    funds = [
+        {
+            "id": 1,
+            "name": "Seguro Coche",
+            "target_amount": 600.0,
+            "current_balance": 600.0,  # Completada
+            "monthly_target_amount": 50.0,
+            "status": "ACTIVE",
+        },
+        {
+            "id": 2,
+            "name": "Vacaciones",
+            "target_amount": 1000.0,
+            "current_balance": 400.0,  # En progreso
+            "monthly_target_amount": 100.0,
+            "status": "ACTIVE",
+        },
+    ]
+
+    res = calculate_monthly_contributions(
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        needs_budget=500.0,
+        sinking_funds=funds,
+        member_a_income=2000.0,
+        member_b_income=2000.0,
+    )
+
+    # total_household_budget = 500.0 (necesidades) + 100.0 (solo hucha 2) = 600.0
+    assert res["sinking_funds_target"] == 100.0
+    assert res["total_household_budget"] == 600.0
+    assert res["member_a_contribution"] == 300.0
+    assert res["member_b_contribution"] == 300.0
+    assert res["fund_allocations"][1] == 0.0  # Hucha completada recibe 0
+    assert res["fund_allocations"][2] == 100.0
+
+
+def test_transfer_sinking_fund_same_source_and_target_rejected(db_session: Session):
+    """Verifica que intentar transferir saldo a la misma hucha sea rechazado tanto a nivel de esquema como de repositorio."""
+    repo = SQLiteRepository(db_session)
+    fund = repo.create_joint_sinking_fund(
+        JointSinkingFundCreate(
+            name="Fondo Mismo",
+            target_amount=500.0,
+            initial_balance=100.0,
+            monthly_target_amount=50.0,
+        )
+    )
+    with pytest.raises(ValueError, match="La hucha de origen y la de destino deben ser distintas."):
+        JointSinkingFundTransferCreate(
+            source_fund_id=fund.id,
+            target_fund_id=fund.id,
+            amount=50.0,
+        )

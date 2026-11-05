@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 from backend.database.interfaz.db_interface import IRepository
 from backend.domain.models import (
     categories as cat_model,
@@ -18,6 +18,10 @@ from backend.domain.schemas import (
     watchlist as watchlist_schema,
     copilot as copilot_schema,
     joint as joint_schema,
+)
+from backend.domain.constants import (
+    is_default_personal_subcategory,
+    is_default_joint_subcategory,
 )
 from typing import Optional, Any, List, Dict
 import json
@@ -57,9 +61,26 @@ class SQLiteRepository(IRepository):
         return query.all()
 
     def create_subcategory(self, subcategory: cat_schema.SubcategoryCreate) -> cat_model.Subcategory:
-        """Persiste una nueva subcategoría contable."""
+        """Persiste una nueva subcategoría contable verificando unicidad por nombre."""
         data = subcategory.model_dump()
-        db_item = cat_model.Subcategory(name=data.get("name"), category_id=data.get("category_id"))
+        raw_name = data.get("name", "")
+        cleaned_name = raw_name.strip() if raw_name else ""
+        if not cleaned_name:
+            raise ValueError("El nombre de la subcategoría no puede estar vacío.")
+
+        cat_id = data.get("category_id")
+        existing = (
+            self.db.query(cat_model.Subcategory)
+            .filter(
+                cat_model.Subcategory.category_id == cat_id,
+                func.lower(cat_model.Subcategory.name) == cleaned_name.lower()
+            )
+            .first()
+        )
+        if existing:
+            raise ValueError(f"Ya existe una subcategoría con el nombre '{cleaned_name}' en esta categoría.")
+
+        db_item = cat_model.Subcategory(name=cleaned_name, category_id=cat_id)
         self.db.add(db_item)
         self.db.commit()
         self.db.refresh(db_item)
@@ -73,6 +94,8 @@ class SQLiteRepository(IRepository):
         cleaned_name = name.strip()
         if not cleaned_name:
             raise ValueError("El nombre de la subcategoría no puede estar vacío.")
+        if is_default_personal_subcategory(db_item.name):
+            raise ValueError(f"No se puede modificar el nombre de la subcategoría base del sistema '{db_item.name}'.")
         db_item.name = cleaned_name
         self.db.commit()
         self.db.refresh(db_item)
@@ -86,24 +109,33 @@ class SQLiteRepository(IRepository):
         budgets_count = self.db.query(pres_model.MonthlyBudget).filter(
             pres_model.MonthlyBudget.subcategory_id == subcategory_id
         ).count()
+        subcat = self.db.query(cat_model.Subcategory).filter(cat_model.Subcategory.id == subcategory_id).first()
+        is_base = is_default_personal_subcategory(subcat.name) if subcat else False
         return {
             "subcategory_id": subcategory_id,
             "transactions_count": tx_count,
             "budgets_count": budgets_count,
-            "can_delete": (tx_count == 0 and budgets_count == 0),
+            "is_base": is_base,
+            "can_delete": (tx_count == 0 and not is_base),
         }
 
     def delete_subcategory(self, subcategory_id: int) -> bool:
-        """Elimina una subcategoría si no tiene transacciones ni presupuestos asociados."""
+        """Elimina una subcategoría si no tiene transacciones asociadas, limpiando presupuestos huérfanos."""
         db_item = self.db.query(cat_model.Subcategory).filter(cat_model.Subcategory.id == subcategory_id).first()
         if not db_item:
             return False
+        if is_default_personal_subcategory(db_item.name):
+            raise ValueError(f"No se puede eliminar la subcategoría base del sistema '{db_item.name}'.")
         usage = self.check_subcategory_usage(subcategory_id)
         if not usage["can_delete"]:
             raise ValueError(
                 f"No se puede eliminar la subcategoría '{db_item.name}': "
-                f"tiene {usage['transactions_count']} transacciones y {usage['budgets_count']} presupuestos vinculados."
+                f"tiene {usage['transactions_count']} transacciones vinculadas."
             )
+        # Limpiar presupuestos asociados a esta subcategoría antes de eliminarla
+        self.db.query(pres_model.MonthlyBudget).filter(
+            pres_model.MonthlyBudget.subcategory_id == subcategory_id
+        ).delete()
         self.db.delete(db_item)
         self.db.commit()
         return True
@@ -701,11 +733,28 @@ class SQLiteRepository(IRepository):
         return self.db.query(joint_model.JointSubcategory).filter(joint_model.JointSubcategory.id == subcategory_id).first()
 
     def create_joint_subcategory(self, subcategory: joint_schema.JointSubcategoryCreate) -> joint_model.JointSubcategory:
-        """Crea una nueva subcategoría de necesidades comunes."""
+        """Crea una nueva subcategoría de necesidades comunes verificando etapa y unicidad."""
         data = subcategory.model_dump()
+        raw_name = data.get("name", "")
+        cleaned_name = raw_name.strip() if raw_name else ""
+        if not cleaned_name:
+            raise ValueError("El nombre de la subcategoría del hogar no puede estar vacío.")
+
+        account = self.get_joint_account()
+        if account and account.cohabitation_stage in ("PRE_COHABITATION", "DATING_COHABITATION"):
+            raise ValueError("No se pueden registrar subcategorías de necesidades comunes en etapa de Pre-Convivencia.")
+
+        existing = (
+            self.db.query(joint_model.JointSubcategory)
+            .filter(func.lower(joint_model.JointSubcategory.name) == cleaned_name.lower())
+            .first()
+        )
+        if existing:
+            raise ValueError(f"Ya existe una subcategoría con el nombre '{cleaned_name}' en los gastos del hogar.")
+
         db_item = joint_model.JointSubcategory(
             joint_category_id=data["joint_category_id"],
-            name=data["name"],
+            name=cleaned_name,
             monthly_budget=data.get("monthly_budget", 0.0),
         )
         self.db.add(db_item)
@@ -721,6 +770,22 @@ class SQLiteRepository(IRepository):
         if not item:
             return None
         data = update_data.model_dump(exclude_unset=True)
+        if "name" in data and data["name"] is not None:
+            new_name = data["name"].strip()
+            if not new_name:
+                raise ValueError("El nombre no puede estar vacío.")
+            if new_name.lower() != item.name.lower():
+                if is_default_joint_subcategory(item.name):
+                    raise ValueError(f"No se puede modificar el nombre de la subcategoría base del hogar '{item.name}'.")
+                # Validar unicidad
+                existing = self.db.query(joint_model.JointSubcategory).filter(
+                    func.lower(joint_model.JointSubcategory.name) == new_name.lower(),
+                    joint_model.JointSubcategory.id != subcategory_id
+                ).first()
+                if existing:
+                    raise ValueError(f"Ya existe una subcategoría con el nombre '{new_name}' en los gastos del hogar.")
+                data["name"] = new_name
+
         for key, value in data.items():
             setattr(item, key, value)
         self.db.commit()
@@ -732,10 +797,13 @@ class SQLiteRepository(IRepository):
         tx_count = self.db.query(joint_model.JointTransaction).filter(
             joint_model.JointTransaction.joint_subcategory_id == subcategory_id
         ).count()
+        subcat = self.get_joint_subcategory(subcategory_id)
+        is_base = is_default_joint_subcategory(subcat.name) if subcat else False
         return {
             "subcategory_id": subcategory_id,
             "transactions_count": tx_count,
-            "can_delete": (tx_count == 0),
+            "is_base": is_base,
+            "can_delete": (tx_count == 0 and not is_base),
         }
 
     def delete_joint_subcategory(self, subcategory_id: int) -> bool:
@@ -743,6 +811,8 @@ class SQLiteRepository(IRepository):
         item = self.get_joint_subcategory(subcategory_id)
         if not item:
             return False
+        if is_default_joint_subcategory(item.name):
+            raise ValueError(f"No se puede eliminar la subcategoría base del hogar '{item.name}'.")
         usage = self.check_joint_subcategory_usage(subcategory_id)
         if not usage["can_delete"]:
             raise ValueError(

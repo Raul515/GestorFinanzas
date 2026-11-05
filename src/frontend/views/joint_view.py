@@ -1,3 +1,4 @@
+from backend.domain.constants import is_default_joint_subcategory
 """
 Vista Frontend para la Gestión de Finanzas Compartidas (Cuenta Conjunta del Hogar).
 Especificación 010: Arquitectura Multi-Perfil para Parejas y Finanzas Compartidas.
@@ -950,7 +951,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
 
     # Formulario para crear una nueva hucha
     with st.expander("➕ Crear Nueva Hucha de Amortización", expanded=(len(funds) == 0)):
-        with st.form("create_sinking_fund_form"):
+        with st.form("create_sinking_fund_form", clear_on_submit=True):
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 fund_name = st.text_input("Nombre de la Meta / Hucha", placeholder="Ej. Seguro Coche Anual")
@@ -993,36 +994,41 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
         elif len(funds) < 2:
             st.info("ℹ️ Necesitas tener al menos dos huchas creadas para realizar un traspaso entre ellas.")
         else:
-            with st.form("transfer_sinking_fund_form"):
-                col_tr1, col_tr2 = st.columns(2)
-                with col_tr1:
-                    src_id = st.selectbox(
-                        "Hucha de Origen (desde donde sale el saldo)",
-                        options=[f["id"] for f in eligible_sources],
-                        format_func=lambda fid: next(
-                            (f"{f['name']} (Disponible: {float(f.get('current_balance', 0.0)):,.2f} €)" for f in eligible_sources if f["id"] == fid),
-                            str(fid),
-                        ),
-                        key="sel_src_fund_transfer",
-                    )
-                    selected_src = next((f for f in eligible_sources if f["id"] == src_id), None)
-                    max_avail = float(selected_src.get("current_balance", 0.0)) if selected_src else 0.0
+            # Selector reactivo de origen fuera del form para refrescar destinos dinámicamente
+            col_sel_src, col_sel_dest_info = st.columns(2)
+            with col_sel_src:
+                src_id = st.selectbox(
+                    "Hucha de Origen (desde donde sale el saldo)",
+                    options=[f["id"] for f in eligible_sources],
+                    format_func=lambda fid: next(
+                        (f"{f['name']} (Disponible: {float(f.get('current_balance', 0.0)):,.2f} €)" for f in eligible_sources if f["id"] == fid),
+                        str(fid),
+                    ),
+                    key="sel_src_fund_transfer",
+                )
+            selected_src = next((f for f in eligible_sources if f["id"] == src_id), None)
+            max_avail = float(selected_src.get("current_balance", 0.0)) if selected_src else 0.0
+            dest_candidates = [f for f in active_targets if f["id"] != src_id]
 
-                    tr_amount = st.number_input(
-                        "Importe a Traspasar (€)",
-                        min_value=0.01,
-                        max_value=max(max_avail, 0.01),
-                        value=min(50.0, max(max_avail, 0.01)),
-                        step=10.0,
-                        key="num_amount_fund_transfer",
-                    )
+            with col_sel_dest_info:
+                if not dest_candidates:
+                    st.warning("No hay otra hucha activa disponible como destino.")
+                else:
+                    st.caption("Selecciona el importe y la hucha receptora a continuación.")
 
-                with col_tr2:
-                    dest_candidates = [f for f in active_targets if f["id"] != src_id]
-                    if not dest_candidates:
-                        st.warning("No hay otra hucha activa disponible como destino.")
-                        dest_id = None
-                    else:
+            if dest_candidates:
+                with st.form("transfer_sinking_fund_form", clear_on_submit=True):
+                    col_tr1, col_tr2 = st.columns(2)
+                    with col_tr1:
+                        tr_amount = st.number_input(
+                            f"Importe a Traspasar (€, máx {max_avail:,.2f} €)",
+                            min_value=0.01,
+                            max_value=max(max_avail, 0.01),
+                            value=min(50.0, max(max_avail, 0.01)),
+                            step=10.0,
+                            key="num_amount_fund_transfer",
+                        )
+                    with col_tr2:
                         dest_id = st.selectbox(
                             "Hucha de Destino (hacia donde entra el saldo)",
                             options=[f["id"] for f in dest_candidates],
@@ -1032,29 +1038,28 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                             ),
                             key="sel_dest_fund_transfer",
                         )
-
                     tr_notes = st.text_input("Motivo / Notas del Traspaso (Opcional)", placeholder="Ej. Reasignación de viaje cancelado a revisión coche")
 
-                tr_submitted = st.form_submit_button("↔️ Confirmar Traspaso de Saldo", width="stretch")
-                if tr_submitted:
-                    if not dest_id:
-                        st.error("Debes seleccionar una hucha de destino activa válida.")
-                    elif tr_amount <= 0 or tr_amount > max_avail:
-                        st.error(f"El importe debe ser mayor a 0 y no superar los {max_avail:,.2f} € disponibles.")
-                    else:
-                        payload_tr = {
-                            "source_fund_id": src_id,
-                            "target_fund_id": dest_id,
-                            "amount": float(tr_amount),
-                            "notes": tr_notes.strip() if tr_notes else None,
-                            "created_by_profile": account.get("local_profile", "MEMBER_A"),
-                        }
-                        res_tr = api_client.transfer_joint_sinking_fund(payload_tr)
-                        if res_tr:
-                            st.success(f"✅ Se han traspasado {tr_amount:,.2f} € con éxito y se han emitido los deltas de sincronización.")
-                            st.rerun()
+                    tr_submitted = st.form_submit_button("↔️ Confirmar Traspaso de Saldo", width="stretch")
+                    if tr_submitted:
+                        if not dest_id or dest_id == src_id:
+                            st.error("⚠️ La hucha de origen y la de destino deben ser distintas.")
+                        elif tr_amount <= 0 or tr_amount > max_avail:
+                            st.error(f"El importe debe ser mayor a 0 y no superar los {max_avail:,.2f} € disponibles.")
                         else:
-                            st.error("❌ No se pudo completar el traspaso de saldo.")
+                            payload_tr = {
+                                "source_fund_id": src_id,
+                                "target_fund_id": dest_id,
+                                "amount": float(tr_amount),
+                                "notes": tr_notes.strip() if tr_notes else None,
+                                "created_by_profile": account.get("local_profile", "MEMBER_A"),
+                            }
+                            res_tr = api_client.transfer_joint_sinking_fund(payload_tr)
+                            if res_tr:
+                                st.success(f"✅ Se han traspasado {tr_amount:,.2f} € con éxito y se han emitido los deltas de sincronización.")
+                                st.rerun()
+                            else:
+                                st.error("❌ No se pudo completar el traspaso de saldo.")
 
     st.markdown("### Mis Huchas Activas")
     if not funds:
@@ -1068,19 +1073,36 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
             balance = float(f.get("current_balance", 0.0))
             pct = min(balance / target, 1.0)
 
+            is_completed = (target > 0 and balance >= target)
             with col:
+                badge_completed = (
+                    " &nbsp; <span style='background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 600; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px;'>✅ Completada</span>"
+                    if is_completed else ""
+                )
+                card_border = "#10b981" if is_completed else "#334155"
                 st.markdown(
                     f"""
-                    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
-                        <h4 style="margin: 0 0 6px 0; color: #38bdf8;">🎯 {f.get('name')}</h4>
+                    <div style="background: #1e293b; border: 1px solid {card_border}; border-radius: 10px; padding: 14px; margin-bottom: 12px;">
+                        <h4 style="margin: 0 0 6px 0; color: #38bdf8;">🎯 {f.get('name')}{badge_completed}</h4>
                         <p style="font-size: 0.85rem; color: #94a3b8; margin: 0 0 8px 0;">{f.get('description') or 'Sin descripción'}</p>
                         <h3 style="margin: 0; color: #f8fafc;">{balance:,.2f} € <small style="font-size: 0.8rem; color: #64748b;">/ {target:,.2f} €</small></h3>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                st.progress(pct)
-                st.caption(f"Progreso: {pct * 100:.1f}% | Mensual sugerido: {f.get('monthly_target_amount', 0.0):,.2f} €")
+                if is_completed:
+                    st.markdown(
+                        """
+                        <div style="background-color: #334155; border-radius: 6px; height: 10px; width: 100%; overflow: hidden; margin: 6px 0;">
+                            <div style="background-color: #10b981; height: 100%; width: 100%;"></div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.caption("Progreso: 100.0% | 🎉 ¡Meta cumplida! (0,00 €/mes requeridos)")
+                else:
+                    st.progress(pct)
+                    st.caption(f"Progreso: {pct * 100:.1f}% | Mensual sugerido: {f.get('monthly_target_amount', 0.0):,.2f} €")
 
         # Acciones de edición / eliminación
         with st.expander("⚙️ Administrar Huchas"):
@@ -1522,6 +1544,119 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
         key="download_excel_config_tab",
     )
 
+    # EXPANDER: GESTIÓN DE SUBCATEGORÍAS DEL HOGAR (SPEC-015)
+    # RF-5: Si la cuenta está en Pre-Convivencia, los gastos de vivienda no aplican y el expander no se muestra.
+    is_pre_cohabitation = account.get("cohabitation_stage") in ("PRE_COHABITATION", "DATING_COHABITATION")
+    if not is_pre_cohabitation:
+        st.markdown("<hr style='margin: 25px 0 15px 0;'>", unsafe_allow_html=True)
+        with st.expander("🏷️ Administrar Subcategorías del Hogar", expanded=False):
+            st.markdown("#### ➕ Añadir Nueva Subcategoría de Necesidades Comunes")
+            st.caption("Crea nuevos conceptos para clasificar los gastos compartidos del piso o la familia.")
+
+            joint_cats = api_client.get_joint_categories()
+            joint_subcats = api_client.get_joint_subcategories()
+            if not joint_cats:
+                st.info("No hay categorías principales del hogar configuradas.")
+            else:
+                with st.form("form_alta_subcat_hogar", clear_on_submit=True):
+                    col_jc_cat, col_jc_nom, col_jc_bud = st.columns([1.5, 2, 1.2])
+                    with col_jc_cat:
+                        sel_jcat = st.selectbox(
+                            "Categoría del Hogar",
+                            options=joint_cats,
+                            format_func=lambda c: c.get("name", "Gastos Comunes"),
+                            key="sel_joint_subcat_parent"
+                        )
+                    with col_jc_nom:
+                        new_jsub_name = st.text_input(
+                            "Nombre del Concepto",
+                            placeholder="Ej: Artículos de limpieza, Mascotas...",
+                            key="txt_new_joint_subcat_name"
+                        )
+                    with col_jc_bud:
+                        new_jsub_budget = st.number_input(
+                            "Presupuesto Mensual (€)",
+                            min_value=0.0,
+                            value=0.0,
+                            step=10.0,
+                            key="num_new_joint_subcat_budget"
+                        )
+
+                    btn_add_jsub = st.form_submit_button("💾 Guardar Subcategoría del Hogar", width="stretch")
+                    if btn_add_jsub:
+                        cleaned_jname = new_jsub_name.strip()
+                        if not cleaned_jname:
+                            st.warning("⚠️ Debes indicar un nombre para la subcategoría.")
+                        else:
+                            existing_jnames = [js.get("name", "").strip().lower() for js in joint_subcats]
+                            if cleaned_jname.lower() in existing_jnames:
+                                st.warning(f"⚠️ Ya existe una subcategoría con el nombre '{cleaned_jname}' en los gastos del hogar.")
+                            else:
+                                created_jsub = api_client.create_joint_subcategory(
+                                    name=cleaned_jname,
+                                    joint_category_id=sel_jcat["id"],
+                                    monthly_budget=new_jsub_budget
+                                )
+                                if created_jsub:
+                                    st.success(f"✅ ¡Subcategoría '{cleaned_jname}' creada exitosamente y propagada a la pareja!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ No se pudo crear la subcategoría conjunta. Es posible que ya exista o que la pareja la haya registrado.")
+
+            st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
+            st.markdown("#### 📋 Subcategorías de Necesidades Registradas")
+            st.caption("Puedes modificar el nombre, presupuesto mensual estimado o eliminar subcategorías libres de transacciones.")
+            if not joint_subcats:
+                st.info("Aún no se han configurado subcategorías para el hogar.")
+            else:
+                for js in joint_subcats:
+                    js_id = js["id"]
+                    js_name = js.get("name", "")
+                    js_budget = float(js.get("monthly_budget", 0.0) or 0.0)
+                    is_base = is_default_joint_subcategory(js_name)
+
+                    col_jinfo, col_jedit, col_jdel = st.columns([3, 1, 1])
+                    with col_jinfo:
+                        badge_jbase = " &nbsp; <span style='background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px;'>Base</span>" if is_base else ""
+                        st.markdown(f"**{js_name}**{badge_jbase} &nbsp; <span style='color: #64748b; font-size: 0.85rem;'>[{js_budget:.2f} €/mes]</span>", unsafe_allow_html=True)
+
+                    with col_jedit:
+                        with st.popover("✏️ Editar", key=f"pop_edit_joint_{js_id}"):
+                            st.markdown(f"**Editar '{js_name}'**")
+                            if is_base:
+                                st.caption("🔒 El nombre de este concepto base no se puede modificar.")
+                                edit_name = js_name
+                            else:
+                                edit_name = st.text_input("Nombre:", value=js_name, key=f"inp_edit_jname_{js_id}")
+                            edit_bud = st.number_input("Presupuesto (€):", min_value=0.0, value=js_budget, step=10.0, key=f"inp_edit_jbud_{js_id}")
+                            if st.button("Guardar Cambios", key=f"btn_confirm_jedit_{js_id}"):
+                                if edit_name.strip():
+                                    res_jupd = api_client.update_joint_subcategory(
+                                        js_id,
+                                        name=edit_name.strip(),
+                                        monthly_budget=edit_bud
+                                    )
+                                    if res_jupd:
+                                        st.success("✅ Subcategoría actualizada y propagada.")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Error al actualizar la subcategoría conjunta.")
+                                else:
+                                    st.warning("El nombre no puede estar vacío.")
+
+                    if not is_base:
+                        with col_jdel:
+                            with st.popover("🗑️ Eliminar", key=f"pop_del_joint_{js_id}"):
+                                st.markdown(f"**Eliminar '{js_name}'**")
+                                st.warning("Solo se eliminará si no contiene transacciones comunes vinculadas.")
+                                if st.button("Confirmar Borrado", key=f"btn_confirm_jdel_{js_id}", type="primary"):
+                                    ok_jdel, msg_jdel = api_client.delete_joint_subcategory(js_id)
+                                    if ok_jdel:
+                                        st.success(f"✅ {msg_jdel}")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {msg_jdel}")
+
     st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid #334155;'>", unsafe_allow_html=True)
     with st.expander("⚙️ Parámetros de la Cuenta Conjunta", expanded=False):
         with st.form("edit_joint_account_form"):
@@ -1689,10 +1824,10 @@ def _render_personal_assisted_contribution_banner(year: int) -> None:
             target_local = round(ref_inc_loc * 0.4, 2) if ref_inc_loc > 0 else 500.0
             target_remote = round(ref_inc_rem * 0.4, 2) if ref_inc_rem > 0 else 500.0
 
-        is_local_complete = (contrib_local >= target_local and target_local > 0) or (contrib_local > 0 and target_local <= 0)
-        is_remote_complete = (contrib_remote >= target_remote and target_remote > 0) or (contrib_remote > 0 and target_remote <= 0)
+        is_local_complete = (target_local <= 0.0) or (contrib_local >= target_local)
+        is_remote_complete = (target_remote <= 0.0) or (contrib_remote >= target_remote)
 
-        # CASO 1: Ambos miembros han completado su aportación -> Auto-ocultación limpia
+        # CASO 1: Ambos miembros han completado su aportación (o la cuota requerida es 0.00 €) -> Auto-ocultación limpia
         if is_local_complete and is_remote_complete:
             return
 

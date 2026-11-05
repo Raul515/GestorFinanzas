@@ -30,19 +30,22 @@ def test_create_and_read_subcategory(db_session: Session, seed_data: dict[str, i
 
 
 def test_update_subcategory_success(db_session: Session, seed_data: dict[str, int]):
-    """Verifica que se pueda renombrar una subcategoría existente."""
+    """Verifica que se pueda renombrar una subcategoría personalizada existente."""
     repo = SQLiteRepository(db_session)
-    sub_id = seed_data["sub_alquiler_id"]
+    custom_sub = repo.create_subcategory(cat_schemas.SubcategoryCreate(
+        name="Clases de Piano",
+        category_id=seed_data["cat_deseos_id"]
+    ))
 
-    updated = repo.update_subcategory(sub_id, "Alquiler y Gastos de Comunidad")
+    updated = repo.update_subcategory(custom_sub.id, "Clases de Teclado")
     assert updated is not None
-    assert updated.id == sub_id
-    assert updated.name == "Alquiler y Gastos de Comunidad"
+    assert updated.id == custom_sub.id
+    assert updated.name == "Clases de Teclado"
 
     subcats = repo.get_subcategories()
-    found = next((s for s in subcats if s.id == sub_id), None)
+    found = next((s for s in subcats if s.id == custom_sub.id), None)
     assert found is not None
-    assert found.name == "Alquiler y Gastos de Comunidad"
+    assert found.name == "Clases de Teclado"
 
 
 def test_update_subcategory_not_found(db_session: Session):
@@ -100,7 +103,7 @@ def test_check_subcategory_usage_with_transactions(db_session: Session, seed_dat
 
 
 def test_check_subcategory_usage_with_budgets(db_session: Session, seed_data: dict[str, int]):
-    """Verifica que si existen asignaciones en MonthlyBudget, can_delete sea False."""
+    """Verifica que si existen asignaciones en MonthlyBudget pero 0 transacciones, can_delete sea True (limpieza en cascada)."""
     repo = SQLiteRepository(db_session)
     sub = repo.create_subcategory(cat_schemas.SubcategoryCreate(
         name="Cursos Online",
@@ -118,7 +121,69 @@ def test_check_subcategory_usage_with_budgets(db_session: Session, seed_data: di
     usage = repo.check_subcategory_usage(sub.id)
     assert usage["transactions_count"] == 0
     assert usage["budgets_count"] == 1
-    assert usage["can_delete"] is False
+    assert usage["can_delete"] is True
+
+
+def test_delete_subcategory_with_budgets_cascades(db_session: Session, seed_data: dict[str, int]):
+    """Verifica que eliminar una subcategoría sin transacciones elimine en cascada sus presupuestos asociados."""
+    repo = SQLiteRepository(db_session)
+    sub = repo.create_subcategory(cat_schemas.SubcategoryCreate(
+        name="Clases de Baile",
+        category_id=seed_data["cat_deseos_id"]
+    ))
+
+    budget = budget_models.MonthlyBudget(
+        month="BASE",
+        subcategory_id=sub.id,
+        amount=40.0,
+    )
+    db_session.add(budget)
+    db_session.commit()
+
+    deleted = repo.delete_subcategory(sub.id)
+    assert deleted is True
+
+    # Verificar que el presupuesto huérfano fue purgado
+    rem_budget = db_session.query(budget_models.MonthlyBudget).filter_by(subcategory_id=sub.id).first()
+    assert rem_budget is None
+
+
+def test_base_subcategory_protection_crud(db_session: Session, seed_data: dict[str, int]):
+    """Verifica que las subcategorías base del sistema estén blindadas contra renombrado y borrado."""
+    repo = SQLiteRepository(db_session)
+    base_id = seed_data["sub_alquiler_id"]
+
+    # Bloqueo de renombrado
+    with pytest.raises(ValueError, match="No se puede modificar el nombre de la subcategoría base del sistema"):
+        repo.update_subcategory(base_id, "Hipoteca Modificada")
+
+    # Bloqueo de eliminación
+    with pytest.raises(ValueError, match="No se puede eliminar la subcategoría base del sistema"):
+        repo.delete_subcategory(base_id)
+
+
+def test_joint_base_subcategory_protection_crud(db_session: Session):
+    """Verifica que las subcategorías base del hogar estén blindadas contra renombrado y borrado."""
+    repo = SQLiteRepository(db_session)
+    account = repo.create_joint_account(
+        joint_schemas.JointAccountSetupRequest(
+            household_name="Hogar Test Protegido",
+            cohabitation_stage=joint_schemas.CohabitationStage.COHABITATION,
+            split_mode=joint_schemas.SplitMode.EQUAL_50_50,
+            contribution_strategy=joint_schemas.ContributionStrategy.NOMINAL_TEMPLATE,
+            member_a_reference_income=2500.0,
+            member_b_reference_income=2200.0,
+        )
+    )
+    base_subcat = repo.get_joint_subcategories()[0]
+
+    # Bloqueo de renombrado
+    with pytest.raises(ValueError, match="No se puede modificar el nombre de la subcategoría base del hogar"):
+        repo.update_joint_subcategory(base_subcat.id, joint_schemas.JointSubcategoryUpdate(name="Nombre No Permitido"))
+
+    # Bloqueo de eliminación
+    with pytest.raises(ValueError, match="No se puede eliminar la subcategoría base del hogar"):
+        repo.delete_joint_subcategory(base_subcat.id)
 
 
 def test_delete_subcategory_success(db_session: Session, seed_data: dict[str, int]):
@@ -178,6 +243,7 @@ def test_joint_subcategory_crud_and_usage(db_session: Session):
         member_a_reference_income=2000.0,
         member_b_reference_income=2000.0,
         split_mode="EQUAL_50_50",
+        cohabitation_stage="COHABITATION",
     )
     db_session.add(account)
     db_session.flush()
@@ -244,3 +310,60 @@ def test_init_db_data_preserves_custom_subcategories(db_session: Session):
     found = db_session.query(cat_models.Subcategory).filter(cat_models.Subcategory.name == "Cómics y Manga").first()
     assert found is not None
     assert found.category_id == cat.id
+
+
+def test_create_subcategory_duplicate_rejected(db_session: Session, seed_data: dict[str, int]):
+    """Verifica que no se permita crear subcategorías duplicadas case-insensitive en la misma categoría."""
+    repo = SQLiteRepository(db_session)
+    cat_id = seed_data["cat_necesidades_id"]
+
+    repo.create_subcategory(cat_schemas.SubcategoryCreate(name="BBS", category_id=cat_id))
+
+    with pytest.raises(ValueError, match="Ya existe una subcategoría con el nombre 'bbs'"):
+        repo.create_subcategory(cat_schemas.SubcategoryCreate(name="bbs", category_id=cat_id))
+
+
+def test_create_joint_subcategory_duplicate_rejected(db_session: Session):
+    """Verifica que no se permita crear subcategorías conjuntas duplicadas case-insensitive."""
+    repo = SQLiteRepository(db_session)
+    account = joint_models.JointAccount(
+        household_name="Casa Duplicados",
+        cohabitation_stage="COHABITATION",
+    )
+    db_session.add(account)
+    cat = joint_models.JointCategory(joint_account_id=1, name="Común")
+    db_session.add(cat)
+    db_session.commit()
+
+    repo.create_joint_subcategory(joint_schemas.JointSubcategoryCreate(
+        name="Artículos Limpieza",
+        joint_category_id=cat.id,
+        monthly_budget=20.0
+    ))
+
+    with pytest.raises(ValueError, match="Ya existe una subcategoría con el nombre 'artículos limpieza'"):
+        repo.create_joint_subcategory(joint_schemas.JointSubcategoryCreate(
+            name="artículos limpieza",
+            joint_category_id=cat.id,
+            monthly_budget=25.0
+        ))
+
+
+def test_create_joint_subcategory_blocked_in_pre_cohabitation(db_session: Session):
+    """Verifica que no se permita dar de alta necesidades comunes si la cuenta está en Pre-Convivencia."""
+    repo = SQLiteRepository(db_session)
+    account = joint_models.JointAccount(
+        household_name="Casa Pre",
+        cohabitation_stage="PRE_COHABITATION",
+    )
+    db_session.add(account)
+    cat = joint_models.JointCategory(joint_account_id=1, name="Común")
+    db_session.add(cat)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="etapa de Pre-Convivencia"):
+        repo.create_joint_subcategory(joint_schemas.JointSubcategoryCreate(
+            name="Luz y Gas",
+            joint_category_id=cat.id,
+            monthly_budget=50.0
+        ))

@@ -339,7 +339,13 @@ def create_joint_subcategory(
             detail="Debe configurar la cuenta conjunta antes de añadir subcategorías.",
         )
 
-    subcat = repo.create_joint_subcategory(subcat_create)
+    try:
+        subcat = repo.create_joint_subcategory(subcat_create)
+    except ValueError as val_err:
+        err_str = str(val_err)
+        status_code = status.HTTP_400_BAD_REQUEST if "Pre-Convivencia" in err_str else status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=status_code, detail=err_str)
+
     cat = repo.get_joint_category(subcat.joint_category_id)
     cat_name = cat.name if cat else None
 
@@ -364,7 +370,10 @@ def update_joint_subcategory(
     sync_service: JointSyncService = Depends(get_sync_service),
 ) -> schemas.JointSubcategoryResponse:
     """Actualiza una subcategoría de necesidades comunes y propaga el cambio a la pareja."""
-    subcat = repo.update_joint_subcategory(subcategory_id, subcat_update)
+    try:
+        subcat = repo.update_joint_subcategory(subcategory_id, subcat_update)
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
     if not subcat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subcategoría no encontrada.")
 
@@ -409,6 +418,11 @@ def delete_joint_subcategory(
 
     usage = repo.check_joint_subcategory_usage(subcategory_id)
     if not usage.get("can_delete", False):
+        if usage.get("is_base", False):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No se puede eliminar la subcategoría base del hogar '{subcat.name}'.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -552,6 +566,12 @@ def transfer_joint_sinking_fund(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cuenta conjunta no configurada.",
+        )
+
+    if transfer_req.source_fund_id == transfer_req.target_fund_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La hucha de origen y de destino no pueden ser la misma.",
         )
 
     try:
@@ -903,6 +923,8 @@ def get_joint_contribution_calculation(
         {
             "id": f.id,
             "status": f.status,
+            "current_balance": f.current_balance,
+            "target_amount": f.target_amount,
             "monthly_target_amount": f.monthly_target_amount,
             "allocation_percentage": f.allocation_percentage,
         }
@@ -1025,6 +1047,8 @@ def record_assisted_contribution(
             {
                 "id": f.id,
                 "status": f.status,
+                "current_balance": f.current_balance,
+                "target_amount": f.target_amount,
                 "monthly_target_amount": f.monthly_target_amount,
                 "allocation_percentage": f.allocation_percentage,
             }

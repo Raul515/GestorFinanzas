@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from backend.domain.models.joint import (
     JointAppliedSyncEvent,
@@ -284,10 +285,33 @@ class JointSyncService:
             logger.warning("Evento SUBCATEGORY ignorado por falta de 'name' en payload.")
             return
 
-        subcat = db.query(JointSubcategory).filter(JointSubcategory.name == name).first()
+        subcat = db.query(JointSubcategory).filter(func.lower(JointSubcategory.name) == name.strip().lower()).first()
 
         if event.action == SyncAction.DELETE:
             if subcat:
+                # VETO DE BORRADO ANTE CONCURRENCIA OFFLINE (SPEC-015 FASE 4)
+                # Si en el nodo local existen transacciones vinculadas a esta subcategoría, se VETA el DELETE remoto
+                # para evitar violar la integridad referencial y dejar transacciones huérfanas.
+                tx_count = db.query(JointTransaction).filter(JointTransaction.joint_subcategory_id == subcat.id).count()
+                if tx_count > 0:
+                    logger.warning(
+                        "VETO DE BORRADO: La subcategoría conjunta '%s' tiene %d transacciones locales. "
+                        "Se veta el DELETE remoto y se re-emite UPSERT para mantener la consistencia contable.",
+                        name, tx_count
+                    )
+                    cat_obj = db.query(JointCategory).filter(JointCategory.id == subcat.joint_category_id).first()
+                    self.emit_event(
+                        entity_type=SyncEntityType.SUBCATEGORY,
+                        action=SyncAction.UPSERT,
+                        payload={
+                            "name": subcat.name,
+                            "monthly_budget": subcat.monthly_budget,
+                            "category_name": cat_obj.name if cat_obj else None,
+                        },
+                        origin_device_id=self.local_device_id,
+                    )
+                    return
+
                 db.delete(subcat)
                 logger.info("Subcategoría conjunta '%s' eliminada por evento remoto.", name)
             return
@@ -406,9 +430,24 @@ class JointSyncService:
             subcat_id = None
             subcat_name = payload.get("subcategory_name")
             if subcat_name:
-                subcat = db.query(JointSubcategory).filter(JointSubcategory.name == subcat_name).first()
+                subcat = db.query(JointSubcategory).filter(func.lower(JointSubcategory.name) == subcat_name.strip().lower()).first()
                 if subcat:
                     subcat_id = subcat.id
+                else:
+                    # RESURRECCIÓN AUTOMÁTICA ANTE CONCURRENCIA OFFLINE (SPEC-015 FASE 4)
+                    # Si la subcategoría fue borrada en el nodo local porque creía que estaba vacía,
+                    # pero la pareja registró transacciones mientras estaba desconectada, se recrea automáticamente
+                    target_cat = db.query(JointCategory).filter(JointCategory.joint_account_id == 1).first()
+                    if target_cat:
+                        subcat = JointSubcategory(
+                            joint_category_id=target_cat.id,
+                            name=subcat_name.strip(),
+                            monthly_budget=0.0,
+                        )
+                        db.add(subcat)
+                        db.flush()
+                        subcat_id = subcat.id
+                        logger.info("Resurrección automática: Subcategoría conjunta '%s' recreada para alojar transacción remota.", subcat_name)
             if subcat_id is None and payload.get("joint_subcategory_id"):
                 subcat_id = payload.get("joint_subcategory_id")
 

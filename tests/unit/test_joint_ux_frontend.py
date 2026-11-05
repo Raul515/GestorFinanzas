@@ -76,3 +76,51 @@ def test_joint_view_settings_tab_right_aligned_css():
 
     assert '#joint-tabs-marker' in code
     assert 'margin-left: auto !important;' in code
+
+
+def test_joint_view_subcategories_management_expander():
+    """Valida la integración de gestión de subcategorías del hogar en joint_view.py (Spec 015 - Fase 3 y 4):
+    - Presencia del expander '🏷️ Administrar Subcategorías del Hogar'.
+    - Situado encima del expander '⚙️ Parámetros de la Cuenta Conjunta'.
+    - Conexión con los métodos de api_client (create_joint_subcategory, update_joint_subcategory, delete_joint_subcategory).
+    """
+    jv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/views/joint_view.py"))
+    with open(jv_path, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    pos_subcats = code.find("🏷️ Administrar Subcategorías del Hogar")
+    pos_params = code.find("⚙️ Parámetros de la Cuenta Conjunta")
+    assert pos_subcats != -1, "El expander de subcategorías del hogar debe existir"
+    assert pos_params != -1, "El expander de parámetros debe existir"
+    assert pos_subcats < pos_params, "El expander de subcategorías del hogar debe situarse encima del de parámetros"
+
+    assert "api_client.create_joint_subcategory" in code
+    assert "api_client.update_joint_subcategory" in code
+    assert "api_client.delete_joint_subcategory" in code
+
+
+def test_joint_view_sinking_funds_ux_improvements():
+    """Valida las mejoras de UX en Huchas de Amortización (Fase 5):
+    - create_sinking_fund_form con clear_on_submit=True.
+    - transfer_sinking_fund_form con clear_on_submit=True y bloqueo de misma hucha origen == destino.
+    - Tarjetas de huchas con soporte de estado 'is_completed', badge '✅ Completada' y borde verde.
+    """
+    jv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/views/joint_view.py"))
+    with open(jv_path, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    assert 'st.form("create_sinking_fund_form", clear_on_submit=True)' in code
+    assert 'st.form("transfer_sinking_fund_form", clear_on_submit=True)' in code
+    assert 'dest_id == src_id' in code or 'src_id == dest_id' in code
+    assert '✅ Completada' in code
+    assert '#10b981' in code
+
+
+def test_joint_view_assisted_contribution_banner_auto_hiding():
+    """Valida que el banner de aportación asistida se auto-oculte cuando la cuota local requerida es 0.00 €."""
+    jv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/views/joint_view.py"))
+    with open(jv_path, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    assert 'is_local_complete = (target_local <= 0.0) or (contrib_local >= target_local)' in code
+    assert 'is_remote_complete = (target_remote <= 0.0) or (contrib_remote >= target_remote)' in code

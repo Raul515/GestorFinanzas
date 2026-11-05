@@ -34,7 +34,10 @@ def read_subcategories(category_id: Optional[int] = None, repo: ICategoryReposit
 @router.post("/subcategories/", response_model=schemas.Subcategory)
 def create_subcategory(subcategory: schemas.SubcategoryCreate, repo: ICategoryRepository = Depends(get_repo)):
     """Crea una nueva subcategoría asignada a una categoría existente."""
-    return repo.create_subcategory(subcategory)
+    try:
+        return repo.create_subcategory(subcategory)
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(val_err))
 @router.get("/subcategories/{subcategory_id}/usage", response_model=schemas.SubcategoryUsage)
 def check_subcategory_usage(subcategory_id: int, repo: ICategoryRepository = Depends(get_repo)):
     """Comprueba el número de transacciones y presupuestos que dependen de una subcategoría."""
@@ -59,14 +62,19 @@ def update_subcategory(
 
 @router.delete("/subcategories/{subcategory_id}")
 def delete_subcategory(subcategory_id: int, repo: ICategoryRepository = Depends(get_repo)):
-    """Elimina una subcategoría si no tiene transacciones ni presupuestos asociados."""
+    """Elimina una subcategoría si no tiene transacciones asociadas."""
     usage = repo.check_subcategory_usage(subcategory_id)
     if not usage.get("can_delete", False):
+        if usage.get("is_base", False):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No se puede eliminar una subcategoría base del sistema.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f"No se puede eliminar la subcategoría: tiene {usage.get('transactions_count', 0)} "
-                f"transacciones y {usage.get('budgets_count', 0)} presupuestos vinculados."
+                f"transacciones vinculadas."
             ),
         )
     try:

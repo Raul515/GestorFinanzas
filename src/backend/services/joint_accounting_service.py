@@ -55,8 +55,17 @@ def calculate_monthly_contributions(
     # 1. En Pre-Convivencia, los costes fijos de necesidades son estrictamente 0.00 €
     effective_needs_budget = 0.0 if cohabitation_stage == CohabitationStage.PRE_COHABITATION else max(0.0, float(needs_budget))
 
-    # Filtrar huchas activas
-    active_funds = [f for f in sinking_funds if f.get("status", "ACTIVE") == "ACTIVE"]
+    # Filtrar huchas activas que no hayan alcanzado ya su objetivo de ahorro
+    # Si target_amount > 0 y current_balance >= target_amount, la meta está cumplida y la cuota requerida es 0.00 €
+    active_funds = []
+    for f in sinking_funds:
+        if f.get("status", "ACTIVE") != "ACTIVE":
+            continue
+        tgt = float(f.get("target_amount", 0.0) or 0.0)
+        bal = float(f.get("current_balance", 0.0) or 0.0)
+        if tgt > 0 and bal >= tgt:
+            continue
+        active_funds.append(f)
 
     sinking_funds_target = sum(float(f.get("monthly_target_amount", 0.0)) for f in active_funds)
     fund_allocations: Dict[int, float] = {}
@@ -91,10 +100,13 @@ def calculate_monthly_contributions(
             member_a_contribution = round(total_household_budget * 0.5, 2)
             member_b_contribution = round(total_household_budget - member_a_contribution, 2)
 
-        # Cada hucha nominal recibe su cuota fijada
-        for f in active_funds:
+        # Cada hucha nominal activa recibe su cuota fijada; las completadas reciben 0.00 €
+        for f in sinking_funds:
             fid = f.get("id", 0)
-            fund_allocations[fid] = round(float(f.get("monthly_target_amount", 0.0)), 2)
+            if f in active_funds:
+                fund_allocations[fid] = round(float(f.get("monthly_target_amount", 0.0)), 2)
+            elif f.get("status", "ACTIVE") == "ACTIVE":
+                fund_allocations[fid] = 0.0
 
         allocated_to_sinking_funds = sinking_funds_target
 
@@ -113,6 +125,10 @@ def calculate_monthly_contributions(
             available_for_funds = total_collected
 
         fund_allocations = distribute_sinking_funds_allocation(active_funds, available_for_funds)
+        for f in sinking_funds:
+            fid = f.get("id", 0)
+            if fid not in fund_allocations and f.get("status", "ACTIVE") == "ACTIVE":
+                fund_allocations[fid] = 0.0
         allocated_to_sinking_funds = sum(fund_allocations.values())
 
     return {
@@ -423,8 +439,8 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
     txs = (
         db.query(JointTransaction)
         .options(
-            joinedload(JointTransaction.joint_subcategory).joinedload(JointSubcategory.joint_category),
-            joinedload(JointTransaction.joint_sinking_fund),
+            joinedload(JointTransaction.subcategory).joinedload(JointSubcategory.category),
+            joinedload(JointTransaction.sinking_fund),
         )
         .filter(JointTransaction.joint_account_id == household_id)
         .order_by(JointTransaction.date.desc(), JointTransaction.id.desc())
@@ -432,11 +448,11 @@ def generate_household_excel_export(db: Any, household_id: int) -> bytes:
     )
     tx_rows = []
     for t in txs:
-        subcat_name = t.joint_subcategory.name if getattr(t, 'joint_subcategory', None) else ''
-        fund_name = t.joint_sinking_fund.name if getattr(t, 'joint_sinking_fund', None) else ''
+        subcat_name = t.subcategory.name if getattr(t, 'subcategory', None) else ''
+        fund_name = t.sinking_fund.name if getattr(t, 'sinking_fund', None) else ''
         cat_name = ''
-        if getattr(t, 'joint_subcategory', None) and getattr(t.joint_subcategory, 'joint_category', None):
-            cat_name = t.joint_subcategory.joint_category.name
+        if getattr(t, 'subcategory', None) and getattr(t.subcategory, 'category', None):
+            cat_name = t.subcategory.category.name
 
         tx_rows.append({
             'ID': t.id,

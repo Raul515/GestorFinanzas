@@ -256,3 +256,39 @@ def test_delete_joint_subcategory_conflict():
         assert ok is False
         assert "5 transacciones" in msg
 
+
+
+# ==========================================
+# 3. PRESUPUESTO INDIVIDUAL (create_presupuesto)
+# ==========================================
+
+def test_create_presupuesto_success():
+    """Verifica que create_presupuesto envíe POST a /budgets/ e invalide la caché del resumen anual."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "id": 1,
+        "month": "BASE",
+        "subcategory_id": 10,
+        "amount": 50.0,
+    }
+
+    with patch.object(api_client._session, "post", return_value=mock_resp) as mock_post,          patch.object(api_client, "clear_annual_cache") as mock_clear_ann:
+
+        res = api_client.create_presupuesto("BASE", 10, 50.0)
+        assert res is not None
+        assert res["cantidad"] == 50.0
+        assert res["mes"] == "BASE"
+        mock_post.assert_called_once()
+        mock_clear_ann.assert_called_once()
+
+
+def test_create_presupuesto_error():
+    """Verifica que retorne None si la API de presupuestos falla."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.text = "Server Error"
+
+    with patch.object(api_client._session, "post", return_value=mock_resp):
+        res = api_client.create_presupuesto("BASE", 10, 50.0)
+        assert res is None

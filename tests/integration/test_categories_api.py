@@ -48,13 +48,17 @@ def test_get_subcategory_usage_api(client: TestClient, seed_data: dict[str, int]
 
 
 def test_update_subcategory_api_success(client: TestClient, seed_data: dict[str, int]):
-    """Verifica el renombrado exitoso mediante PUT /categories/subcategories/{id}."""
-    sub_id = seed_data["sub_alquiler_id"]
-    response = client.put(f"/categories/subcategories/{sub_id}", json={"name": "Alquiler Piso Principal"})
+    """Verifica el renombrado exitoso de una subcategoría personalizada mediante PUT /categories/subcategories/{id}."""
+    create_res = client.post(
+        "/categories/subcategories/",
+        json={"name": "Clases de Canto", "category_id": seed_data["cat_deseos_id"]},
+    )
+    sub_id = create_res.json()["id"]
+    response = client.put(f"/categories/subcategories/{sub_id}", json={"name": "Clases de Canto y Voz"})
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == sub_id
-    assert data["name"] == "Alquiler Piso Principal"
+    assert data["name"] == "Clases de Canto y Voz"
 
 
 def test_update_subcategory_api_not_found(client: TestClient):
@@ -113,11 +117,11 @@ def test_delete_subcategory_api_conflict_with_transactions(client: TestClient, d
     assert "1 transacciones" in error_detail
 
 
-def test_delete_subcategory_api_conflict_with_budgets(client: TestClient, db_session: Session, seed_data: dict[str, int]):
-    """Verifica que el endpoint devuelva HTTP 409 Conflict si la subcategoría tiene presupuestos vinculados."""
+def test_delete_subcategory_api_success_with_budgets(client: TestClient, db_session: Session, seed_data: dict[str, int]):
+    """Verifica que el endpoint permita eliminar una subcategoría con presupuesto si tiene 0 transacciones."""
     create_res = client.post(
         "/categories/subcategories/",
-        json={"name": "Gas Natural", "category_id": seed_data["cat_necesidades_id"]},
+        json={"name": "Gas Natural Extra", "category_id": seed_data["cat_necesidades_id"]},
     )
     sub_id = create_res.json()["id"]
 
@@ -130,10 +134,27 @@ def test_delete_subcategory_api_conflict_with_budgets(client: TestClient, db_ses
     db_session.commit()
 
     del_res = client.delete(f"/categories/subcategories/{sub_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["deleted"] is True
+
+    # Verificar que el presupuesto fue purgado
+    found_b = db_session.query(budget_models.MonthlyBudget).filter_by(subcategory_id=sub_id).first()
+    assert found_b is None
+
+
+def test_base_subcategory_protection_api(client: TestClient, seed_data: dict[str, int]):
+    """Verifica que la API rechace renombrar o eliminar subcategorías base del sistema."""
+    base_id = seed_data["sub_alquiler_id"]
+
+    # Intento de renombrar
+    ren_res = client.put(f"/categories/subcategories/{base_id}", json={"name": "Alquiler Ilegal"})
+    assert ren_res.status_code == 400
+    assert "No se puede modificar el nombre de la subcategoría base" in ren_res.json()["detail"]
+
+    # Intento de eliminar
+    del_res = client.delete(f"/categories/subcategories/{base_id}")
     assert del_res.status_code == 409
-    error_detail = del_res.json()["detail"]
-    assert "No se puede eliminar la subcategoría" in error_detail
-    assert "1 presupuestos" in error_detail
+    assert "No se puede eliminar una subcategoría base" in del_res.json()["detail"]
 
 
 def test_joint_subcategories_api_usage_and_delete(client: TestClient, db_session: Session):
@@ -145,6 +166,7 @@ def test_joint_subcategories_api_usage_and_delete(client: TestClient, db_session
         member_a_reference_income=1500.0,
         member_b_reference_income=1500.0,
         split_mode="EQUAL_50_50",
+        cohabitation_stage="COHABITATION",
     )
     db_session.add(account)
     db_session.flush()
@@ -200,3 +222,63 @@ def test_joint_subcategories_api_usage_and_delete(client: TestClient, db_session
 
     del_res_404 = client.delete(f"/joint/subcategories/{sub_id}")
     assert del_res_404.status_code == 404
+
+
+def test_create_subcategory_duplicate_api(client: TestClient, seed_data: dict[str, int]):
+    """Verifica que la API retorne HTTP 409 Conflict al intentar crear una subcategoría duplicada."""
+    payload = {"name": "Gimnasio Crossfit", "category_id": seed_data["cat_deseos_id"]}
+    res1 = client.post("/categories/subcategories/", json=payload)
+    assert res1.status_code == 200
+
+    # Segundo intento con diferente capitalización
+    payload_dup = {"name": "gimnasio crossfit", "category_id": seed_data["cat_deseos_id"]}
+    res2 = client.post("/categories/subcategories/", json=payload_dup)
+    assert res2.status_code == 409
+    assert "Ya existe una subcategoría" in res2.json()["detail"]
+
+
+def test_create_joint_subcategory_duplicate_api(client: TestClient, db_session: Session):
+    """Verifica que la API retorne HTTP 409 Conflict al registrar una subcategoría conjunta duplicada."""
+    account = joint_models.JointAccount(
+        household_name="Hogar Dup API",
+        cohabitation_stage="COHABITATION",
+    )
+    db_session.add(account)
+    cat = joint_models.JointCategory(joint_account_id=1, name="Hogar")
+    db_session.add(cat)
+    db_session.commit()
+
+    res1 = client.post("/joint/subcategories", json={
+        "name": "Supermercado Semanal",
+        "joint_category_id": cat.id,
+        "monthly_budget": 200.0,
+    })
+    assert res1.status_code == 201
+
+    res2 = client.post("/joint/subcategories", json={
+        "name": "supermercado semanal",
+        "joint_category_id": cat.id,
+        "monthly_budget": 250.0,
+    })
+    assert res2.status_code == 409
+    assert "Ya existe una subcategoría" in res2.json()["detail"]
+
+
+def test_create_joint_subcategory_pre_cohabitation_blocked_api(client: TestClient, db_session: Session):
+    """Verifica que en Pre-Convivencia la API bloquee con 400 Bad Request el alta de subcategorías comunes."""
+    account = joint_models.JointAccount(
+        household_name="Hogar Pre API",
+        cohabitation_stage="PRE_COHABITATION",
+    )
+    db_session.add(account)
+    cat = joint_models.JointCategory(joint_account_id=1, name="Hogar")
+    db_session.add(cat)
+    db_session.commit()
+
+    res = client.post("/joint/subcategories", json={
+        "name": "Alquiler Piso",
+        "joint_category_id": cat.id,
+        "monthly_budget": 700.0,
+    })
+    assert res.status_code == 400
+    assert "Pre-Convivencia" in res.json()["detail"]

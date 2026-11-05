@@ -229,6 +229,40 @@ def get_presupuestos(mes):
     return []
 
 
+def create_presupuesto(mes: str, subcategoria_id: int, cantidad: float) -> Optional[Dict[str, Any]]:
+    """
+    Crea o actualiza una asignación presupuestaria individual para un mes o plantilla BASE.
+    Invalida reactivamente la caché del resumen anual consolidado.
+    """
+    url = f"{API_URL}/budgets/"
+    payload = {
+        "month": mes,
+        "subcategory_id": subcategoria_id,
+        "amount": float(cantidad or 0.0),
+    }
+    try:
+        response = _session.post(url, json=payload, timeout=10)
+        if response.status_code in (200, 201):
+            clear_annual_cache()
+            raw = response.json()
+            if isinstance(raw, dict):
+                if "month" in raw and "mes" not in raw:
+                    raw["mes"] = raw["month"]
+                if "amount" in raw and "cantidad" not in raw:
+                    raw["cantidad"] = raw["amount"]
+                if "subcategory_id" in raw and "subcategoria_id" not in raw:
+                    raw["subcategoria_id"] = raw["subcategory_id"]
+            return raw
+        logger.warning("Error al crear presupuesto individual (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red o conexión al crear presupuesto en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en create_presupuesto(): %s", e)
+    return None
+
+create_budget = create_presupuesto
+
+
 def get_transacciones(mes=None):
     """Obtiene transacciones de un mes, normalizando claves para compatibilidad bidireccional."""
     url = f"{API_URL}/transactions/"

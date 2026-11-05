@@ -1,3 +1,4 @@
+from backend.domain.constants import is_default_personal_subcategory
 import logging
 import importlib
 from typing import Any, Optional, Dict, List
@@ -2338,6 +2339,7 @@ elif modulo_personal == "⚙️ Ajustes y Sistema":
             presupuestos_base = api_client.get_presupuestos("BASE")
             base_map = {(p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')): (p.get('cantidad') if p.get('cantidad') is not None else p.get('amount', 0.0)) for p in presupuestos_base} if presupuestos_base else {}
         
+            # 1. EXPANDER: FORMULARIO DE CONFIGURACIÓN DEL PRESUPUESTO BASE (ARRIBA)
             with st.expander("⚙️ Formulario de Configuración del Presupuesto Base", expanded=False):
                 with st.form("form_presupuesto_base"):
                     nuevos_presupuestos = []
@@ -2379,6 +2381,165 @@ elif modulo_personal == "⚙️ Ajustes y Sistema":
                             st.rerun()
                         else:
                             st.error("Error al guardar el presupuesto base.")
+
+            # SEPARADOR Y EXPLICACIÓN DEL ADMINISTRADOR DE SUBCATEGORÍAS
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.caption("Personaliza y organiza los conceptos de gasto y ahorro de tu presupuesto. Añade nuevas subcategorías a tu medida o renombra y elimina aquellas personalizadas que hayas creado y ya no utilices.")
+
+            # 2. EXPANDER: GESTIÓN DE SUBCATEGORÍAS PERSONALIZADAS (DEBAJO)
+            with st.expander("🏷️ Administrar Subcategorías Personalizadas", expanded=False):
+                st.markdown("#### ➕ Añadir Nueva Subcategoría")
+                st.caption("Crea conceptos personalizados para adaptar el presupuesto a tu estilo de vida.")
+
+                cats_disponibles = [c for c in categorias if c.get("tipo") in ("gasto", "ahorro") or c.get("type") in ("gasto", "ahorro")]
+                if not cats_disponibles:
+                    st.info("No se encontraron categorías de gastos o ahorro disponibles.")
+                else:
+                    saved_cat_id = st.session_state.get("last_selected_personal_cat_id")
+                    default_cat_idx = 0
+                    if saved_cat_id is not None:
+                        for idx_c, c_opt in enumerate(cats_disponibles):
+                            if c_opt.get("id") == saved_cat_id:
+                                default_cat_idx = idx_c
+                                break
+
+                    with st.form("form_alta_subcat_personal", clear_on_submit=True):
+                        col_cat_sel, col_sub_nom, col_sub_pres, col_sub_mes = st.columns([1.4, 1.8, 1.1, 1.3])
+                        with col_cat_sel:
+                            selected_cat = st.selectbox(
+                                "Categoría Principal",
+                                options=cats_disponibles,
+                                index=default_cat_idx,
+                                format_func=lambda c: c.get("nombre") or c.get("name", ""),
+                                key="sel_new_subcat_parent"
+                            )
+                        with col_sub_nom:
+                            new_sub_name = st.text_input(
+                                "Nombre de la Subcategoría",
+                                placeholder="Ej: Veterinario, Cursos, etc.",
+                                key="txt_new_subcat_name"
+                            )
+                        with col_sub_pres:
+                            new_sub_budget = st.number_input(
+                                "Presupuesto (€, opc.)",
+                                min_value=0.0,
+                                value=0.0,
+                                step=10.0,
+                                key="num_new_subcat_budget"
+                            )
+                        today_dt = date.today()
+                        curr_natural_year = today_dt.year
+                        default_month_idx = max(0, min(11, today_dt.month - 1))
+                        with col_sub_mes:
+                            start_month_name = st.selectbox(
+                                f"A partir de ({curr_natural_year})",
+                                options=MESES_NOMBRES,
+                                index=default_month_idx,
+                                key="sel_new_subcat_start_month",
+                                help=f"El presupuesto mensual se aplicará desde este mes hasta diciembre de {curr_natural_year}. Los meses anteriores tendrán 0,00 €."
+                            )
+
+                        btn_add_subcat = st.form_submit_button("💾 Guardar Nueva Subcategoría", width="stretch")
+                        if btn_add_subcat:
+                            st.session_state["last_selected_personal_cat_id"] = selected_cat["id"]
+                            cleaned_name = new_sub_name.strip()
+                            if not cleaned_name:
+                                st.warning("⚠️ Debes indicar un nombre para la subcategoría.")
+                            else:
+                                existing_names = [
+                                    (s.get("nombre") or s.get("name", "")).strip().lower()
+                                    for s in todas_subcats
+                                    if (s.get("categoria_id") if s.get("categoria_id") is not None else s.get("category_id")) == selected_cat["id"]
+                                ]
+                                if cleaned_name.lower() in existing_names:
+                                    st.warning(f"⚠️ Ya existe una subcategoría con el nombre '{cleaned_name}' en {selected_cat.get('nombre') or selected_cat.get('name')}.")
+                                else:
+                                    created_sub = api_client.create_subcategory(
+                                        category_id=selected_cat["id"],
+                                        name=cleaned_name
+                                    )
+                                    if created_sub:
+                                        if new_sub_budget > 0:
+                                            start_month_num = (MESES_NOMBRES.index(start_month_name) + 1) if start_month_name in MESES_NOMBRES else today_dt.month
+                                            bulk_presupuestos = [
+                                                {"mes": "BASE", "subcategoria_id": created_sub["id"], "cantidad": new_sub_budget}
+                                            ]
+                                            # Meses anteriores del año natural: 0.00 € explícito para blindar el histórico
+                                            for m in range(1, start_month_num):
+                                                bulk_presupuestos.append({
+                                                    "mes": f"{curr_natural_year}-{m:02d}",
+                                                    "subcategoria_id": created_sub["id"],
+                                                    "cantidad": 0.0
+                                                })
+                                            # Mes de inicio y posteriores del año natural: nuevo presupuesto
+                                            for m in range(start_month_num, 13):
+                                                bulk_presupuestos.append({
+                                                    "mes": f"{curr_natural_year}-{m:02d}",
+                                                    "subcategoria_id": created_sub["id"],
+                                                    "cantidad": new_sub_budget
+                                                })
+                                            api_client.save_presupuestos_bulk(bulk_presupuestos)
+                                        st.success(f"✅ ¡Subcategoría '{cleaned_name}' creada exitosamente!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ No se pudo crear la subcategoría '{cleaned_name}'. Verifica si ya existe o contacta con el administrador.")
+
+                st.markdown("<hr style='margin: 20px 0;'>", unsafe_allow_html=True)
+                st.markdown("#### 📋 Catálogo y Edición de Subcategorías")
+                st.caption("Solo se pueden renombrar o eliminar las subcategorías personalizadas creadas por ti que no tengan transacciones vinculadas. Las subcategorías base del sistema están protegidas.")
+
+                for cat in cats_disponibles:
+                    n_cat = cat.get("nombre") or cat.get("name", "")
+                    subcats_c = [
+                        s for s in todas_subcats 
+                        if (s.get("categoria_id") if s.get("categoria_id") is not None else s.get("category_id")) == cat["id"]
+                    ]
+                    if not subcats_c:
+                        continue
+
+                    h_color = colores_cabecera.get(n_cat, "#333333")
+                    st.markdown(f"""<div style="border-left: 5px solid {h_color}; padding-left: 10px; margin-top: 15px; margin-bottom: 8px;">
+<h5 style="margin: 0; color: inherit; font-family: 'Inter', sans-serif;">{n_cat}</h5>
+</div>""", unsafe_allow_html=True)
+
+                    for s in subcats_c:
+                        s_id = s["id"]
+                        s_name = s.get("nombre") or s.get("name", "")
+                        b_val = base_map.get(s_id, 0.0)
+                        is_base = is_default_personal_subcategory(s_name)
+
+                        col_info, col_ren, col_del = st.columns([3, 1, 1])
+                        with col_info:
+                            badge_base = " &nbsp; <span style='background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px;'>Base</span>" if is_base else ""
+                            st.markdown(f"**{s_name}**{badge_base} &nbsp; <span style='color: #64748b; font-size: 0.85rem;'>[Base: {b_val:.2f} €/mes]</span>", unsafe_allow_html=True)
+
+                        if not is_base:
+                            with col_ren:
+                                with st.popover("✏️ Renombrar", key=f"pop_ren_{s_id}"):
+                                    st.markdown(f"**Renombrar '{s_name}'**")
+                                    ren_name = st.text_input("Nuevo nombre:", value=s_name, key=f"ren_input_{s_id}")
+                                    if st.button("Guardar Nombre", key=f"btn_confirm_ren_{s_id}"):
+                                        if ren_name.strip() and ren_name.strip() != s_name:
+                                            res_ren = api_client.update_subcategory(s_id, ren_name.strip())
+                                            if res_ren:
+                                                st.success("✅ Nombre actualizado.")
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Error al actualizar nombre.")
+                                        elif not ren_name.strip():
+                                            st.warning("El nombre no puede estar vacío.")
+
+                            with col_del:
+                                with st.popover("🗑️ Eliminar", key=f"pop_del_{s_id}"):
+                                    st.markdown(f"**Eliminar '{s_name}'**")
+                                    st.warning("Solo se eliminará si no contiene transacciones vinculadas.")
+                                    if st.button("Confirmar Borrado", key=f"btn_confirm_del_{s_id}", type="primary"):
+                                        ok_del, msg_del = api_client.delete_subcategory(s_id)
+                                        if ok_del:
+                                            st.success(f"✅ {msg_del}")
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ {msg_del}")
 
             # SECCIÓN CONFIGURACIÓN FONDO DE EMERGENCIA (SAFETY GUARD)
             st.markdown("<br><hr>", unsafe_allow_html=True)

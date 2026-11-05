@@ -87,3 +87,37 @@ def test_app_py_household_banner_confinement():
     assert pos_budget != -1, "El módulo de presupuesto debe existir"
     assert pos_ai != -1, "El módulo de IA debe existir"
     assert pos_budget < pos_banner_call < pos_ai, "La llamada al banner debe estar dentro del módulo de presupuesto y antes del módulo de IA"
+
+
+def test_app_py_subcategories_management_expander():
+    """Valida la integración de gestión de subcategorías personalizadas en app.py (Spec 015 - Fase 3):
+    - Presencia del expander '🏷️ Administrar Subcategorías Personalizadas'.
+    - Situado inmediatamente antes del '⚙️ Formulario de Configuración del Presupuesto Base'.
+    - Conexión con los métodos de api_client (create_subcategory, update_subcategory, delete_subcategory).
+    """
+    app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/app.py"))
+    with open(app_path, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    pos_subcat_expander = code.find("🏷️ Administrar Subcategorías Personalizadas")
+    pos_base_form = code.find("⚙️ Formulario de Configuración del Presupuesto Base")
+
+    assert pos_subcat_expander != -1, "El expander de subcategorías personalizadas debe existir en app.py"
+    assert pos_base_form != -1, "El formulario de presupuesto base debe existir en app.py"
+    assert pos_base_form < pos_subcat_expander, "El formulario de presupuesto base debe situarse arriba y el expander de subcategorías debajo"
+
+    assert "api_client.create_subcategory" in code
+    assert "api_client.update_subcategory" in code
+    assert "api_client.delete_subcategory" in code
+
+
+def test_app_py_subcategory_start_month_and_budget_propagation():
+    """Valida la presencia del selector de mes de inicio y la propagación de presupuestos al crear subcategoría."""
+    app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/app.py"))
+    with open(app_path, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    assert "sel_new_subcat_start_month" in code, "Debe existir el selector de mes de inicio en el formulario de alta"
+    assert "A partir de" in code, "Debe mostrarse la etiqueta 'A partir de' con el año natural"
+    assert "bulk_presupuestos = [" in code, "Debe preparar el lote masivo de presupuestos para los meses"
+    assert "api_client.save_presupuestos_bulk" in code, "Debe guardar los presupuestos de forma atómica en bulk"

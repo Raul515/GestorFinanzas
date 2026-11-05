@@ -903,3 +903,126 @@ def test_sinking_fund_transfer_sync(temp_sync_dir: str, db_session: Session):
     assert tr_db.target_fund_id == fund_b.id
     assert tr_db.amount == 100.0
     assert tr_db.notes == "Rebalanceo remoto"
+
+def test_subcategory_delete_vetoed_when_local_transactions_exist(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """Verifica que si llega un DELETE remoto para una subcategoría que tiene transacciones locales, se veta y re-emite UPSERT (Spec-015 Fase 4)."""
+    subcat = setup_household_db["subcategory"]
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    
+    # Crear transacción local asociada a la subcategoría
+    tx = JointTransaction(
+        uuid=str(uuid.uuid4()),
+        joint_account_id=1,
+        joint_subcategory_id=subcat.id,
+        amount=50.0,
+        paid_by="MEMBER_A",
+        created_by_profile="MEMBER_A",
+        date=date(2026, 11, 5),
+        description="Compra local",
+        settlement_status="PENDING",
+    )
+    db_session.add(tx)
+    db_session.commit()
+
+    inbox_path = Path(temp_sync_dir) / "inbox"
+    evt_delete = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "DELETE",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-05T10:00:00Z",
+        "payload": {
+            "name": subcat.name,
+        },
+    }
+    with open(inbox_path / "evt_del_subcat.json", "w", encoding="utf-8") as f:
+        json.dump(evt_delete, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    # Verificar que la subcategoría sigue viva en la BD
+    subcat_db = db_session.query(JointSubcategory).filter_by(id=subcat.id).first()
+    assert subcat_db is not None
+    assert subcat_db.name == subcat.name
+
+    # Verificar que se emitió el evento correctivo UPSERT al outbox
+    outbox_files = list((Path(temp_sync_dir) / "outbox").iterdir())
+    assert len(outbox_files) == 1
+    with open(outbox_files[0], "r", encoding="utf-8") as f:
+        out_data = json.load(f)
+    assert out_data["entity_type"] == "SUBCATEGORY"
+    assert out_data["action"] == "UPSERT"
+    assert out_data["payload"]["name"] == subcat.name
+
+
+def test_transaction_upsert_auto_resurrects_deleted_subcategory(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """Verifica que si llega una transacción para una subcategoría eliminada/inexistente, se resucita automáticamente (Spec-015 Fase 4)."""
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    inbox_path = Path(temp_sync_dir) / "inbox"
+    
+    # Confirmar que 'Farmacia' no existe
+    subcat_pre = db_session.query(JointSubcategory).filter_by(name="Farmacia").first()
+    assert subcat_pre is None
+
+    tx_uuid = str(uuid.uuid4())
+    evt_tx = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "TRANSACTION",
+        "action": "UPSERT",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-05T10:15:00Z",
+        "payload": {
+            "uuid": tx_uuid,
+            "amount": 28.50,
+            "description": "Medicamentos",
+            "paid_by_profile": "MEMBER_B",
+            "date": "2026-11-05",
+            "category_name": "Necesidades Básicas",
+            "subcategory_name": "Farmacia",
+            "settlement_status": "PENDING",
+        },
+    }
+    with open(inbox_path / "evt_tx_resurrect.json", "w", encoding="utf-8") as f:
+        json.dump(evt_tx, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    # Verificar que la subcategoría 'Farmacia' fue recreada automáticamente
+    subcat_resurrected = db_session.query(JointSubcategory).filter_by(name="Farmacia").first()
+    assert subcat_resurrected is not None
+    assert subcat_resurrected.joint_category_id == setup_household_db["category"].id
+
+    # Verificar que la transacción quedó enlazada
+    tx_db = db_session.query(JointTransaction).filter_by(uuid=tx_uuid).first()
+    assert tx_db is not None
+    assert tx_db.joint_subcategory_id == subcat_resurrected.id
+    assert tx_db.amount == 28.50
+
+
+def test_subcategory_delete_succeeds_when_no_transactions(temp_sync_dir: str, db_session: Session, setup_household_db: dict):
+    """Verifica que un DELETE de subcategoría remota se ejecuta sin trabas si no existen transacciones vinculadas."""
+    subcat = setup_household_db["subcategory"]
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    inbox_path = Path(temp_sync_dir) / "inbox"
+
+    evt_delete = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SUBCATEGORY",
+        "action": "DELETE",
+        "origin_device_id": "DEV_REMOTE",
+        "timestamp_utc": "2026-11-05T10:30:00Z",
+        "payload": {
+            "name": subcat.name,
+        },
+    }
+    with open(inbox_path / "evt_del_subcat_ok.json", "w", encoding="utf-8") as f:
+        json.dump(evt_delete, f)
+
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    # Verificar que la subcategoría fue borrada
+    subcat_db = db_session.query(JointSubcategory).filter_by(id=subcat.id).first()
+    assert subcat_db is None

@@ -23,6 +23,7 @@ class SubcategoryUsage(BaseModel):
     transactions_count: int
     budgets_count: int
     can_delete: bool
+    is_base: bool = False
 
 
 class Subcategory(SubcategoryBase):
