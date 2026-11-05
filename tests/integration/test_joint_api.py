@@ -807,3 +807,51 @@ def test_joint_transactions_search_endpoint(client: TestClient):
     res_amt = resp_amt.json()
     assert len(res_amt) == 1
     assert res_amt[0]["amount"] == 85.50
+
+
+def test_joint_account_global_fixed_budget_and_calculation(client: TestClient):
+    """
+    Verifica que la configuración de la cuenta conjunta soporte la estrategia GLOBAL_FIXED
+    con custom_total_monthly_budget, y que el endpoint de cálculo devuelva las cuotas correctas.
+    """
+    # 1. Asegurar cuenta inicializada
+    resp = client.get("/joint/account")
+    if resp.status_code == 404:
+        init_resp = client.post(
+            "/joint/setup",
+            json={
+                "household_name": "Hogar Fijo Test",
+                "member_a_name": "Raul",
+                "member_b_name": "Evita",
+                "cohabitation_stage": "COHABITATION",
+                "split_mode": "EQUAL_50_50",
+                "contribution_strategy": "NOMINAL_TEMPLATE",
+                "member_a_reference_income": 1500.0,
+                "member_b_reference_income": 1500.0,
+            },
+        )
+        assert init_resp.status_code == 201
+
+    # 2. Actualizar a GLOBAL_FIXED con presupuesto manual de 1400.0 €
+    upd_resp = client.put(
+        "/joint/account",
+        json={
+            "contribution_strategy": "GLOBAL_FIXED",
+            "custom_total_monthly_budget": 1400.0,
+            "split_mode": "EQUAL_50_50",
+            "cohabitation_stage": "COHABITATION",
+        },
+    )
+    assert upd_resp.status_code == 200
+    acc_data = upd_resp.json()
+    assert acc_data["contribution_strategy"] == "GLOBAL_FIXED"
+    assert acc_data["custom_total_monthly_budget"] == 1400.0
+
+    # 3. Consultar endpoint de cálculo de aportaciones
+    calc_resp = client.get("/joint/contributions/calculation")
+    assert calc_resp.status_code == 200
+    calc_data = calc_resp.json()
+    assert calc_data["contribution_strategy"] == "GLOBAL_FIXED"
+    assert calc_data["total_household_budget"] == 1400.0
+    assert calc_data["member_a_contribution"] == 700.0
+    assert calc_data["member_b_contribution"] == 700.0

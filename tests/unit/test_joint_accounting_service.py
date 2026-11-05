@@ -841,3 +841,86 @@ def test_transfer_sinking_fund_same_source_and_target_rejected(db_session: Sessi
             target_fund_id=fund.id,
             amount=50.0,
         )
+
+
+def test_calculate_contributions_global_fixed_cohabitation_50_50():
+    """
+    Verifica la estrategia GLOBAL_FIXED (Presupuesto Fijo Global / Manual):
+    - Convivencia, necesidades = 800 €, huchas activas = 300 €.
+    - Presupuesto global manual fijado = 1200 €.
+    - Reparto 50/50: 600 € cada miembro.
+    - Asignación: 800 € a necesidades, remanente de 400 € a huchas.
+    """
+    funds = [
+        {"id": 1, "name": "Coche", "monthly_target_amount": 200.0, "status": "ACTIVE", "target_amount": 1000.0, "current_balance": 100.0},
+        {"id": 2, "name": "Viajes", "monthly_target_amount": 100.0, "status": "ACTIVE", "target_amount": 1000.0, "current_balance": 100.0},
+    ]
+
+    res = calculate_monthly_contributions(
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        contribution_strategy=ContributionStrategy.GLOBAL_FIXED,
+        split_mode=SplitMode.EQUAL_50_50,
+        needs_budget=800.0,
+        sinking_funds=funds,
+        member_a_income=1500.0,
+        member_b_income=1500.0,
+        custom_total_monthly_budget=1200.0,
+    )
+
+    assert res["total_household_budget"] == 1200.0
+    assert res["needs_budget"] == 800.0
+    assert res["member_a_contribution"] == 600.0
+    assert res["member_b_contribution"] == 600.0
+    # Remanente para huchas = 1200 - 800 = 400 €
+    assert res["sinking_funds_target"] == 400.0
+
+
+def test_calculate_contributions_global_fixed_income_proportional():
+    """
+    Verifica la estrategia GLOBAL_FIXED con reparto INCOME_PROPORTIONAL:
+    - Salario Raúl = 2000 € (66.67%), Salario Evita = 1000 € (33.33%).
+    - Presupuesto global fijado = 1500 €.
+    - Cuota Raúl = 1000 €, Cuota Evita = 500 €.
+    """
+    funds = []
+    res = calculate_monthly_contributions(
+        cohabitation_stage=CohabitationStage.COHABITATION,
+        contribution_strategy=ContributionStrategy.GLOBAL_FIXED,
+        split_mode=SplitMode.INCOME_PROPORTIONAL,
+        needs_budget=1000.0,
+        sinking_funds=funds,
+        member_a_income=2000.0,
+        member_b_income=1000.0,
+        custom_total_monthly_budget=1500.0,
+    )
+
+    assert res["total_household_budget"] == 1500.0
+    assert res["member_a_contribution"] == 1000.0
+    assert res["member_b_contribution"] == 500.0
+
+
+def test_calculate_contributions_global_fixed_pre_cohabitation():
+    """
+    Verifica la estrategia GLOBAL_FIXED en PRE_COHABITATION:
+    - Necesidades forzadas a 0.00 €.
+    - Todo el presupuesto fijo va a huchas de amortización / ahorro común.
+    """
+    funds = [
+        {"id": 1, "name": "Entrada", "monthly_target_amount": 500.0, "status": "ACTIVE", "target_amount": 10000.0, "current_balance": 1000.0},
+    ]
+    res = calculate_monthly_contributions(
+        cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=ContributionStrategy.GLOBAL_FIXED,
+        split_mode=SplitMode.EQUAL_50_50,
+        needs_budget=1000.0,  # Se ignora en Pre-Convivencia
+        sinking_funds=funds,
+        member_a_income=1800.0,
+        member_b_income=1800.0,
+        custom_total_monthly_budget=800.0,
+    )
+
+    assert res["total_household_budget"] == 800.0
+    assert res["needs_budget"] == 0.0
+    assert res["member_a_contribution"] == 400.0
+    assert res["member_b_contribution"] == 400.0
+    assert res["sinking_funds_target"] == 800.0

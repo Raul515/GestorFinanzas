@@ -39,6 +39,7 @@ class JointAccount(Base):
     member_b_contribution_pct: Mapped[float] = mapped_column(Float, default=50.0)
     local_profile: Mapped[str] = mapped_column(String(20), default="MEMBER_A")
     remote_profile: Mapped[str] = mapped_column(String(20), default="MEMBER_B")
+    custom_total_monthly_budget: Mapped[float] = mapped_column(Float, default=0.0)
     member_a_name: Mapped[str] = mapped_column(String(100), default="Miembro A")
     member_b_name: Mapped[str] = mapped_column(String(100), default="Miembro B")
     created_at: Mapped[datetime.datetime] = mapped_column(

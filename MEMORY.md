@@ -119,6 +119,10 @@
 
 ---
 
+| **2026-11-05** | Modalidad de Presupuesto Fijo Global del Hogar (`GLOBAL_FIXED`) | En Parámetros de la Cuenta Conjunta, permite fijar un presupuesto mensual total (`custom_total_monthly_budget`) repartido equitativa (50/50) o proporcionalmente a ingresos. Asigna primero a necesidades y remanente a huchas activas. Incluye migración SQLite y sincronización P2P vía Syncthing. |
+
+---
+
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.

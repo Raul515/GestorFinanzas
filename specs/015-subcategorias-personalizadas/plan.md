@@ -106,6 +106,31 @@ Fusión final: Merge en develop tras 100% de tests
 
 ---
 
+
+### Fase 6: Modalidad de Presupuesto Fijo Global (Manual) en Parámetros del Hogar
+- **Objetivo**: Permitir al usuario definir directamente en los Parámetros de la Cuenta Conjunta un importe mensual fijo total para el hogar (`GLOBAL_FIXED`), conviviendo con el cálculo por conceptos (`NOMINAL_TEMPLATE`).
+- **Entregables**:
+  1. `src/backend/domain/schemas/joint.py`:
+     - Añadido `GLOBAL_FIXED = "GLOBAL_FIXED"` a `ContributionStrategy`.
+     - Campo `custom_total_monthly_budget: float` en `JointAccountSetupRequest`, `JointAccountBase` y `JointAccountUpdate`.
+  2. `src/backend/domain/models/joint.py`:
+     - Columna `custom_total_monthly_budget: Mapped[float] = mapped_column(Float, default=0.0)`.
+  3. `src/backend/database/componentes/sqlite_db.py` y `sqlite_crud.py`:
+     - Migración introspectiva en `init_db()` con `PRAGMA table_info` y `ALTER TABLE joint_accounts ADD COLUMN custom_total_monthly_budget REAL DEFAULT 0.0`.
+  4. `src/backend/services/joint_accounting_service.py`:
+     - Lógica contable en `calculate_monthly_contributions` para distribuir el importe global según el `SplitMode` (`EQUAL_50_50` o `INCOME_PROPORTIONAL`), cubriendo necesidades prioritariamente y asignando remanente a huchas activas.
+  5. `src/backend/api/routers/joint.py`:
+     - Parámetro `custom_total_monthly_budget` integrado en endpoints de cálculo, asientos en 1-clic e invitaciones P2P.
+  6. `src/backend/services/joint_sync_service.py`:
+     - Sincronización automática de mutaciones de configuración y presupuesto fijo global vía eventos delta `ACCOUNT` (UPSERT).
+  7. `src/frontend/views/joint_view.py`:
+     - Selector visual con Opción A: "Calculado por Conceptos (Necesidades + Huchas)" vs "Presupuesto Fijo Global (Manual)".
+     - Campo condicional `Cantidad Total a Aportar cada Mes (€)`.
+     - Actualización del banner principal con la modalidad y cuota fijada.
+  8. Pruebas: Batería ampliada con tests unitarios e integrados (`test_calculate_contributions_global_fixed_*` y `test_joint_account_global_fixed_budget_and_calculation`).
+
+---
+
 ## 3. Plan de Verificación
 
 ```powershell

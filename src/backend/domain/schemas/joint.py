@@ -15,6 +15,7 @@ class ContributionStrategy(str, Enum):
     """Estrategia de cálculo de aportaciones mensuales."""
     NOMINAL_TEMPLATE = "NOMINAL_TEMPLATE"
     INCOME_PERCENTAGE = "INCOME_PERCENTAGE"
+    GLOBAL_FIXED = "GLOBAL_FIXED"
 
 
 class SplitMode(str, Enum):
@@ -105,6 +106,7 @@ class JointAccountSetupRequest(BaseModel):
     member_b_name: str = Field(default="Miembro B", max_length=100)
     local_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_A
     remote_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_B
+    custom_total_monthly_budget: float = Field(ge=0.0, default=0.0)
 
     @model_validator(mode="before")
     @classmethod
@@ -155,6 +157,7 @@ class JointAccountBase(BaseModel):
     member_b_name: str = Field(default="Miembro B", max_length=100)
     local_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_A
     remote_profile: ProfileIdentifier = ProfileIdentifier.MEMBER_B
+    custom_total_monthly_budget: float = Field(ge=0.0, default=0.0)
 
 
 class JointAccountUpdate(BaseModel):
@@ -171,6 +174,7 @@ class JointAccountUpdate(BaseModel):
     member_b_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     local_profile: Optional[ProfileIdentifier] = None
     remote_profile: Optional[ProfileIdentifier] = None
+    custom_total_monthly_budget: Optional[float] = Field(default=None, ge=0.0)
 
     @model_validator(mode="before")
     @classmethod

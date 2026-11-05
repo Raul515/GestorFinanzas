@@ -172,6 +172,7 @@ def resend_joint_invitation(
             "member_b_name": account.member_b_name,
             "local_profile": account.local_profile,
             "remote_profile": account.remote_profile,
+            "custom_total_monthly_budget": getattr(account, "custom_total_monthly_budget", 0.0),
         },
         origin_device_id=sync_service.local_device_id,
     )
@@ -255,6 +256,7 @@ def accept_joint_invitation(
         member_b_reference_income=float(invitation.get("member_b_reference_income", 0.0)),
         member_a_contribution_pct=float(invitation.get("member_a_contribution_pct", 50.0)),
         member_b_contribution_pct=float(invitation.get("member_b_contribution_pct", 50.0)),
+        custom_total_monthly_budget=float(invitation.get("custom_total_monthly_budget", 0.0)),
         local_profile=schemas.ProfileIdentifier.MEMBER_B,
         remote_profile=schemas.ProfileIdentifier.MEMBER_A,
     )
@@ -956,6 +958,7 @@ def get_joint_contribution_calculation(
         member_b_income=account.member_b_reference_income,
         member_a_contribution_pct=account.member_a_contribution_pct,
         member_b_contribution_pct=account.member_b_contribution_pct,
+        custom_total_monthly_budget=getattr(account, "custom_total_monthly_budget", 0.0),
     )
     calc["local_profile"] = account.local_profile
     calc["remote_profile"] = account.remote_profile
@@ -1074,6 +1077,7 @@ def record_assisted_contribution(
             member_b_income=account.member_b_reference_income,
             member_a_contribution_pct=account.member_a_contribution_pct,
             member_b_contribution_pct=account.member_b_contribution_pct,
+            custom_total_monthly_budget=getattr(account, "custom_total_monthly_budget", 0.0),
         )
         total_budget = float(calc.get("total_household_budget", 0.0))
         fund_allocs = calc.get("fund_allocations", {})

@@ -47,6 +47,12 @@ def init_db():
                 conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN joint_contribution_uuid TEXT")
                 conn.commit()
 
+            cursor_acc = conn.exec_driver_sql("PRAGMA table_info(joint_accounts)")
+            acc_cols = [row[1] for row in cursor_acc.fetchall()]
+            if acc_cols and "custom_total_monthly_budget" not in acc_cols:
+                conn.exec_driver_sql("ALTER TABLE joint_accounts ADD COLUMN custom_total_monthly_budget REAL DEFAULT 0.0")
+                conn.commit()
+
             cursor_strat = conn.exec_driver_sql("PRAGMA table_info(applied_guideline_strategies)")
             strat_cols = [row[1] for row in cursor_strat.fetchall()]
             if strat_cols and "split_config" not in strat_cols:

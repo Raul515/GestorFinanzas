@@ -403,6 +403,21 @@ class JointSyncService:
             logger.info("Cuenta conjunta reseteada al Estado Cero mediante evento remoto ACCOUNT (DELETE).")
         elif event.action == SyncAction.UPSERT:
             logger.info("Evento ACCOUNT (UPSERT) procesado en inbox.")
+            account = db.query(JointAccount).filter(JointAccount.id == 1).first()
+            if account:
+                payload = event.payload
+                fields_to_sync = [
+                    "household_name", "cohabitation_stage", "contribution_strategy",
+                    "split_mode", "member_a_reference_income", "member_b_reference_income",
+                    "member_a_contribution_pct", "member_b_contribution_pct",
+                    "member_a_name", "member_b_name", "custom_total_monthly_budget",
+                ]
+                for field in fields_to_sync:
+                    if field in payload and payload[field] is not None:
+                        val = payload[field]
+                        val_to_set = val.value if hasattr(val, "value") else val
+                        setattr(account, field, val_to_set)
+                db.flush()
 
     def _apply_transaction_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica mutación sobre transacciones del hogar con resolución determinista LWW por timestamp_utc."""

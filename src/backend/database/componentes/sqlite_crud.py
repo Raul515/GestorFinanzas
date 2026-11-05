@@ -646,6 +646,7 @@ class SQLiteRepository(IRepository):
             remote_profile=data["remote_profile"].value if hasattr(data["remote_profile"], "value") else str(data["remote_profile"]),
             member_a_name=data.get("member_a_name", "Miembro A"),
             member_b_name=data.get("member_b_name", "Miembro B"),
+            custom_total_monthly_budget=data.get("custom_total_monthly_budget", 0.0),
         )
         self.db.add(account)
         self.db.flush()

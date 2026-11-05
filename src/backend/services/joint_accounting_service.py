@@ -47,6 +47,7 @@ def calculate_monthly_contributions(
     member_b_contribution_pct: float = 50.0,
     custom_member_a_fixed: Optional[float] = None,
     custom_member_b_fixed: Optional[float] = None,
+    custom_total_monthly_budget: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Calcula de forma pura las cuotas mensuales a aportar por cada miembro y la distribución
@@ -109,6 +110,50 @@ def calculate_monthly_contributions(
                 fund_allocations[fid] = 0.0
 
         allocated_to_sinking_funds = sinking_funds_target
+
+    elif contribution_strategy == ContributionStrategy.GLOBAL_FIXED:
+        # Estrategia C: Presupuesto Fijo Global fijado directamente por el usuario (Manual)
+        total_household_budget = round(max(0.0, float(custom_total_monthly_budget or 0.0)), 2)
+
+        # Reparto entre miembros según el split_mode seleccionado
+        if split_mode == SplitMode.EQUAL_50_50:
+            member_a_contribution = round(total_household_budget * 0.5, 2)
+            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+        elif split_mode == SplitMode.INCOME_PROPORTIONAL:
+            total_income = member_a_income + member_b_income
+            if total_income > 0:
+                ratio_a = member_a_income / total_income
+                member_a_contribution = round(total_household_budget * ratio_a, 2)
+                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+            else:
+                member_a_contribution = round(total_household_budget * 0.5, 2)
+                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+        elif split_mode == SplitMode.CUSTOM_FIXED:
+            if custom_member_a_fixed is not None and custom_member_b_fixed is not None:
+                member_a_contribution = round(custom_member_a_fixed, 2)
+                member_b_contribution = round(custom_member_b_fixed, 2)
+                total_household_budget = round(member_a_contribution + member_b_contribution, 2)
+            else:
+                pct_a = member_a_contribution_pct / 100.0
+                member_a_contribution = round(total_household_budget * pct_a, 2)
+                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+        else:
+            member_a_contribution = round(total_household_budget * 0.5, 2)
+            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+
+        # Asignación interna a necesidades y remanente para huchas de amortización
+        if cohabitation_stage == CohabitationStage.COHABITATION:
+            needed_for_bills = min(total_household_budget, effective_needs_budget)
+            available_for_funds = max(0.0, round(total_household_budget - needed_for_bills, 2))
+        else:
+            available_for_funds = total_household_budget
+
+        fund_allocations = distribute_sinking_funds_allocation(active_funds, available_for_funds)
+        for f in sinking_funds:
+            fid = f.get("id", 0)
+            if fid not in fund_allocations and f.get("status", "ACTIVE") == "ACTIVE":
+                fund_allocations[fid] = 0.0
+        allocated_to_sinking_funds = sum(fund_allocations.values())
 
     else:
         # Estrategia B: Top-Down Dinámico (Porcentaje de Ingresos)
