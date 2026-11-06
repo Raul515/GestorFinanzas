@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from backend.domain.models.joint import (
+    JointAccount,
     JointAppliedSyncEvent,
     JointCategory,
     JointMonthlyContribution,
@@ -706,8 +707,8 @@ class JointSyncService:
         target_folders = (self.inbox_dir, self.processed_dir, self.error_dir) if keep_outbox else (self.outbox_dir, self.inbox_dir, self.processed_dir, self.error_dir)
         for folder in target_folders:
             if folder.exists():
-                for file_path in folder.glob("*"):
-                    if file_path.is_file():
+                for file_path in folder.iterdir():
+                    if file_path.is_file() and file_path.name != ".gitkeep":
                         try:
                             file_path.unlink()
                         except Exception as exc:
@@ -748,6 +749,7 @@ class JointSyncService:
                             "member_b_contribution_pct": payload.get("member_b_contribution_pct", 50.0),
                             "member_a_name": payload.get("member_a_name", "Miembro A"),
                             "member_b_name": payload.get("member_b_name", "Miembro B"),
+                            "custom_total_monthly_budget": float(payload.get("custom_total_monthly_budget", 0.0) or 0.0),
                         }
             except Exception as exc:
                 logger.warning("Error inspeccionando posible invitación en %s: %s", file_path.name, exc)
@@ -815,7 +817,10 @@ class JointSyncService:
         if not self.error_dir.exists():
             return {"retried_count": 0, "status": "No existe directorio de error."}
 
-        error_files = [f for f in self.error_dir.iterdir() if f.is_file()]
+        error_files = [
+            f for f in self.error_dir.iterdir()
+            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp") and f.name != ".gitkeep"
+        ]
         retried = 0
         for ef in error_files:
             dest = self.inbox_dir / ef.name
@@ -830,4 +835,18 @@ class JointSyncService:
             "retried_count": retried,
             "process_summary": summary,
         }
+
+    def clear_failed_events(self) -> int:
+        """Elimina todos los archivos delta en cuarentena de sync/error/."""
+        if not self.error_dir.exists():
+            return 0
+        deleted = 0
+        for ef in self.error_dir.iterdir():
+            if ef.is_file() and ef.name != ".gitkeep":
+                try:
+                    ef.unlink()
+                    deleted += 1
+                except Exception as exc:
+                    logger.warning("Error eliminando archivo fallido %s: %s", ef.name, exc)
+        return deleted
 

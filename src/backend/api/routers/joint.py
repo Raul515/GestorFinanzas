@@ -1339,3 +1339,12 @@ def retry_sync_errors(
     """Mueve los deltas de sync/error/ a sync/inbox/ y dispara el procesamiento inmediato."""
     return sync_service.retry_failed_events(db)
 
+
+@router.post("/sync/clear-errors")
+def clear_sync_errors(
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Elimina permanentemente los eventos delta fallidos de la carpeta sync/error/."""
+    deleted_count = sync_service.clear_failed_events()
+    return {"status": "ok", "deleted_count": deleted_count}
+

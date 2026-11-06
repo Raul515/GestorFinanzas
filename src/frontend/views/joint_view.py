@@ -177,6 +177,31 @@ def _render_zero_state_wizard() -> None:
                 )
                 cohabitation_stage = "COHABITATION" if "Convivencia Plena" in cohab_choice or "Compartiendo" in cohab_choice else "PRE_COHABITATION"
 
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("3. Estrategia de Presupuesto y Aportaciones")
+            col_e, col_f = st.columns(2)
+            with col_e:
+                strat_options = [
+                    "Presupuesto Fijo Global (Manual)",
+                    "Calculado por Conceptos (Necesidades + Huchas)",
+                ]
+                strat_choice = st.selectbox(
+                    "Cálculo del Presupuesto del Hogar",
+                    options=strat_options,
+                    index=0,
+                    help="Determina si el presupuesto mensual total del hogar se fija como una cuota global fija o se calcula sumando las necesidades y metas del hogar.",
+                )
+                contribution_strategy = "GLOBAL_FIXED" if "Global" in strat_choice else "NOMINAL_TEMPLATE"
+
+            with col_f:
+                custom_budget_input = st.number_input(
+                    "Presupuesto Fijo Mensual Total (€)",
+                    min_value=0.0,
+                    value=300.0,
+                    step=50.0,
+                    help="Aplica si eliges Presupuesto Fijo Global. Este importe se repartirá mensualmente según el Modo de Reparto seleccionado.",
+                )
+
             st.info(
                 "ℹ️ Al crear la cuenta conjunta, se inicializarán automáticamente las subcategorías de necesidades comunes "
                 "(Alquiler/Hipoteca, Supermercado, Luz, Agua, Seguros del Hogar, etc.) y se habilitará la sincronización Syncthing."
@@ -194,7 +219,8 @@ def _render_zero_state_wizard() -> None:
                     "member_b_name": member_b_name.strip(),
                     "split_mode": split_mode,
                     "cohabitation_stage": cohabitation_stage,
-                    "contribution_strategy": "NOMINAL_TEMPLATE",
+                    "contribution_strategy": contribution_strategy,
+                    "custom_total_monthly_budget": float(custom_budget_input) if contribution_strategy == "GLOBAL_FIXED" else 0.0,
                     "member_a_reference_income": float(member_a_income),
                     "member_b_reference_income": float(member_b_income),
                     "local_profile": "MEMBER_A",
@@ -1481,12 +1507,21 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                     st.rerun()
 
             if err_c > 0:
-                if st.button("🔁 Reintentar Eventos en Error", key="btn_retry_errors_viewer", type="primary", width="stretch"):
-                    with st.spinner("Reintentando eventos en error..."):
-                        res_r = api_client.retry_joint_sync_errors()
-                        cnt = res_r.get("retried_count", 0) if res_r else 0
-                        st.success(f"Se han reintentado {cnt} eventos.")
-                        st.rerun()
+                col_btn_err1, col_btn_err2 = st.columns(2)
+                with col_btn_err1:
+                    if st.button("🔁 Reintentar Eventos en Error", key="btn_retry_errors_viewer", type="primary", width="stretch"):
+                        with st.spinner("Reintentando eventos en error..."):
+                            res_r = api_client.retry_joint_sync_errors()
+                            cnt = res_r.get("retried_count", 0) if res_r else 0
+                            st.success(f"Se han reintentado {cnt} eventos.")
+                            st.rerun()
+                with col_btn_err2:
+                    if st.button("🗑️ Descartar y Limpiar Errores", key="btn_clear_errors_viewer", width="stretch"):
+                        with st.spinner("Eliminando eventos en error..."):
+                            res_c = api_client.clear_joint_sync_errors()
+                            cnt_c = res_c.get("deleted_count", 0) if res_c else 0
+                            st.success(f"Se han eliminado {cnt_c} eventos en error. Sincronización restaurada.")
+                            st.rerun()
 
                 st.markdown("#### ⚠️ Eventos en Error")
                 for ef in sync_detail.get("error_events", []):

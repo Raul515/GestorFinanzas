@@ -1676,6 +1676,21 @@ def retry_joint_sync_errors() -> Optional[Dict[str, Any]]:
     return None
 
 
+def clear_joint_sync_errors() -> Optional[Dict[str, Any]]:
+    """Solicita al backend purgar todos los eventos delta fallidos de sync/error/."""
+    url = f"{API_URL}/joint/sync/clear-errors"
+    try:
+        response = _session.post(url, timeout=15)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo en clear_joint_sync_errors (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en clear_joint_sync_errors en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en clear_joint_sync_errors(): %s", e)
+    return None
+
+
 
 
 # ==============================================================================
