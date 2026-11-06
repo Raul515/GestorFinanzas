@@ -720,107 +720,126 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
                     help="Define si este gasto se financia con el presupuesto mensual ordinario o si se descuenta de una hucha.",
                 )
 
-            with st.form("new_joint_tx_form"):
-                tx_desc = st.text_input("Concepto / Descripción", placeholder="Ej. Factura Luz, Compra Semanal...")
-                col_amt, col_dt = st.columns(2)
-                with col_amt:
-                    tx_amount = st.number_input("Importe (€)", min_value=0.01, value=65.0, step=5.0)
-                with col_dt:
-                    tx_date = st.date_input("Fecha", value=date.today(), format="DD/MM/YYYY")
-
-                chosen_subcat_id = None
-                chosen_fund_id = None
-                selected_fund_obj = None
-                confirm_overdraft = False
-
-                if charge_type == "Necesidad Común del Hogar":
-                    if subcat_map:
-                        chosen_subcat_id = st.selectbox(
-                            "Subcategoría de Necesidades",
-                            options=list(subcat_map.keys()),
-                            format_func=lambda k: subcat_map[k],
-                        )
-                    else:
-                        st.caption("No hay subcategorías disponibles.")
-                else:
-                    if fund_map:
-                        chosen_fund_id = st.selectbox(
-                            "Hucha a Cargar (se descontará de su saldo)",
-                            options=list(fund_map.keys()),
-                            format_func=lambda k: fund_map[k],
-                        )
-                        selected_fund_obj = next((f for f in sinking_funds if f["id"] == chosen_fund_id), None)
-                        fund_balance = float(selected_fund_obj.get("current_balance", 0.0)) if selected_fund_obj else 0.0
-                        st.caption(f"Saldo disponible en esta hucha: **{fund_balance:,.2f} €**")
-                        has_overdraft = (fund_balance < float(tx_amount))
-                        confirm_overdraft = False
-                        if has_overdraft:
-                            diff_treasury = float(tx_amount) - fund_balance
-                            st.warning(
-                                f"⚠️ **Sobregasto Detectado**\n\n"
-                                f"El importe (**{tx_amount:,.2f} €**) supera el saldo (**{fund_balance:,.2f} €**).\n"
-                                f"La diferencia de **{diff_treasury:,.2f} €** será absorbida por la tesorería común."
-                            )
-                            confirm_overdraft = st.checkbox(
-                                "Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común",
-                                key=f"confirm_overdraft_{selected_month_name}",
-                            )
-                    else:
-                        st.warning("⚠️ No hay huchas activas creadas. Crea una en '🎯 Huchas de Amortización'.")
-
-                paid_options = ["COMMON", "MEMBER_A", "MEMBER_B"]
-                paid_labels = {
-                    "COMMON": "💳 Cuenta Bancaria Común del Hogar",
-                    "MEMBER_A": f"👤 {account.get('member_a_name', 'Miembro A')} (Adelantado con tarjeta personal)",
-                    "MEMBER_B": f"👤 {account.get('member_b_name', 'Miembro B')} (Adelantado con tarjeta personal)",
-                }
-                paid_choice = st.selectbox(
-                    "Medio de Pago / Pagado Por",
-                    options=paid_options,
-                    index=0,
-                    format_func=lambda k: paid_labels[k],
-                    help="Por defecto sale del presupuesto común del hogar. Si uno de los dos adelantó el dinero de su bolsillo, indícalo aquí.",
+            # Formulario reactivo y dinámico (sin st.form para actualización inmediata de saldos y sobregastos)
+            tx_desc = st.text_input(
+                "Concepto / Descripción",
+                placeholder="Ej. Factura Luz, Compra Semanal, Aceite...",
+                key=f"tx_desc_{selected_month_name}",
+            )
+            col_amt, col_dt = st.columns(2)
+            with col_amt:
+                tx_amount = st.number_input(
+                    "Importe (€)",
+                    min_value=0.01,
+                    value=40.0,
+                    step=5.0,
+                    key=f"tx_amount_{selected_month_name}",
                 )
-                settlement_mech = "COMMON_REIMBURSEMENT"
-                if paid_choice in ("MEMBER_A", "MEMBER_B"):
-                    settlement_mech = st.selectbox(
-                        "Modalidad de Liquidación / Reembolso",
-                        options=["COMMON_REIMBURSEMENT", "DIRECT_MEMBER_SETTLEMENT"],
-                        format_func=lambda m: (
-                            "🏦 Reembolso desde Cuenta Común"
-                            if m == "COMMON_REIMBURSEMENT"
-                            else "🤝 Liquidación Directa entre Miembros (Bizum)"
-                        ),
-                        help="Elige cómo se compensará el gasto adelantado.",
-                    )
+            with col_dt:
+                tx_date = st.date_input(
+                    "Fecha",
+                    value=date.today(),
+                    format="DD/MM/YYYY",
+                    key=f"tx_date_{selected_month_name}",
+                )
 
-                tx_submitted = st.form_submit_button("💾 Guardar Gasto Común", width="stretch")
-                if tx_submitted:
-                    if not tx_desc.strip():
-                        st.error("Por favor introduce una descripción del gasto.")
-                    elif charge_type == "Necesidad Común del Hogar" and not chosen_subcat_id:
-                        st.error("Debes seleccionar una subcategoría de necesidad común.")
-                    elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
-                        st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
-                    elif charge_type == "Cargo a Hucha de Amortización" and fund_map and (float(selected_fund_obj.get("current_balance", 0.0) if selected_fund_obj else 0.0) < float(tx_amount)) and not confirm_overdraft:
-                        st.error("⚠️ Debes marcar la casilla obligatoria de confirmación de sobregasto para autorizar el cargo a la tesorería común.")
+            chosen_subcat_id = None
+            chosen_fund_id = None
+            selected_fund_obj = None
+            confirm_overdraft = False
+
+            if charge_type == "Necesidad Común del Hogar":
+                if subcat_map:
+                    chosen_subcat_id = st.selectbox(
+                        "Subcategoría de Necesidades",
+                        options=list(subcat_map.keys()),
+                        format_func=lambda k: subcat_map[k],
+                        key=f"tx_subcat_{selected_month_name}",
+                    )
+                else:
+                    st.caption("No hay subcategorías disponibles.")
+            else:
+                if fund_map:
+                    chosen_fund_id = st.selectbox(
+                        "Hucha a Cargar (se descontará de su saldo)",
+                        options=list(fund_map.keys()),
+                        format_func=lambda k: fund_map[k],
+                        key=f"tx_fund_{selected_month_name}",
+                    )
+                    selected_fund_obj = next((f for f in sinking_funds if f["id"] == chosen_fund_id), None)
+                    fund_balance = float(selected_fund_obj.get("current_balance", 0.0)) if selected_fund_obj else 0.0
+                    st.caption(f"Saldo disponible en esta hucha: **{fund_balance:,.2f} €**")
+                    has_overdraft = (fund_balance < float(tx_amount))
+                    confirm_overdraft = False
+                    if has_overdraft:
+                        diff_treasury = float(tx_amount) - fund_balance
+                        st.warning(
+                            f"⚠️ **Sobregasto Detectado**\n\n"
+                            f"El importe (**{tx_amount:,.2f} €**) supera el saldo (**{fund_balance:,.2f} €**).\n"
+                            f"La diferencia de **{diff_treasury:,.2f} €** será absorbida por la tesorería común."
+                        )
+                        confirm_overdraft = st.checkbox(
+                            "Confirmo el sobregasto y autorizo que la diferencia sea absorbida por la tesorería común",
+                            key=f"confirm_overdraft_{selected_month_name}",
+                        )
+                else:
+                    st.warning("⚠️ No hay huchas activas creadas. Crea una en '🎯 Huchas de Amortización'.")
+
+            paid_options = ["COMMON", "MEMBER_A", "MEMBER_B"]
+            paid_labels = {
+                "COMMON": "💳 Cuenta Bancaria Común del Hogar",
+                "MEMBER_A": f"👤 {account.get('member_a_name', 'Miembro A')} (Adelantado con tarjeta personal)",
+                "MEMBER_B": f"👤 {account.get('member_b_name', 'Miembro B')} (Adelantado con tarjeta personal)",
+            }
+            paid_choice = st.selectbox(
+                "Medio de Pago / Pagado Por",
+                options=paid_options,
+                index=0,
+                format_func=lambda k: paid_labels[k],
+                key=f"tx_paid_{selected_month_name}",
+                help="Por defecto sale del presupuesto común del hogar. Si uno de los dos adelantó el dinero de su bolsillo, indícalo aquí.",
+            )
+            settlement_mech = "COMMON_REIMBURSEMENT"
+            if paid_choice in ("MEMBER_A", "MEMBER_B"):
+                settlement_mech = st.selectbox(
+                    "Modalidad de Liquidación / Reembolso",
+                    options=["COMMON_REIMBURSEMENT", "DIRECT_MEMBER_SETTLEMENT"],
+                    format_func=lambda m: (
+                        "🏦 Reembolso desde Cuenta Común"
+                        if m == "COMMON_REIMBURSEMENT"
+                        else "🤝 Liquidación Directa entre Miembros (Bizum)"
+                    ),
+                    key=f"tx_settle_{selected_month_name}",
+                    help="Elige cómo se compensará el gasto adelantado.",
+                )
+
+            tx_submitted = st.button("💾 Guardar Gasto Común", type="primary", width="stretch", key=f"btn_save_tx_{selected_month_name}")
+            if tx_submitted:
+                if not tx_desc.strip():
+                    st.error("Por favor introduce una descripción del gasto.")
+                elif charge_type == "Necesidad Común del Hogar" and not chosen_subcat_id:
+                    st.error("Debes seleccionar una subcategoría de necesidad común.")
+                elif charge_type == "Cargo a Hucha de Amortización" and not chosen_fund_id:
+                    st.error("Debes seleccionar una hucha de amortización activa para imputar el gasto.")
+                elif charge_type == "Cargo a Hucha de Amortización" and fund_map and (float(selected_fund_obj.get("current_balance", 0.0) if selected_fund_obj else 0.0) < float(tx_amount)) and not confirm_overdraft:
+                    st.error("⚠️ Debes marcar la casilla obligatoria de confirmación de sobregasto para autorizar el cargo a la tesorería común.")
+                else:
+                    payload_tx = {
+                        "description": tx_desc.strip(),
+                        "amount": float(tx_amount),
+                        "date": tx_date.isoformat(),
+                        "joint_subcategory_id": chosen_subcat_id,
+                        "joint_sinking_fund_id": chosen_fund_id,
+                        "created_by_profile": account.get("local_profile", "MEMBER_A"),
+                        "paid_by": paid_choice,
+                        "settlement_mechanism": settlement_mech if paid_choice in ("MEMBER_A", "MEMBER_B") else "COMMON_REIMBURSEMENT",
+                    }
+                    res_tx = api_client.create_joint_transaction(payload_tx)
+                    if res_tx:
+                        st.success("✅ Gasto registrado y transmitido a la sincronización.")
+                        st.rerun()
                     else:
-                        payload_tx = {
-                            "description": tx_desc.strip(),
-                            "amount": float(tx_amount),
-                            "date": tx_date.isoformat(),
-                            "joint_subcategory_id": chosen_subcat_id,
-                            "joint_sinking_fund_id": chosen_fund_id,
-                            "created_by_profile": account.get("local_profile", "MEMBER_A"),
-                            "paid_by": paid_choice,
-                            "settlement_mechanism": settlement_mech if paid_choice in ("MEMBER_A", "MEMBER_B") else "COMMON_REIMBURSEMENT",
-                        }
-                        res_tx = api_client.create_joint_transaction(payload_tx)
-                        if res_tx:
-                            st.success("✅ Gasto registrado y transmitido a la sincronización.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar el gasto común.")
+                        st.error("❌ Error al guardar el gasto común.")
 
     with col_act_aport:
         # Formulario para asentar aportación (ordinaria mensual o extraordinaria a hucha concreta)
@@ -854,16 +873,10 @@ def _render_tab_12_meses(selected_year: int, account: Dict[str, Any]) -> None:
 
                 local_prof = account.get("local_profile", "MEMBER_A")
                 local_name = account.get("member_a_name" if local_prof == "MEMBER_A" else "member_b_name", "Miembro Local")
-                remote_name = account.get("member_b_name" if local_prof == "MEMBER_A" else "member_a_name", "Miembro Pareja")
-                contributor_opts = [local_prof, "MEMBER_B" if local_prof == "MEMBER_A" else "MEMBER_A"]
-                contributor_labels = {
-                    local_prof: f"👤 {local_name} (Tú)",
-                    contributor_opts[1]: f"👤 {remote_name} (Pareja)",
-                }
-                cb_profile = st.selectbox(
-                    "Miembro Aportante",
-                    options=contributor_opts,
-                    format_func=lambda p: contributor_labels.get(p, p),
+                cb_profile = local_prof
+                st.info(
+                    f"👤 **Miembro Aportante**: **{local_name} (Tú)** — Esta aportación se registrará en tu cuenta personal "
+                    f"y se sumará al fondo común del hogar. *(Tu pareja registrará su cuota desde su propio dispositivo).* "
                 )
                 st.caption(f"Mes imputado: **{month_str}**")
 
@@ -1199,41 +1212,116 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
 
             if selected_f:
                 other_funds = [of for of in funds if of["id"] != selected_f["id"]]
-                col_e1, col_e2 = st.columns(2, gap="medium", vertical_alignment="bottom")
+                cur_bal = float(selected_f.get("current_balance", 0.0))
+                is_pre = (account.get("cohabitation_stage") == "PRE_COHABITATION")
+
+                st.markdown("##### ✏️ Modificar Parámetros de la Hucha")
+                col_e1, col_e2 = st.columns(2, gap="medium")
                 with col_e1:
                     new_f_balance = st.number_input(
                         "Ajustar Saldo Directo (€)",
-                        value=float(selected_f.get("current_balance", 0.0)),
+                        value=cur_bal,
                         step=25.0,
-                        key="edit_fund_bal",
+                        key=f"edit_fund_bal_{selected_f['id']}",
                     )
                 with col_e2:
-                    realloc_target = None
-                    if other_funds:
-                        realloc_target = st.selectbox(
-                            "Reasignar saldo a otra hucha al eliminar (opcional)",
-                            options=[None] + [of["id"] for of in other_funds],
-                            format_func=lambda k: "No reasignar" if k is None else next((of["name"] for of in other_funds if of["id"] == k), str(k)),
-                            key="realloc_fund_select",
-                        )
-                    else:
-                        st.caption("ℹ️ Sin otras huchas disponibles para reasignar saldo.")
-
-                col_btn1, col_btn2 = st.columns(2, gap="medium")
-                with col_btn1:
-                    if st.button("💾 Guardar Saldo", key="btn_save_f_bal", width="stretch"):
+                    st.write("")
+                    st.write("")
+                    if st.button("💾 Guardar Saldo Actualizado", key=f"btn_save_f_bal_{selected_f['id']}", width="stretch"):
                         api_client.update_joint_sinking_fund(selected_f["id"], {"current_balance": new_f_balance})
-                        st.success("Saldo actualizado.")
+                        st.success("Saldo actualizado exitosamente.")
                         st.rerun()
 
-                with col_btn2:
-                    if st.button("🗑️ Eliminar Hucha", key="btn_del_fund", type="secondary", width="stretch"):
-                        ok = api_client.delete_joint_sinking_fund(selected_f["id"], reallocate_to_fund_id=realloc_target)
+                st.markdown("---")
+                st.markdown("##### 🗑️ Eliminar Hucha de Amortización")
+
+                if cur_bal <= 0.0:
+                    st.info("ℹ️ Esta hucha tiene un saldo de **0,00 €**. Puedes eliminarla de forma directa y segura.")
+                    if st.button("🗑️ Eliminar Hucha Definitivamente", key=f"btn_del_fund_{selected_f['id']}", type="secondary", width="stretch"):
+                        ok = api_client.delete_joint_sinking_fund(selected_f["id"])
                         if ok:
                             st.success("Hucha eliminada exitosamente.")
                             st.rerun()
                         else:
                             st.error("No se pudo eliminar la hucha.")
+                else:
+                    st.warning(
+                        f"⚠️ **Saldo Remanente Detectado: {cur_bal:,.2f} €**\n\n"
+                        "Para proteger el patrimonio común, queda estrictamente prohibida la eliminación sin definir "
+                        "el destino de estos fondos. Selecciona una de las siguientes opciones obligatorias:"
+                    )
+
+                    # Cálculo de cuotas para miembros
+                    name_a = account.get("member_a_name", "Miembro A")
+                    name_b = account.get("member_b_name", "Miembro B")
+                    split_mode = account.get("split_mode", "EQUAL_50_50")
+                    pct_a = float(account.get("member_a_contribution_pct", 50.0))
+                    if split_mode == "EQUAL_50_50":
+                        share_a = round(cur_bal * 0.5, 2)
+                        share_b = round(cur_bal - share_a, 2)
+                    else:
+                        share_a = round(cur_bal * (pct_a / 100.0), 2)
+                        share_b = round(cur_bal - share_a, 2)
+
+                    # Determinación de opciones según la etapa de convivencia
+                    actions_available = []
+                    actions_labels = {}
+
+                    if is_pre:
+                        # Modo Pre-Convivencia: No hay tesorería general; por defecto devolver a miembros
+                        actions_available.append("REFUND_MEMBERS")
+                        actions_labels["REFUND_MEMBERS"] = f"💰 Devolver a los Miembros según reparto pactado ({name_a}: {share_a:,.2f} € | {name_b}: {share_b:,.2f} €) [Recomendado]"
+                        if other_funds:
+                            actions_available.append("REALLOCATE")
+                            actions_labels["REALLOCATE"] = "↔️ Reasignar todo el saldo a otra hucha activa"
+                    else:
+                        # Modo Convivencia: Por defecto liberar a tesorería general del hogar
+                        actions_available.append("RELEASE_TO_TREASURY")
+                        actions_labels["RELEASE_TO_TREASURY"] = "🏦 Liberar a la Tesorería General del Hogar (Colchón No Asignado para compras comunes) [Recomendado]"
+                        if other_funds:
+                            actions_available.append("REALLOCATE")
+                            actions_labels["REALLOCATE"] = "↔️ Reasignar todo el saldo a otra hucha activa"
+                        actions_available.append("REFUND_MEMBERS")
+                        actions_labels["REFUND_MEMBERS"] = f"💰 Devolver y Liquidar a los Miembros ({name_a}: {share_a:,.2f} € | {name_b}: {share_b:,.2f} €)"
+
+                    chosen_action = st.radio(
+                        "Selecciona el destino del saldo remanente:",
+                        options=actions_available,
+                        format_func=lambda k: actions_labels[k],
+                        key=f"radio_del_action_{selected_f['id']}",
+                    )
+
+                    realloc_dest_id = None
+                    if chosen_action == "REALLOCATE":
+                        realloc_dest_id = st.selectbox(
+                            "Selecciona la hucha de destino que recibirá los fondos:",
+                            options=[of["id"] for of in other_funds],
+                            format_func=lambda fid: next((f"{of['name']} (Saldo actual: {float(of.get('current_balance', 0.0)):,.2f} €)" for of in other_funds if of["id"] == fid), str(fid)),
+                            key=f"sel_realloc_dest_{selected_f['id']}",
+                        )
+
+                    refund_cb = True
+                    if chosen_action == "REFUND_MEMBERS":
+                        local_prof = account.get("local_profile", "MEMBER_A")
+                        local_share = share_a if local_prof == "MEMBER_A" else share_b
+                        refund_cb = st.checkbox(
+                            f"Anotar automáticamente un ingreso de reintegro ({local_share:,.2f} €) en mi cuenta personal",
+                            value=True,
+                            key=f"cb_refund_personal_{selected_f['id']}",
+                        )
+
+                    if st.button("🗑️ Confirmar Destino y Eliminar Hucha", key=f"btn_del_fund_confirm_{selected_f['id']}", type="primary", width="stretch"):
+                        ok = api_client.delete_joint_sinking_fund(
+                            selected_f["id"],
+                            reallocate_to_fund_id=realloc_dest_id if chosen_action == "REALLOCATE" else None,
+                            action_on_balance=chosen_action,
+                            refund_personal_entry=refund_cb if chosen_action == "REFUND_MEMBERS" else False,
+                        )
+                        if ok:
+                            st.success("Hucha eliminada y saldo remanente reasignado exitosamente.")
+                            st.rerun()
+                        else:
+                            st.error("No se pudo eliminar la hucha. Consulta los registros para más información.")
 
         # Historial de Rebalanceos y Traspasos entre Huchas (Fase 7.4)
         transfers_history = api_client.get_joint_sinking_fund_transfers(limit=50)

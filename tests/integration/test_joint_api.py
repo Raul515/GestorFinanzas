@@ -208,10 +208,58 @@ def test_joint_sinking_funds_endpoints(client: TestClient):
     assert update_resp.status_code == 200
     assert update_resp.json()["current_balance"] == 6000.0
 
-    # Eliminar hucha
-    del_resp = client.delete(f"/joint/sinking-funds/{fund_id}")
+    # Veto patrimonial: Eliminar hucha con saldo > 0 sin destino debe ser rechazado con 400
+    veto_resp = client.delete(f"/joint/sinking-funds/{fund_id}")
+    assert veto_resp.status_code == 400
+    assert "Debe seleccionar el destino obligatorio" in veto_resp.json()["detail"]
+
+    # En modo pre-convivencia, liberar a tesorería general debe ser rechazado con 400
+    pre_treasury_resp = client.delete(f"/joint/sinking-funds/{fund_id}?action_on_balance=RELEASE_TO_TREASURY")
+    assert pre_treasury_resp.status_code == 400
+    assert "no existe tesorería general" in pre_treasury_resp.json()["detail"]
+
+    # En modo pre-convivencia, devolver a miembros (REFUND_MEMBERS) liquida el saldo y borra la hucha
+    del_resp = client.delete(f"/joint/sinking-funds/{fund_id}?action_on_balance=REFUND_MEMBERS")
     assert del_resp.status_code == 200
     assert del_resp.json()["deleted"] is True
+    assert del_resp.json()["action_on_balance"] == "REFUND_MEMBERS"
+
+
+def test_joint_sinking_fund_reallocate_and_cohabitation_release(client: TestClient):
+    """Valida la reasignación de saldo a otra hucha y la liberación a tesorería en convivencia."""
+    # 1. Configurar hogar en modo convivencia
+    setup_resp = client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Hogar Convivencia",
+            "cohabitation_stage": "COHABITATION",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "split_mode": "EQUAL_50_50",
+        },
+    )
+    assert setup_resp.status_code == 201
+
+    # Crear dos huchas
+    f1 = client.post("/joint/sinking-funds", json={"name": "Hucha A", "target_amount": 500.0, "current_balance": 100.0}).json()
+    f2 = client.post("/joint/sinking-funds", json={"name": "Hucha B", "target_amount": 500.0, "current_balance": 50.0}).json()
+
+    # Reasignar saldo de Hucha A a Hucha B al eliminar
+    del_realloc = client.delete(f"/joint/sinking-funds/{f1['id']}?action_on_balance=REALLOCATE&reallocate_to_fund_id={f2['id']}")
+    assert del_realloc.status_code == 200
+
+    # Hucha B debe haber incrementado su saldo a 150.0 €
+    updated_f2 = client.get(f"/joint/sinking-funds").json()
+    assert len(updated_f2) == 1
+    assert updated_f2[0]["id"] == f2["id"]
+    assert updated_f2[0]["current_balance"] == 150.0
+
+    # En convivencia, liberar a tesorería (RELEASE_TO_TREASURY) está permitido
+    del_treasury = client.delete(f"/joint/sinking-funds/{f2['id']}?action_on_balance=RELEASE_TO_TREASURY")
+    assert del_treasury.status_code == 200
+    assert del_treasury.json()["deleted"] is True
+
+    # Verificar que ya no quedan huchas
+    assert client.get("/joint/sinking-funds").json() == []
 
 
 def test_joint_transactions_endpoints(client: TestClient):
@@ -347,6 +395,16 @@ def test_assisted_contribution_flow(client: TestClient):
     assert len(contribs_final) == 0
 
     # Comprobar endpoint de cálculo dinámico de cuotas (Mejora 1)
+    # 4. Salvaguarda: Rechazar aportación a nombre de la pareja (MEMBER_B) desde dispositivo local (MEMBER_A)
+    impersonate_payload = {
+        "month": "2026-11",
+        "amount": 500.0,
+        "contributor_profile": "MEMBER_B",
+    }
+    resp_imp = client.post("/joint/contributions/asentar-asistida", json=impersonate_payload)
+    assert resp_imp.status_code == 403
+    assert "Solo puedes asentar aportaciones desde tu propio perfil local" in resp_imp.json()["detail"]
+
     calc_resp = client.get("/joint/contributions/calculation")
     assert calc_resp.status_code == 200
     calc_data = calc_resp.json()

@@ -10,13 +10,22 @@ import requests
 from frontend import api_client
 
 
+@pytest.fixture(autouse=True)
+def block_unmocked_network():
+    """Salvaguarda de seguridad: bloquea cualquier petición HTTP real saliente desde api_client._session."""
+    def _fail_call(*args, **kwargs):
+        raise RuntimeError("Llamada de red no permitida en pruebas unitarias: mock no configurado.")
+    with patch.object(api_client._session, "send", side_effect=_fail_call):
+        yield
+
+
 # =====================================================================
 # 1. PRUEBAS DE MÉTODOS DE API_CLIENT PARA LA CUENTA CONJUNTA
 # =====================================================================
 
 def test_api_client_get_joint_status_success():
     """Valida la consulta exitosa del estado de configuración."""
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"is_configured": True}
@@ -29,7 +38,7 @@ def test_api_client_get_joint_status_success():
 
 def test_api_client_get_joint_status_failure():
     """Valida la resiliencia cuando el backend no está disponible o falla."""
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         status = api_client.get_joint_status()
@@ -47,7 +56,7 @@ def test_api_client_setup_joint_account():
         "member_a_estimated_income": 2000.0,
         "member_b_estimated_income": 2000.0,
     }
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {**payload, "id": 1, "is_active": True}
@@ -62,7 +71,7 @@ def test_api_client_setup_joint_account():
 def test_api_client_sinking_funds_crud():
     """Valida creación, edición y eliminación de huchas de amortización."""
     # Create
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1, "name": "Seguro Coche", "target_amount": 600.0}
@@ -73,7 +82,7 @@ def test_api_client_sinking_funds_crud():
         assert res_create["id"] == 1
 
     # Update
-    with patch("requests.put") as mock_put:
+    with patch.object(api_client._session, "put") as mock_put:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": 1, "current_balance": 150.0}
@@ -84,7 +93,7 @@ def test_api_client_sinking_funds_crud():
         assert res_update["current_balance"] == 150.0
 
     # Delete
-    with patch("requests.delete") as mock_del:
+    with patch.object(api_client._session, "delete") as mock_del:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_del.return_value = mock_resp
@@ -96,7 +105,7 @@ def test_api_client_sinking_funds_crud():
 def test_api_client_transactions_and_contributions():
     """Valida gestión de transacciones y aportaciones asistidas."""
     # Create Transaction
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 10, "amount": 45.0, "description": "Luz"}
@@ -112,7 +121,7 @@ def test_api_client_transactions_and_contributions():
         assert tx["id"] == 10
 
     # Delete Transaction
-    with patch("requests.delete") as mock_del:
+    with patch.object(api_client._session, "delete") as mock_del:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_del.return_value = mock_resp
@@ -121,7 +130,7 @@ def test_api_client_transactions_and_contributions():
         assert ok is True
 
     # Assisted Contribution
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1, "amount": 600.0, "month": "2026-11"}
@@ -136,7 +145,7 @@ def test_api_client_transactions_and_contributions():
         assert res_asistida["month"] == "2026-11"
 
     # Delete Contribution
-    with patch("requests.delete") as mock_del:
+    with patch.object(api_client._session, "delete") as mock_del:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_del.return_value = mock_resp
@@ -147,7 +156,7 @@ def test_api_client_transactions_and_contributions():
 
 def test_api_client_get_joint_contribution_calculation():
     """Valida la consulta del cálculo dinámico de cuotas mensuales (Mejora 1)."""
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -164,7 +173,7 @@ def test_api_client_get_joint_contribution_calculation():
         assert res["member_b_contribution"] == 400.0
 
     # Resiliencia ante error de red
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
         res = api_client.get_joint_contribution_calculation()
         assert res is None
@@ -174,7 +183,7 @@ def test_api_client_get_joint_contribution_calculation():
 def test_api_client_annual_summary_and_health():
     """Valida la consulta de Resumen Anual y Salud Financiera del Hogar."""
     # Annual Summary
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -193,7 +202,7 @@ def test_api_client_annual_summary_and_health():
         assert summary["health_status"] == "SUSTAINABLE"
 
     # Health diagnostic
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -213,7 +222,7 @@ def test_api_client_annual_summary_and_health():
 def test_api_client_sync_endpoints():
     """Valida los endpoints de sincronización de Syncthing."""
     # Status
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -227,7 +236,7 @@ def test_api_client_sync_endpoints():
         assert sync_st["is_synchronized"] is True
 
     # Trigger process inbox
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -243,7 +252,7 @@ def test_api_client_sync_endpoints():
 
 def test_api_client_reset_joint_account():
     """Valida la llamada para restablecer la cuenta conjunta a Estado Cero."""
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"status": "success"}
@@ -257,7 +266,7 @@ def test_api_client_reset_joint_account():
 def test_api_client_invitation_endpoints():
     """Valida los métodos de detección y aceptación de invitación del hogar (Opción A)."""
     # Get invitation
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -271,7 +280,7 @@ def test_api_client_invitation_endpoints():
         assert inv["invitation"]["household_name"] == "Casa Nuestra"
 
     # Accept invitation
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {"id": 1, "account_name": "Casa Nuestra"}
@@ -311,7 +320,7 @@ def test_render_joint_view_routes_to_dashboard_when_configured():
 def test_api_client_export_and_sync_detail_endpoints():
     """Valida los metodos cliente de exportacion a Excel y visor de sincronizacion (Fase 7.2)."""
     # 1. export_joint_excel
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.content = b"PK\x03\x04dummy_excel_bytes"
@@ -322,7 +331,7 @@ def test_api_client_export_and_sync_detail_endpoints():
         assert data.startswith(b"PK\x03\x04")
 
     # 2. get_joint_sync_events_detail
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -341,7 +350,7 @@ def test_api_client_export_and_sync_detail_endpoints():
         assert detail["error_count"] == 1
 
     # 3. retry_joint_sync_errors
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"retried_count": 1, "process_summary": {"processed_count": 1}}
@@ -356,7 +365,7 @@ def test_api_client_export_and_sync_detail_endpoints():
 def test_api_client_settlement_endpoints():
     """Valida los métodos de API client para liquidación y reembolso de gastos adelantados (Fase 7.3)."""
     # 1. get_joint_settlement_summary
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -384,7 +393,7 @@ def test_api_client_settlement_endpoints():
         assert summary["direct_settlement"]["net_amount"] == 50.0
 
     # 2. settle_joint_transaction
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"id": 10, "settlement_status": "SETTLED"}
@@ -394,7 +403,7 @@ def test_api_client_settlement_endpoints():
         assert ok is True
 
     # 3. settle_all_joint_transactions
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [{"id": 10, "settlement_status": "SETTLED"}, {"id": 11, "settlement_status": "SETTLED"}]
@@ -407,7 +416,7 @@ def test_api_client_settlement_endpoints():
 def test_api_client_sinking_fund_transfer_endpoints():
     """Valida los métodos de API client para rebalanceo y traspaso entre huchas (Fase 7.4)."""
     # 1. transfer_joint_sinking_fund
-    with patch("requests.post") as mock_post:
+    with patch.object(api_client._session, "post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 201
         mock_resp.json.return_value = {
@@ -431,7 +440,7 @@ def test_api_client_sinking_fund_transfer_endpoints():
         assert res["source_fund_id"] == 1
 
     # 2. get_joint_sinking_fund_transfers
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [
@@ -567,7 +576,7 @@ def test_cross_contribution_monitor_local_pending_remote_completed():
 
 def test_api_client_search_joint_transactions():
     """Valida la llamada del cliente frontend para el buscador global multicriterio."""
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [
@@ -599,7 +608,7 @@ def test_api_client_search_joint_transactions():
         assert params["max_amount"] == 150.0
 
     # Error de red
-    with patch("requests.get") as mock_get:
+    with patch.object(api_client._session, "get") as mock_get:
         mock_get.side_effect = requests.exceptions.ConnectionError("Refused")
         assert api_client.search_joint_transactions() == []
 

@@ -15,8 +15,11 @@ from sqlalchemy.orm import Session
 
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.componentes.sqlite_db import get_db
+from backend.domain.models import joint as joint_models
 from backend.domain.models.joint import JointAppliedSyncEvent
 from backend.domain.models.transactions import Transaction as PersonalTransaction
+from backend.domain.schemas import categories as personal_cat_schemas
+from backend.domain.schemas import transactions as personal_tx_schemas
 from backend.domain.schemas import joint as schemas
 from backend.services.joint_accounting_service import (
     calculate_joint_annual_summary,
@@ -516,30 +519,54 @@ def update_joint_sinking_fund(
 def delete_joint_sinking_fund(
     fund_id: int,
     reallocate_to_fund_id: Optional[int] = Query(default=None),
+    action_on_balance: Optional[str] = Query(default=None),
+    refund_personal_entry: bool = Query(default=True),
     repo: SQLiteRepository = Depends(get_repo),
     sync_service: JointSyncService = Depends(get_sync_service),
 ) -> Dict[str, Any]:
-    """Elimina una hucha de amortización, reasignando su saldo remanente a otra hucha activa si procede."""
+    """
+    Elimina una hucha de amortización aplicando el destino obligatorio a su saldo remanente:
+    - REALLOCATE: traspasa el saldo a otra hucha activa.
+    - RELEASE_TO_TREASURY: libera el remanente a la tesorería general del hogar (solo modo convivencia).
+    - REFUND_MEMBERS: liquida y devuelve el remanente a los miembros según el split_mode pactado.
+    """
     fund = repo.get_joint_sinking_fund(fund_id)
     if not fund:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hucha no encontrada.")
 
     fund_name = fund.name
-    success = repo.delete_joint_sinking_fund(fund_id, reallocate_to_fund_id=reallocate_to_fund_id)
-    if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la hucha.")
+    fund_balance = round(float(fund.current_balance or 0.0), 2)
+    account = repo.get_joint_account()
+    if not account:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cuenta conjunta no configurada.")
 
-    sync_service.emit_event(
-        entity_type=schemas.SyncEntityType.SINKING_FUND,
-        action=schemas.SyncAction.DELETE,
-        payload={"name": fund_name},
-        origin_device_id=sync_service.local_device_id,
-    )
+    stage_str = account.cohabitation_stage.value if hasattr(account.cohabitation_stage, "value") else account.cohabitation_stage
+    split_str = account.split_mode.value if hasattr(account.split_mode, "value") else account.split_mode
 
-    # Si se reasignó saldo a otra hucha activa, sincronizar el nuevo saldo de la receptora (BUG-4)
-    if reallocate_to_fund_id:
-        target_fund = repo.get_joint_sinking_fund(reallocate_to_fund_id)
-        if target_fund:
+    # Veto patrimonial: Si la hucha tiene saldo > 0, es obligatorio indicar el destino
+    if fund_balance > 0.0:
+        if not action_on_balance:
+            if reallocate_to_fund_id:
+                action_on_balance = "REALLOCATE"
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Esta hucha tiene un saldo remanente de {fund_balance:,.2f} €. Debe seleccionar el destino obligatorio de los fondos (action_on_balance: REALLOCATE, RELEASE_TO_TREASURY o REFUND_MEMBERS)."
+                )
+
+        if action_on_balance == "REALLOCATE":
+            if not reallocate_to_fund_id or reallocate_to_fund_id == fund_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Debe seleccionar una hucha receptora válida distinta de la que se elimina."
+                )
+            target_fund = repo.get_joint_sinking_fund(reallocate_to_fund_id)
+            if not target_fund:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hucha de destino no encontrada.")
+
+            target_fund.current_balance = round(float(target_fund.current_balance) + fund_balance, 2)
+            repo.db.commit()
+
             sync_service.emit_event(
                 entity_type=schemas.SyncEntityType.SINKING_FUND,
                 action=schemas.SyncAction.UPSERT,
@@ -555,7 +582,139 @@ def delete_joint_sinking_fund(
                 origin_device_id=sync_service.local_device_id,
             )
 
-    return {"deleted": True, "fund_id": fund_id}
+        elif action_on_balance == "RELEASE_TO_TREASURY":
+            if stage_str == "PRE_COHABITATION":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="En modo pre-convivencia no existe tesorería general; debe reasignar a otra hucha o devolver a los miembros."
+                )
+            # En modo convivencia, al borrarse la hucha el dinero queda libre en tesorería general del hogar
+
+        elif action_on_balance == "REFUND_MEMBERS":
+            # Reparto de fondos según split_mode
+            if split_str == "EQUAL_50_50":
+                share_a = round(fund_balance * 0.5, 2)
+                share_b = round(fund_balance - share_a, 2)
+            else:
+                pct_a = float(account.member_a_contribution_pct or 50.0) / 100.0
+                share_a = round(fund_balance * pct_a, 2)
+                share_b = round(fund_balance - share_a, 2)
+
+            today_date = datetime.now().date()
+            # 1. Asentar transacciones conjuntas de liquidación/devolución para cada miembro
+            if share_a > 0:
+                tx_a = joint_models.JointTransaction(
+                    uuid=str(uuid.uuid4()),
+                    joint_account_id=account.id,
+                    date=today_date,
+                    amount=share_a,
+                    description=f"Devolución liquidación hucha '{fund_name}' a {account.member_a_name}",
+                    paid_by="COMMON",
+                    created_by_profile="MEMBER_A",
+                    settlement_mechanism="COMMON_REIMBURSEMENT",
+                    settlement_status="SETTLED",
+                    settled_at=datetime.now(timezone.utc),
+                )
+                repo.db.add(tx_a)
+                repo.db.commit()
+                repo.db.refresh(tx_a)
+                sync_service.emit_event(
+                    entity_type=schemas.SyncEntityType.TRANSACTION,
+                    action=schemas.SyncAction.UPSERT,
+                    payload={
+                        "uuid": tx_a.uuid,
+                        "description": tx_a.description,
+                        "amount": tx_a.amount,
+                        "date": tx_a.date.isoformat(),
+                        "paid_by": tx_a.paid_by,
+                        "created_by_profile": tx_a.created_by_profile,
+                        "settlement_mechanism": tx_a.settlement_mechanism,
+                        "settlement_status": tx_a.settlement_status,
+                        "settled_at": tx_a.settled_at.isoformat() if tx_a.settled_at else None,
+                    },
+                    origin_device_id=sync_service.local_device_id,
+                )
+
+            if share_b > 0:
+                tx_b = joint_models.JointTransaction(
+                    uuid=str(uuid.uuid4()),
+                    joint_account_id=account.id,
+                    date=today_date,
+                    amount=share_b,
+                    description=f"Devolución liquidación hucha '{fund_name}' a {account.member_b_name}",
+                    paid_by="COMMON",
+                    created_by_profile="MEMBER_B",
+                    settlement_mechanism="COMMON_REIMBURSEMENT",
+                    settlement_status="SETTLED",
+                    settled_at=datetime.now(timezone.utc),
+                )
+                repo.db.add(tx_b)
+                repo.db.commit()
+                repo.db.refresh(tx_b)
+                sync_service.emit_event(
+                    entity_type=schemas.SyncEntityType.TRANSACTION,
+                    action=schemas.SyncAction.UPSERT,
+                    payload={
+                        "uuid": tx_b.uuid,
+                        "description": tx_b.description,
+                        "amount": tx_b.amount,
+                        "date": tx_b.date.isoformat(),
+                        "paid_by": tx_b.paid_by,
+                        "created_by_profile": tx_b.created_by_profile,
+                        "settlement_mechanism": tx_b.settlement_mechanism,
+                        "settlement_status": tx_b.settlement_status,
+                        "settled_at": tx_b.settled_at.isoformat() if tx_b.settled_at else None,
+                    },
+                    origin_device_id=sync_service.local_device_id,
+                )
+
+            # 2. Asentar reintegro en el perfil personal del miembro local si está habilitado
+            if refund_personal_entry:
+                local_prof_str = account.local_profile.value if hasattr(account.local_profile, "value") else account.local_profile
+                local_share = share_a if local_prof_str == "MEMBER_A" else share_b
+                if local_share > 0:
+                    try:
+                        cats = repo.get_categories()
+                        income_cat = next((c for c in cats if getattr(c, "type", "") == "ingreso"), None)
+                        if income_cat:
+                            subcats = repo.get_subcategories(category_id=income_cat.id)
+                            target_subcat = next((s for s in subcats if "reintegro" in s.name.lower() or "conjunt" in s.name.lower()), None)
+                            if not target_subcat:
+                                target_subcat = repo.create_subcategory(
+                                    personal_cat_schemas.SubcategoryCreate(
+                                        name="Reintegro Hucha Conjunta",
+                                        category_id=income_cat.id,
+                                    )
+                                )
+                            repo.create_transaction(
+                                personal_tx_schemas.TransactionCreate(
+                                    date=today_date,
+                                    amount=local_share,
+                                    description=f"Reintegro por cierre hucha '{fund_name}'",
+                                    subcategory_id=target_subcat.id,
+                                )
+                            )
+                    except Exception as e:
+                        logger.warning("No se pudo asentar el reintegro personal para el miembro local: %s", e)
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Acción no reconocida '{action_on_balance}'. Debe ser REALLOCATE, RELEASE_TO_TREASURY o REFUND_MEMBERS."
+            )
+
+    success = repo.delete_joint_sinking_fund(fund_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la hucha.")
+
+    sync_service.emit_event(
+        entity_type=schemas.SyncEntityType.SINKING_FUND,
+        action=schemas.SyncAction.DELETE,
+        payload={"name": fund_name},
+        origin_device_id=sync_service.local_device_id,
+    )
+
+    return {"deleted": True, "fund_id": fund_id, "action_on_balance": action_on_balance}
 
 
 @router.post("/sinking-funds/transfer", response_model=schemas.JointSinkingFundTransferResponse, status_code=status.HTTP_201_CREATED)
@@ -987,6 +1146,15 @@ def record_assisted_contribution(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cuenta conjunta no configurada.",
+        )
+
+    # Salvaguarda: Solo se pueden asentar aportaciones desde el perfil local de este dispositivo
+    req_profile_str = req.contributor_profile.value if hasattr(req.contributor_profile, "value") else str(req.contributor_profile)
+    acc_local_str = account.local_profile.value if hasattr(account.local_profile, "value") else account.local_profile
+    if req_profile_str != acc_local_str:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Solo puedes asentar aportaciones desde tu propio perfil local ({acc_local_str}). No es posible debitar la cuenta personal de tu pareja.",
         )
 
     try:

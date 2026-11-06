@@ -1245,12 +1245,20 @@ def update_joint_sinking_fund(fund_id: int, payload: dict) -> Optional[Dict[str,
     return None
 
 
-def delete_joint_sinking_fund(fund_id: int, reallocate_to_fund_id: Optional[int] = None) -> bool:
-    """Elimina una hucha de amortización, reasignando su saldo a otra meta si corresponde."""
+def delete_joint_sinking_fund(
+    fund_id: int,
+    reallocate_to_fund_id: Optional[int] = None,
+    action_on_balance: Optional[str] = None,
+    refund_personal_entry: bool = True,
+) -> bool:
+    """Elimina una hucha de amortización, definiendo el destino de su saldo remanente si corresponde."""
     url = f"{API_URL}/joint/sinking-funds/{fund_id}"
-    params = {}
+    params: Dict[str, Any] = {}
     if reallocate_to_fund_id:
         params["reallocate_to_fund_id"] = reallocate_to_fund_id
+    if action_on_balance:
+        params["action_on_balance"] = action_on_balance
+    params["refund_personal_entry"] = str(refund_personal_entry).lower()
     try:
         response = _session.delete(url, params=params, timeout=10)
         if response.status_code == 200:
@@ -1258,6 +1266,8 @@ def delete_joint_sinking_fund(fund_id: int, reallocate_to_fund_id: Optional[int]
                 get_joint_sinking_funds.clear()
             except Exception:
                 pass
+            clear_joint_cache()
+            clear_annual_cache()
             return True
         logger.warning("Fallo en delete_joint_sinking_fund (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
