@@ -51,40 +51,6 @@ def render_updater_view() -> None:
     is_git = bool(version_data.get("is_git_repo", False))
 
     # ==============================================================================
-    # BANNER DE ROLLBACK EN 1 CLIC (SI EXISTE INSTANTÁNEA PREVIA)
-    # ==============================================================================
-    if rollback_avail:
-        st.markdown(
-            """
-            <div style="background-color: #fff3cd; border-left: 5px solid #ffc107; padding: 12px 18px; border-radius: 6px; margin-bottom: 20px;">
-                <span style="font-size: 1.1rem; font-weight: 600; color: #856404;">
-                    ↩️ ¿La última actualización presenta algún problema o inestabilidad?
-                </span>
-                <p style="margin: 4px 0 0 0; color: #664d03; font-size: 0.95rem;">
-                    Existe una instantánea de código previo disponible en <code>backups/code_snapshot_prev.tar.gz</code>.
-                    Puedes deshacer la actualización en 1 clic y volver al estado previo sin perder ninguna transacción
-                    ni modificar la base de datos.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        col_rb1, col_rb2 = st.columns([3, 1])
-        with col_rb1:
-            st.caption("La instantánea previa preserva la versión estable anterior del código y dependencias.")
-        with col_rb2:
-            if st.button("↩️ Deshacer Actualización", key="btn_rollback_code_banner", type="primary", width="stretch"):
-                with st.spinner("Restaurando versión previa de código..."):
-                    res_rb = api_client.rollback_system_update()
-                    if res_rb and res_rb.get("success"):
-                        st.success(res_rb.get("message", "Código restaurado con éxito."))
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        err_detail = res_rb.get("message") if res_rb else "Fallo desconocido"
-                        st.error(f"Error al deshacer actualización: {err_detail}")
-
-    # ==============================================================================
     # TARJETA 1: ESTADO ACTUAL DEL SISTEMA
     # ==============================================================================
     st.subheader("1. Estado Actual de la Aplicación")
@@ -219,3 +185,38 @@ def render_updater_view() -> None:
                         status_text.empty()
                         err_msg = apply_res.get("message") if apply_res else "Error desconocido del servidor"
                         st.error(f"❌ No se pudo completar la actualización: {err_msg}")
+
+    # ==============================================================================
+    # SECCIÓN DE REVERSIÓN / ROLLBACK EN 1 CLIC (SI EXISTE INSTANTÁNEA PREVIA)
+    # ==============================================================================
+    if rollback_avail:
+        st.markdown("<br><hr style='opacity: 0.15; margin: 28px 0 16px 0;'>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="background: rgba(33, 150, 243, 0.06); border: 1px solid rgba(33, 150, 243, 0.25); border-left: 4px solid #1976d2; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px;">
+                <span style="font-size: 1.05rem; font-weight: 600; color: inherit;">
+                    ↩️ ¿La última actualización presenta algún problema o inestabilidad?
+                </span>
+                <p style="margin: 6px 0 0 0; opacity: 0.9; font-size: 0.92rem; line-height: 1.45; color: inherit;">
+                    Existe una instantánea de código previo disponible en <code>backups/code_snapshot_prev.tar.gz</code>.
+                    Puedes deshacer la actualización en 1 clic y volver al estado previo sin perder ninguna transacción
+                    ni modificar la base de datos.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_rb1, col_rb2 = st.columns([3, 1])
+        with col_rb1:
+            st.caption("La instantánea previa preserva la versión estable anterior del código y dependencias.")
+        with col_rb2:
+            if st.button("↩️ Deshacer Actualización", key="btn_rollback_code_banner", width="stretch"):
+                with st.spinner("Restaurando versión previa de código..."):
+                    res_rb = api_client.rollback_system_update()
+                    if res_rb and res_rb.get("success"):
+                        st.success(res_rb.get("message", "Código restaurado con éxito."))
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        err_detail = res_rb.get("message") if res_rb else "Fallo desconocido"
+                        st.error(f"Error al deshacer actualización: {err_detail}")

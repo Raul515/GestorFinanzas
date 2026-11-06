@@ -21,7 +21,7 @@ def test_format_iso_timestamp():
     assert format_iso_timestamp("2026-11-03 Invalid String") == "2026-11-03 Invalid "
 
 
-@patch("frontend.api_client.requests.get")
+@patch("frontend.api_client._session.get")
 def test_client_get_app_version(mock_get):
     """GET /api/updater/version devuelve la versión instalada o None ante fallo de red."""
     mock_resp = MagicMock()
@@ -42,11 +42,12 @@ def test_client_get_app_version(mock_get):
     assert res["rollback_available"] is True
 
     # Error de red
+    api_client.get_app_version.clear()
     mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
     assert api_client.get_app_version() is None
 
 
-@patch("frontend.api_client.requests.get")
+@patch("frontend.api_client._session.get")
 def test_client_check_for_updates(mock_get):
     """GET /api/updater/check consulta GitHub API con parámetros force y branch."""
     mock_resp = MagicMock()
@@ -75,7 +76,7 @@ def test_client_check_for_updates(mock_get):
     assert api_client.check_for_updates() is None
 
 
-@patch("frontend.api_client.requests.post")
+@patch("frontend.api_client._session.post")
 def test_client_apply_system_update(mock_post):
     """POST /api/updater/apply envía solicitud de actualización y maneja errores."""
     mock_resp = MagicMock()
@@ -112,7 +113,7 @@ def test_client_apply_system_update(mock_post):
     assert "Error de conexión" in str(res_conn.get("message"))
 
 
-@patch("frontend.api_client.requests.post")
+@patch("frontend.api_client._session.post")
 def test_client_rollback_system_update(mock_post):
     """POST /api/updater/rollback envía petición de reversión y devuelve respuesta."""
     mock_resp = MagicMock()
