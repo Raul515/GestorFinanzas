@@ -1266,6 +1266,7 @@ def delete_joint_sinking_fund(
                 get_joint_sinking_funds.clear()
             except Exception:
                 pass
+            clear_categories_cache()
             clear_joint_cache()
             clear_annual_cache()
             return True
@@ -1494,7 +1495,9 @@ def asentar_aportacion_asistida(payload: dict) -> Optional[Dict[str, Any]]:
     try:
         response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            clear_categories_cache()
             clear_joint_cache()
+            clear_annual_cache()
             return response.json()
         logger.warning("Fallo en asentar_aportacion_asistida (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1510,7 +1513,9 @@ def delete_joint_contribution(contribution_id: int) -> bool:
     try:
         response = _session.delete(url, timeout=10)
         if response.status_code == 200:
+            clear_categories_cache()
             clear_joint_cache()
+            clear_annual_cache()
             return True
         logger.warning("Fallo en delete_joint_contribution (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:

@@ -34,6 +34,7 @@ def populate():
         "Ingresos Secundarios",
         "Devoluciones y Reembolsos",
         "Intereses y Dividendos",
+        "Reintegros por Cierres de Huchas Conjuntas",
         "Otros Ingresos",
     ]
     necesidades = [

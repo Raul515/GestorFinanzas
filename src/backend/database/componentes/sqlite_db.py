@@ -116,6 +116,30 @@ def init_db():
                 )
             """)
             conn.commit()
+
+            # Asegurar subcategoría de reintegros por cierre de huchas conjuntas bajo 'Ingresos Netos'
+            cur_cat = conn.exec_driver_sql("SELECT id FROM categories WHERE type = 'ingreso' OR name = 'Ingresos Netos' LIMIT 1")
+            row_cat = cur_cat.fetchone()
+            if row_cat:
+                income_cat_id = row_cat[0]
+                # Si existe con el nombre antiguo 'Reintegro Hucha Conjunta', actualizar nombre
+                conn.exec_driver_sql(
+                    "UPDATE subcategories SET name = 'Reintegros por Cierres de Huchas Conjuntas' "
+                    "WHERE name IN ('Reintegro Hucha Conjunta', 'Reintegros por cierre de huchas conjuntas') "
+                    "AND category_id = ?",
+                    (income_cat_id,)
+                )
+                # Verificar si ya existe 'Reintegros por Cierres de Huchas Conjuntas'
+                cur_sub = conn.exec_driver_sql(
+                    "SELECT id FROM subcategories WHERE name = 'Reintegros por Cierres de Huchas Conjuntas' AND category_id = ?",
+                    (income_cat_id,)
+                )
+                if not cur_sub.fetchone():
+                    conn.exec_driver_sql(
+                        "INSERT INTO subcategories (name, category_id) VALUES ('Reintegros por Cierres de Huchas Conjuntas', ?)",
+                        (income_cat_id,)
+                    )
+                conn.commit()
     except Exception as exc:
         logger.warning("Error comprobando/migrando columnas en SQLite: %s", exc)
 

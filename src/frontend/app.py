@@ -499,6 +499,18 @@ if modulo_personal == "📊 Presupuesto y Meses":
             st.info("La base de datos está vacía o el backend no está corriendo.")
             pass
 
+        # Detección defensiva de subcategorías recién creadas en transacciones
+        known_subcat_ids = {s['id'] for s in todas_subcats}
+        tx_unknown = any(
+            (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) not in known_subcat_ids
+            for t in (transacciones_m or [])
+            if (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) is not None
+        )
+        if tx_unknown:
+            api_client.clear_categories_cache()
+            todas_subcats = api_client.get_subcategorias()
+            subcat_options = {s['id']: s['nombre'] for s in todas_subcats} if todas_subcats else {}
+
         # Totales del mes
         totales_m = calculate_category_totals(
             categorias, todas_subcats, presupuestos_m, transacciones_m,
@@ -664,6 +676,12 @@ if modulo_personal == "📊 Presupuesto y Meses":
                     tx_id = tx.get("id")
                     tx_sub_id = tx.get("subcategoria_id") if tx.get("subcategoria_id") is not None else tx.get("subcategory_id")
                     tx_sub = subcat_map.get(tx_sub_id)
+                    if not tx_sub and tx_sub_id:
+                        api_client.clear_categories_cache()
+                        fresh_subcats = api_client.get_subcategorias()
+                        if fresh_subcats:
+                            subcat_map = {s['id']: s for s in fresh_subcats}
+                            tx_sub = subcat_map.get(tx_sub_id)
                     sub_nombre = tx_sub["nombre"] if tx_sub else f"Subcategoría #{tx_sub_id}"
 
                     cat_id = (tx_sub.get("categoria_id") if tx_sub.get("categoria_id") is not None else tx_sub.get("category_id")) if tx_sub else None

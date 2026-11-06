@@ -145,6 +145,24 @@ class JointSyncService:
 
         return event_payload
 
+    @staticmethod
+    def _is_sync_file(file_path: Path, require_json: bool = True) -> bool:
+        """
+        Determina si un archivo es un artefacto de sincronización válido:
+        - Debe ser un archivo regular (no directorio ni enlace roto).
+        - No debe ser un archivo oculto ni de sistema (empieza por '.').
+        - No debe ser .gitkeep ni un archivo temporal (.tmp).
+        - Opcionalmente requiere extensión .json.
+        """
+        if not file_path.is_file():
+            return False
+        name = file_path.name
+        if name.startswith(".") or name == ".gitkeep" or name.endswith(".tmp"):
+            return False
+        if require_json and file_path.suffix.lower() != ".json":
+            return False
+        return True
+
     def rotate_outbox(self, max_files: int = 50) -> None:
         """
         Mantiene un límite máximo de archivos en sync/outbox/ eliminando los más
@@ -153,7 +171,7 @@ class JointSyncService:
         try:
             outbox_files = [
                 f for f in self.outbox_dir.iterdir()
-                if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+                if self._is_sync_file(f, require_json=True)
             ]
             if len(outbox_files) > max_files:
                 outbox_files.sort(key=lambda f: f.stat().st_mtime)
@@ -175,7 +193,7 @@ class JointSyncService:
         """
         inbox_files = [
             f for f in self.inbox_dir.iterdir()
-            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+            if self._is_sync_file(f, require_json=True)
         ]
 
         if not inbox_files:
@@ -675,6 +693,61 @@ class JointSyncService:
         fund = db.query(JointSinkingFund).filter(JointSinkingFund.joint_account_id == 1, JointSinkingFund.name == name).first()
 
         if event.action == SyncAction.DELETE:
+            action_on_balance = payload.get("action_on_balance")
+            refund_shares = payload.get("refund_shares") or {}
+            account = db.query(JointAccount).filter(JointAccount.id == 1).first()
+            if action_on_balance == "REFUND_MEMBERS" and account and refund_shares:
+                local_prof_str = account.local_profile.value if hasattr(account.local_profile, "value") else account.local_profile
+                local_share = float(refund_shares.get(local_prof_str, 0.0) or 0.0)
+                if local_share > 0:
+                    try:
+                        from backend.database.componentes.sqlite_crud import SQLiteRepository
+                        from backend.domain.schemas import categories as personal_cat_schemas
+                        from backend.domain.schemas import transactions as personal_tx_schemas
+                        repo = SQLiteRepository(db)
+                        cats = repo.get_categories()
+                        income_cat = next((c for c in cats if getattr(c, "type", "") == "ingreso"), None)
+                        if not income_cat:
+                            income_cat = repo.create_category(
+                                personal_cat_schemas.CategoryCreate(name="Ingresos Netos", type="ingreso")
+                            )
+                        if income_cat:
+                            subcats = repo.get_subcategories(category_id=income_cat.id)
+                            target_subcat = next(
+                                (
+                                    s for s in subcats
+                                    if s.name in (
+                                        "Reintegros por Cierres de Huchas Conjuntas",
+                                        "Reintegro Hucha Conjunta",
+                                    )
+                                    or "reintegro" in s.name.lower()
+                                    or "cierre" in s.name.lower()
+                                ),
+                                None,
+                            )
+                            if not target_subcat:
+                                target_subcat = repo.create_subcategory(
+                                    personal_cat_schemas.SubcategoryCreate(
+                                        name="Reintegros por Cierres de Huchas Conjuntas",
+                                        category_id=income_cat.id,
+                                    )
+                                )
+                            event_date = datetime.fromisoformat(event.timestamp_utc.replace("Z", "+00:00")).date()
+                            repo.create_transaction(
+                                personal_tx_schemas.TransactionCreate(
+                                    date=event_date,
+                                    amount=local_share,
+                                    description=f"Reintegro por cierre hucha '{name}'",
+                                    subcategory_id=target_subcat.id,
+                                )
+                            )
+                            logger.info(
+                                "Reintegro remoto por liquidación de hucha '%s' aplicado en la cuenta personal local (%s €).",
+                                name, local_share
+                            )
+                    except Exception as exc:
+                        logger.warning("Error aplicando reintegro personal remoto por cierre de hucha %s: %s", name, exc)
+
             if fund:
                 db.delete(fund)
             return
@@ -718,9 +791,9 @@ class JointSyncService:
 
     def get_sync_status(self, db: Optional[Session] = None) -> Dict[str, Any]:
         """Calcula el estado del buzón de sincronización y métricas de deltas pendientes."""
-        outbox_pending = len([f for f in self.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")])
-        inbox_pending = len([f for f in self.inbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")])
-        error_count = len([f for f in self.error_dir.iterdir() if f.is_file()])
+        outbox_pending = len([f for f in self.outbox_dir.iterdir() if self._is_sync_file(f, require_json=True)])
+        inbox_pending = len([f for f in self.inbox_dir.iterdir() if self._is_sync_file(f, require_json=True)])
+        error_count = len([f for f in self.error_dir.iterdir() if self._is_sync_file(f, require_json=False)])
 
         last_applied_dt: Optional[datetime] = None
         if db:
@@ -748,7 +821,7 @@ class JointSyncService:
         for folder in target_folders:
             if folder.exists():
                 for file_path in folder.iterdir():
-                    if file_path.is_file() and file_path.name != ".gitkeep":
+                    if self._is_sync_file(file_path, require_json=False):
                         try:
                             file_path.unlink()
                         except Exception as exc:
@@ -764,7 +837,7 @@ class JointSyncService:
 
         inbox_files = [
             f for f in self.inbox_dir.iterdir()
-            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")
+            if self._is_sync_file(f, require_json=True)
         ]
         for file_path in inbox_files:
             try:
@@ -808,7 +881,7 @@ class JointSyncService:
 
         inbox_files = [
             f for f in self.inbox_dir.iterdir()
-            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp") and f.name != ".gitkeep"
+            if self._is_sync_file(f, require_json=True)
         ]
         for file_path in inbox_files:
             try:
@@ -885,10 +958,10 @@ class JointSyncService:
         - processed: ultimos N eventos archivados tras su aplicacion exitosa.
         - error: eventos en cuarentena que fallaron durante el procesamiento.
         """
-        outbox_files = [f.name for f in self.outbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")] if self.outbox_dir.exists() else []
-        inbox_files = [f.name for f in self.inbox_dir.iterdir() if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp")] if self.inbox_dir.exists() else []
+        outbox_files = [f.name for f in self.outbox_dir.iterdir() if self._is_sync_file(f, require_json=True)] if self.outbox_dir.exists() else []
+        inbox_files = [f.name for f in self.inbox_dir.iterdir() if self._is_sync_file(f, require_json=True)] if self.inbox_dir.exists() else []
 
-        processed_files = [f for f in self.processed_dir.iterdir() if f.is_file() and f.suffix == ".json"] if self.processed_dir.exists() else []
+        processed_files = [f for f in self.processed_dir.iterdir() if self._is_sync_file(f, require_json=True)] if self.processed_dir.exists() else []
         processed_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
 
         processed_events = []
@@ -907,7 +980,7 @@ class JointSyncService:
             except Exception as exc:
                 logger.warning("Error leyendo evento procesado %s: %s", pf.name, exc)
 
-        error_files = [f for f in self.error_dir.iterdir() if f.is_file()] if self.error_dir.exists() else []
+        error_files = [f for f in self.error_dir.iterdir() if self._is_sync_file(f, require_json=False)] if self.error_dir.exists() else []
         error_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
 
         error_events = []
@@ -941,7 +1014,7 @@ class JointSyncService:
 
         error_files = [
             f for f in self.error_dir.iterdir()
-            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp") and f.name != ".gitkeep"
+            if self._is_sync_file(f, require_json=True)
         ]
         retried = 0
         for ef in error_files:
@@ -964,7 +1037,7 @@ class JointSyncService:
             return 0
         deleted = 0
         for ef in self.error_dir.iterdir():
-            if ef.is_file() and ef.name != ".gitkeep":
+            if self._is_sync_file(ef, require_json=False):
                 try:
                     ef.unlink()
                     deleted += 1

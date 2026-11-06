@@ -224,6 +224,18 @@ def test_joint_sinking_funds_endpoints(client: TestClient):
     assert del_resp.json()["deleted"] is True
     assert del_resp.json()["action_on_balance"] == "REFUND_MEMBERS"
 
+    # Verificar que se creó la subcategoría oficial y la transacción de reintegro personal
+    subcats_resp = client.get("/categories/subcategories/")
+    assert subcats_resp.status_code == 200
+    subcat_names = [s["name"] for s in subcats_resp.json()]
+    assert "Reintegros por Cierres de Huchas Conjuntas" in subcat_names
+
+    txs_resp = client.get("/transactions/")
+    assert txs_resp.status_code == 200
+    refund_tx = next((t for t in txs_resp.json() if "Reintegro por cierre hucha" in t.get("description", "")), None)
+    assert refund_tx is not None
+    assert refund_tx["amount"] == 3000.0
+
 
 def test_joint_sinking_fund_reallocate_and_cohabitation_release(client: TestClient):
     """Valida la reasignación de saldo a otra hucha y la liberación a tesorería en convivencia."""

@@ -1121,3 +1121,144 @@ def test_subcategory_delete_succeeds_when_no_transactions(temp_sync_dir: str, db
     # Verificar que la subcategoría fue borrada
     subcat_db = db_session.query(JointSubcategory).filter_by(id=subcat.id).first()
     assert subcat_db is None
+
+
+def test_sync_ignores_gitkeep_and_hidden_files(temp_sync_dir: str, db_session: Session):
+    """
+    Certifica que archivos marcadores de git (.gitkeep), archivos ocultos del sistema
+    (.DS_Store, .stfolder, .stignore) y archivos temporales (.tmp) son ignorados por completo:
+    - No inflan error_count ni inbox_pending_count ni outbox_pending_count.
+    - No aparecen listados en get_sync_events_detail().
+    - .gitkeep se preserva en disco al invocar clear_failed_events() o clear_sync_folders().
+    """
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="DEV_LOCAL")
+    
+    # 1. Crear marcadores y archivos ocultos en todas las carpetas
+    for folder in [service.outbox_dir, service.inbox_dir, service.processed_dir, service.error_dir]:
+        (folder / ".gitkeep").touch()
+        (folder / ".DS_Store").touch()
+        (folder / "temp_download.tmp").touch()
+
+    # 2. Verificar get_sync_status() -> Todo debe estar a 0 y sincronizado
+    status = service.get_sync_status(db_session)
+    assert status["outbox_pending_count"] == 0
+    assert status["inbox_pending_count"] == 0
+    assert status["error_count"] == 0
+    assert status["is_synchronized"] is True
+
+    # 3. Verificar get_sync_events_detail() -> Listas vacías
+    details = service.get_sync_events_detail()
+    assert details["outbox_count"] == 0
+    assert details["inbox_count"] == 0
+    assert details["processed_count"] == 0
+    assert details["error_count"] == 0
+    assert details["error_events"] == []
+
+    # 4. Colocar un archivo de error real junto al .gitkeep
+    bad_file = service.error_dir / "evt_broken.json"
+    bad_file.write_text("{ corrupt json", encoding="utf-8")
+
+    status_with_err = service.get_sync_status(db_session)
+    assert status_with_err["error_count"] == 1
+    assert status_with_err["is_synchronized"] is False
+
+    details_with_err = service.get_sync_events_detail()
+    assert details_with_err["error_count"] == 1
+    assert len(details_with_err["error_events"]) == 1
+    assert details_with_err["error_events"][0]["filename"] == "evt_broken.json"
+
+    # 5. Limpiar errores -> evt_broken.json debe borrarse, .gitkeep debe permanecer intacto
+    deleted = service.clear_failed_events()
+    assert deleted == 1
+    assert not bad_file.exists()
+    assert (service.error_dir / ".gitkeep").exists()
+
+    # 6. Estado final vuelve a 0 errores
+    status_final = service.get_sync_status(db_session)
+    assert status_final["error_count"] == 0
+    assert status_final["is_synchronized"] is True
+
+
+def test_remote_sinking_fund_deletion_refunds_partner_personal_account(temp_sync_dir: str, db_session: Session):
+    """
+    Certifica que cuando un miembro borra remotamente una hucha con devolución a miembros (REFUND_MEMBERS),
+    el nodo receptor (pareja) aplica la eliminación y registra automáticamente en su cuenta personal
+    la cuota de reintegro que le corresponde según su perfil local.
+    """
+    from backend.database.componentes.sqlite_crud import SQLiteRepository
+    from backend.domain.models.categories import Category, Subcategory
+    from backend.domain.models.transactions import Transaction
+
+    repo = SQLiteRepository(db_session)
+    # 1. Configurar categoría de ingresos personal si no existe
+    income_cat = db_session.query(Category).filter(Category.type == "ingreso").first()
+    if not income_cat:
+        income_cat = Category(name="Ingresos Netos", type="ingreso")
+        db_session.add(income_cat)
+        db_session.commit()
+
+    # 2. Configurar hogar conjunto en el nodo de la pareja (MEMBER_B)
+    repo.create_joint_account(
+        JointAccountSetupRequest(
+            household_name="Hogar Remoto",
+            cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+            split_mode=SplitMode.EQUAL_50_50,
+            contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+            member_a_name="Raulito",
+            member_b_name="Evita",
+            local_profile="MEMBER_B",
+            remote_profile="MEMBER_A",
+        )
+    )
+
+    # 3. Crear hucha local antes del borrado
+    fund = JointSinkingFund(
+        joint_account_id=1,
+        name="Coche",
+        target_amount=1000.0,
+        current_balance=200.0,
+    )
+    db_session.add(fund)
+    db_session.commit()
+
+    # 4. Simular recepción de delta DELETE emitido por MEMBER_A con liquidación de 100€ a cada uno
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="MAC_EVITA")
+    inbox_path = Path(temp_sync_dir) / "inbox"
+
+    evt_del_fund = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "SINKING_FUND",
+        "action": "DELETE",
+        "origin_device_id": "PC_RAUL",
+        "timestamp_utc": "2026-11-06T15:00:00Z",
+        "payload": {
+            "name": "Coche",
+            "action_on_balance": "REFUND_MEMBERS",
+            "refund_shares": {
+                "MEMBER_A": 100.0,
+                "MEMBER_B": 100.0,
+            },
+        },
+    }
+    with open(inbox_path / "evt_del_fund_refund.json", "w", encoding="utf-8") as f:
+        json.dump(evt_del_fund, f)
+
+    # 5. Procesar inbox en la máquina de Evita
+    res = service.process_inbox(db_session)
+    assert res["processed_count"] == 1
+
+    # 6. Certificar que la hucha se borró
+    fund_db = db_session.query(JointSinkingFund).filter_by(name="Coche").first()
+    assert fund_db is None
+
+    # 7. Certificar que Evita recibió su apunte de ingreso en su cuenta personal
+    subcat = db_session.query(Subcategory).filter(Subcategory.name == "Reintegros por Cierres de Huchas Conjuntas").first()
+    assert subcat is not None
+    assert subcat.category_id == income_cat.id
+
+    personal_tx = db_session.query(Transaction).filter_by(subcategory_id=subcat.id).first()
+    assert personal_tx is not None
+    assert personal_tx.amount == 100.0
+    assert "Reintegro por cierre hucha 'Coche'" in personal_tx.description
+
+

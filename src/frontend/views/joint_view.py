@@ -1240,6 +1240,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                     if st.button("🗑️ Eliminar Hucha Definitivamente", key=f"btn_del_fund_{selected_f['id']}", type="secondary", width="stretch"):
                         ok = api_client.delete_joint_sinking_fund(selected_f["id"])
                         if ok:
+                            st.cache_data.clear()
                             st.success("Hucha eliminada exitosamente.")
                             st.rerun()
                         else:
@@ -1318,6 +1319,7 @@ def _render_tab_huchas(account: Dict[str, Any]) -> None:
                             refund_personal_entry=refund_cb if chosen_action == "REFUND_MEMBERS" else False,
                         )
                         if ok:
+                            st.cache_data.clear()
                             st.success("Hucha eliminada y saldo remanente reasignado exitosamente.")
                             st.rerun()
                         else:

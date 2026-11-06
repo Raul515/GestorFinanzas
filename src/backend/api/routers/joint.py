@@ -544,6 +544,8 @@ def delete_joint_sinking_fund(
     split_str = account.split_mode.value if hasattr(account.split_mode, "value") else account.split_mode
 
     # Veto patrimonial: Si la hucha tiene saldo > 0, es obligatorio indicar el destino
+    share_a: float = 0.0
+    share_b: float = 0.0
     if fund_balance > 0.0:
         if not action_on_balance:
             if reallocate_to_fund_id:
@@ -676,13 +678,28 @@ def delete_joint_sinking_fund(
                     try:
                         cats = repo.get_categories()
                         income_cat = next((c for c in cats if getattr(c, "type", "") == "ingreso"), None)
+                        if not income_cat:
+                            income_cat = repo.create_category(
+                                personal_cat_schemas.CategoryCreate(name="Ingresos Netos", type="ingreso")
+                            )
                         if income_cat:
                             subcats = repo.get_subcategories(category_id=income_cat.id)
-                            target_subcat = next((s for s in subcats if "reintegro" in s.name.lower() or "conjunt" in s.name.lower()), None)
+                            target_subcat = next(
+                                (
+                                    s for s in subcats
+                                    if s.name in (
+                                        "Reintegros por Cierres de Huchas Conjuntas",
+                                        "Reintegro Hucha Conjunta",
+                                    )
+                                    or "reintegro" in s.name.lower()
+                                    or "cierre" in s.name.lower()
+                                ),
+                                None,
+                            )
                             if not target_subcat:
                                 target_subcat = repo.create_subcategory(
                                     personal_cat_schemas.SubcategoryCreate(
-                                        name="Reintegro Hucha Conjunta",
+                                        name="Reintegros por Cierres de Huchas Conjuntas",
                                         category_id=income_cat.id,
                                     )
                                 )
@@ -707,10 +724,19 @@ def delete_joint_sinking_fund(
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se pudo eliminar la hucha.")
 
+    delete_payload: Dict[str, Any] = {"name": fund_name}
+    if action_on_balance:
+        delete_payload["action_on_balance"] = action_on_balance
+        if action_on_balance == "REFUND_MEMBERS":
+            delete_payload["refund_shares"] = {
+                "MEMBER_A": share_a,
+                "MEMBER_B": share_b,
+            }
+
     sync_service.emit_event(
         entity_type=schemas.SyncEntityType.SINKING_FUND,
         action=schemas.SyncAction.DELETE,
-        payload={"name": fund_name},
+        payload=delete_payload,
         origin_device_id=sync_service.local_device_id,
     )
 
