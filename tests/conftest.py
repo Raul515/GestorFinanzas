@@ -1,3 +1,5 @@
+import os
+import tempfile
 import pytest
 from typing import Generator
 from fastapi.testclient import TestClient
@@ -40,6 +42,26 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
         Base.metadata.drop_all(bind=engine)
 
+@pytest.fixture(autouse=True)
+def isolate_sync_folder_for_all_tests():
+    """Garantiza que ningún test del sistema escriba jamás en la carpeta real sync/."""
+    with tempfile.TemporaryDirectory(prefix="safe_test_sync_") as temp_dir:
+        old_env = os.environ.get("BASE_SYNC_DIR")
+        os.environ["BASE_SYNC_DIR"] = temp_dir
+        from backend.services.joint_sync_service import JointSyncService
+        from backend.api.routers.joint import get_sync_service
+        test_sync = JointSyncService(base_sync_dir=temp_dir, local_device_id="TEST_MOCK_DEVICE")
+        app.dependency_overrides[get_sync_service] = lambda: test_sync
+        try:
+            yield
+        finally:
+            app.dependency_overrides.pop(get_sync_service, None)
+            if old_env is not None:
+                os.environ["BASE_SYNC_DIR"] = old_env
+            else:
+                os.environ.pop("BASE_SYNC_DIR", None)
+
+
 @pytest.fixture(scope="function")
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """Cliente de pruebas TestClient conectado a la base de datos de test mediante sobreescritura de dependencias."""
@@ -52,7 +74,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_db, None)
 
 @pytest.fixture(scope="function")
 def seed_data(db_session: Session) -> dict[str, int]:

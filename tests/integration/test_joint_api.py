@@ -5,6 +5,7 @@ Verifica los contratos HTTP, códigos de estado (200, 201, 400, 404, 409) y obse
 
 from pathlib import Path
 import json
+import os
 import shutil
 import tempfile
 import pytest
@@ -26,10 +27,18 @@ def api_sync_dir():
 @pytest.fixture(autouse=True)
 def override_sync_service(api_sync_dir: str):
     """Sobreescribe el servicio de sincronización para que use el directorio temporal."""
+    old_env = os.environ.get("BASE_SYNC_DIR")
+    os.environ["BASE_SYNC_DIR"] = api_sync_dir
     sync_service = JointSyncService(base_sync_dir=api_sync_dir, local_device_id="TEST_DEVICE_A")
     app.dependency_overrides[get_sync_service] = lambda: sync_service
-    yield
-    app.dependency_overrides.pop(get_sync_service, None)
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_sync_service, None)
+        if old_env is not None:
+            os.environ["BASE_SYNC_DIR"] = old_env
+        else:
+            os.environ.pop("BASE_SYNC_DIR", None)
 
 
 def test_joint_status_and_onboarding_lifecycle(client: TestClient):

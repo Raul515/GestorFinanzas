@@ -76,8 +76,11 @@ class JointSyncService:
     """Servicio de gestión de buzones de sincronización y resolución de conflictos LWW."""
 
     def __init__(self, base_sync_dir: Optional[str] = None, local_device_id: Optional[str] = None):
+        env_sync_dir = os.environ.get("BASE_SYNC_DIR")
         if base_sync_dir:
             self.base_dir = Path(base_sync_dir)
+        elif env_sync_dir and env_sync_dir.strip():
+            self.base_dir = Path(env_sync_dir.strip())
         else:
             # Por defecto: directorio 'sync' en la raíz del proyecto
             root_dir = Path(__file__).resolve().parent.parent.parent.parent

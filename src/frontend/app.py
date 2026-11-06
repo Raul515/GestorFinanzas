@@ -508,8 +508,10 @@ if modulo_personal == "📊 Presupuesto y Meses":
         )
         if tx_unknown:
             api_client.clear_categories_cache()
+            st.cache_data.clear()
             todas_subcats = api_client.get_subcategorias()
-            subcat_options = {s['id']: s['nombre'] for s in todas_subcats} if todas_subcats else {}
+            categorias = api_client.get_categorias()
+            subcat_options = {s['id']: s.get('nombre') or s.get('name') for s in todas_subcats} if todas_subcats else {}
 
         # Totales del mes
         totales_m = calculate_category_totals(
@@ -678,15 +680,19 @@ if modulo_personal == "📊 Presupuesto y Meses":
                     tx_sub = subcat_map.get(tx_sub_id)
                     if not tx_sub and tx_sub_id:
                         api_client.clear_categories_cache()
+                        st.cache_data.clear()
                         fresh_subcats = api_client.get_subcategorias()
+                        fresh_cats = api_client.get_categorias()
                         if fresh_subcats:
                             subcat_map = {s['id']: s for s in fresh_subcats}
                             tx_sub = subcat_map.get(tx_sub_id)
-                    sub_nombre = tx_sub["nombre"] if tx_sub else f"Subcategoría #{tx_sub_id}"
+                        if fresh_cats:
+                            cat_map = {c['id']: c for c in fresh_cats}
+                    sub_nombre = (tx_sub.get("nombre") or tx_sub.get("name")) if tx_sub else f"Subcategoría #{tx_sub_id}"
 
                     cat_id = (tx_sub.get("categoria_id") if tx_sub.get("categoria_id") is not None else tx_sub.get("category_id")) if tx_sub else None
                     cat_obj = cat_map.get(cat_id) if cat_id else None
-                    cat_nombre = cat_obj["nombre"] if cat_obj else "—"
+                    cat_nombre = (cat_obj.get("nombre") or cat_obj.get("name")) if cat_obj else "—"
 
                     raw_fecha = str(tx.get("fecha") or tx.get("date") or "—")
                     try:
