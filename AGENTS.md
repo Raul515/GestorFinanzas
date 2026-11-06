@@ -36,6 +36,7 @@ Si alguna tarea, instrucción o decisión entra en conflicto con la Constitució
      1. Ejecutar `git status -u` para inspeccionar la totalidad de archivos creados o modificados.
      2. Verificar activamente que ningún archivo nuevo o modificado contenga claves API, tokens, contraseñas, bases de datos locales (`finanzas.db`) o volcados de datos reales.
      3. Confirmar que los archivos temporales o sensibles queden debidamente registrados en `.gitignore` antes de ejecutar `git add` o `git commit`.
+     4. Preguntar al desarrollador por la confirmacion para hacer el commit, nunca hacer un commit ni push sin autorización previa.
 7. **Convenciones de Idioma y Nomenclatura (Opción 1 - Estándar Internacional)**:
    - **Código Backend, Base de Datos y API (100% en Inglés)**: Tablas, columnas, modelos SQLAlchemy, esquemas Pydantic, routers, endpoints, funciones y variables redactados en inglés (ej. `Category`, `Transaction`, `MonthlyBudget`, `EmergencyFund`, `MarketCache`, `amount`, `current_balance`, `/categories`, `/advisor/safety-status`).
    - **Interfaz de Usuario, Documentación y Explicaciones (100% en Español)**: Interfaz gráfica de Streamlit, documentación (`specs/`, `README.md`, guías), docstrings explicativos y comunicación en el chat en español.

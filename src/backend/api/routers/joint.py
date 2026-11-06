@@ -290,7 +290,10 @@ def reset_joint_account(
     Emite un evento ACCOUNT (DELETE) para propagar el reset a la pareja.
     """
     account = repo.get_joint_account()
-    had_account = account is not None
+    # 1. Purgar previamente todas las carpetas (incluyendo deltas huérfanos en outbox)
+    sync_service.clear_sync_folders(keep_outbox=False)
+
+    # 2. Si existía cuenta, emitir el evento ACCOUNT (DELETE) limpio en outbox para propagar el reset a la pareja
     if account:
         try:
             sync_service.emit_event(
@@ -303,7 +306,6 @@ def reset_joint_account(
             logger.warning("No se pudo emitir evento ACCOUNT DELETE en reset: %s", exc)
 
     repo.reset_joint_account()
-    sync_service.clear_sync_folders(keep_outbox=had_account)
     logger.info("Cuenta conjunta reseteada al Estado Cero exitosamente.")
     return {"status": "success", "message": "Cuenta conjunta purgada y restablecida al Estado Cero."}
 
@@ -1347,4 +1349,36 @@ def clear_sync_errors(
     """Elimina permanentemente los eventos delta fallidos de la carpeta sync/error/."""
     deleted_count = sync_service.clear_failed_events()
     return {"status": "ok", "deleted_count": deleted_count}
+
+
+# ==========================================
+# 9. GESTIÓN DE BORRADO REMOTO DEL HOGAR
+# ==========================================
+
+@router.get("/remote-deletion/pending")
+def get_pending_remote_deletion(
+    db: Session = Depends(get_db),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Consulta si existe una solicitud pendiente de borrado remoto del hogar emitida por la pareja."""
+    pending = sync_service.get_pending_account_deletion(db)
+    return {"pending": pending is not None, "data": pending}
+
+
+@router.post("/remote-deletion/accept")
+def accept_remote_deletion(
+    db: Session = Depends(get_db),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Acepta el borrado remoto: purga la cuenta conjunta local y vuelve a Estado Cero."""
+    return sync_service.resolve_remote_account_deletion(db, accept=True)
+
+
+@router.post("/remote-deletion/reject")
+def reject_remote_deletion(
+    db: Session = Depends(get_db),
+    sync_service: JointSyncService = Depends(get_sync_service),
+) -> Dict[str, Any]:
+    """Rechaza el borrado remoto: conserva los datos locales intactos y archiva la solicitud."""
+    return sync_service.resolve_remote_account_deletion(db, accept=False)
 

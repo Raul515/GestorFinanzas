@@ -855,3 +855,86 @@ def test_joint_account_global_fixed_budget_and_calculation(client: TestClient):
     assert calc_data["total_household_budget"] == 1400.0
     assert calc_data["member_a_contribution"] == 700.0
     assert calc_data["member_b_contribution"] == 700.0
+
+
+def test_remote_deletion_endpoints_and_clear_errors(client: TestClient, api_sync_dir: str):
+    """Verifica los endpoints de borrado remoto (pending, reject, accept) y limpieza de errores."""
+    import uuid
+
+    # 1. Asegurar cuenta configurada
+    client.post(
+        "/joint/setup",
+        json={
+            "household_name": "Hogar Borrado Remoto",
+            "member_a_name": "Raul",
+            "member_b_name": "Evita",
+            "cohabitation_stage": "COHABITATION",
+            "split_mode": "EQUAL_50_50",
+            "contribution_strategy": "NOMINAL_TEMPLATE",
+            "member_a_reference_income": 2000.0,
+            "member_b_reference_income": 2000.0,
+        },
+    )
+
+    # 2. Sin eventos pendientes
+    pend_resp = client.get("/joint/remote-deletion/pending")
+    assert pend_resp.status_code == 200
+    assert pend_resp.json()["pending"] is False
+
+    # 3. Colocar un evento ACCOUNT DELETE en inbox
+    inbox_dir = Path(api_sync_dir) / "inbox"
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    del_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"household_name": "Hogar Borrado Remoto"},
+    }
+    with open(inbox_dir / "evt_delete.json", "w", encoding="utf-8") as f:
+        json.dump(del_evt, f)
+
+    # 4. Comprobar que pending lo detecta
+    pend_resp2 = client.get("/joint/remote-deletion/pending")
+    assert pend_resp2.status_code == 200
+    assert pend_resp2.json()["pending"] is True
+    assert pend_resp2.json()["data"]["origin_device_id"] == "REMOTE_MAC"
+
+    # 5. Rechazar borrado
+    rej_resp = client.post("/joint/remote-deletion/reject")
+    assert rej_resp.status_code == 200
+    assert rej_resp.json()["accepted"] is False
+
+    # La cuenta sigue existiendo
+    status_resp = client.get("/joint/status")
+    assert status_resp.json()["is_configured"] is True
+
+    # 6. Colocar otro evento ACCOUNT DELETE y ahora Aceptar
+    del_evt2 = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "REMOTE_MAC",
+        "timestamp_utc": "2026-11-20T13:00:00Z",
+        "payload": {"household_name": "Hogar Borrado Remoto"},
+    }
+    with open(inbox_dir / "evt_delete2.json", "w", encoding="utf-8") as f:
+        json.dump(del_evt2, f)
+
+    acc_resp = client.post("/joint/remote-deletion/accept")
+    assert acc_resp.status_code == 200
+    assert acc_resp.json()["accepted"] is True
+
+    # La cuenta vuelve a Estado Cero
+    status_resp2 = client.get("/joint/status")
+    assert status_resp2.json()["is_configured"] is False
+
+    # 7. Probar clear-errors
+    err_dir = Path(api_sync_dir) / "error"
+    err_dir.mkdir(parents=True, exist_ok=True)
+    with open(err_dir / "err_dummy.json", "w", encoding="utf-8") as f:
+        f.write("{}")
+    clear_resp = client.post("/joint/sync/clear-errors")
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["deleted_count"] == 1

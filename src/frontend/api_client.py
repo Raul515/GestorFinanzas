@@ -999,6 +999,8 @@ def setup_joint_account(payload: dict) -> Optional[Dict[str, Any]]:
     try:
         response = _session.post(url, json=payload, timeout=10)
         if response.status_code in (200, 201):
+            clear_joint_cache()
+            clear_annual_cache()
             return response.json()
         logger.warning("Fallo en setup_joint_account (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1575,6 +1577,8 @@ def reset_joint_account() -> bool:
     try:
         response = _session.post(url, timeout=10)
         if response.status_code == 200:
+            clear_joint_cache()
+            clear_annual_cache()
             return True
         logger.warning("Fallo en reset_joint_account (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1605,6 +1609,8 @@ def accept_joint_invitation() -> Optional[Dict[str, Any]]:
     try:
         response = _session.post(url, timeout=10)
         if response.status_code in (200, 201):
+            clear_joint_cache()
+            clear_annual_cache()
             return response.json()
         logger.warning("Fallo en accept_joint_invitation (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
@@ -1689,6 +1695,55 @@ def clear_joint_sync_errors() -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error("Error inesperado en clear_joint_sync_errors(): %s", e)
     return None
+
+
+def get_pending_remote_deletion() -> Optional[Dict[str, Any]]:
+    """Consulta si hay una solicitud de borrado remoto pendiente emitida por la pareja."""
+    url = f"{API_URL}/joint/remote-deletion/pending"
+    try:
+        response = _session.get(url, timeout=10)
+        if response.status_code == 200:
+            res_data = response.json()
+            if res_data.get("pending"):
+                return res_data.get("data")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en get_pending_remote_deletion en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_pending_remote_deletion(): %s", e)
+    return None
+
+
+def accept_remote_deletion() -> bool:
+    """Acepta la solicitud de borrado remoto del hogar y purga las cachés locales."""
+    url = f"{API_URL}/joint/remote-deletion/accept"
+    try:
+        response = _session.post(url, timeout=15)
+        if response.status_code == 200:
+            clear_joint_cache()
+            clear_annual_cache()
+            return True
+        logger.warning("Fallo en accept_remote_deletion (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en accept_remote_deletion en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en accept_remote_deletion(): %s", e)
+    return False
+
+
+def reject_remote_deletion() -> bool:
+    """Rechaza la solicitud de borrado remoto del hogar, conservando los datos locales."""
+    url = f"{API_URL}/joint/remote-deletion/reject"
+    try:
+        response = _session.post(url, timeout=15)
+        if response.status_code == 200:
+            return True
+        logger.warning("Fallo en reject_remote_deletion (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red en reject_remote_deletion en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en reject_remote_deletion(): %s", e)
+    return False
 
 
 

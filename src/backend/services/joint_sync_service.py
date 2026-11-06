@@ -227,6 +227,29 @@ class JointSyncService:
                 skipped_count += 1
                 continue
 
+            # Comprobar si es un evento ACCOUNT DELETE dirigido a la cuenta local
+            if event.entity_type == SyncEntityType.ACCOUNT and event.action == SyncAction.DELETE:
+                account = db.query(JointAccount).filter(JointAccount.id == 1).first()
+                if account:
+                    event_dt = datetime.fromisoformat(event.timestamp_utc.replace("Z", "+00:00"))
+                    account_dt = account.created_at
+                    if account_dt and account_dt.tzinfo is None:
+                        account_dt = account_dt.replace(tzinfo=timezone.utc)
+                    if account_dt and event_dt < account_dt:
+                        logger.info("Descartando ACCOUNT DELETE obsoleto emitido antes de la creación de la cuenta local.")
+                        self._archive_file(file_path)
+                        skipped_count += 1
+                        continue
+                    else:
+                        # Evento de borrado válido: retener en inbox para confirmación del usuario en UI
+                        logger.info("Evento ACCOUNT DELETE retenido en inbox a la espera de confirmación del usuario.")
+                        continue
+                else:
+                    logger.info("ACCOUNT DELETE recibido pero no existe cuenta conjunta local activa. Archivando.")
+                    self._archive_file(file_path)
+                    skipped_count += 1
+                    continue
+
             # Aplicar evento según tipo de entidad
             try:
                 self._apply_event(db, event)
@@ -398,6 +421,23 @@ class JointSyncService:
     def _apply_account_event(self, db: Session, event: SyncEventPayload) -> None:
         """Aplica eventos sobre la cuenta del hogar (ej. DELETE para reset remoto a Estado Cero)."""
         if event.action == SyncAction.DELETE:
+            account = db.query(JointAccount).filter(JointAccount.id == 1).first()
+            if account and account.created_at:
+                try:
+                    event_dt = datetime.fromisoformat(event.timestamp_utc.replace("Z", "+00:00"))
+                    account_dt = account.created_at
+                    if account_dt.tzinfo is None:
+                        account_dt = account_dt.replace(tzinfo=timezone.utc)
+                    if event_dt < account_dt:
+                        logger.info(
+                            "LWW: Descartando evento ACCOUNT DELETE obsoleto emitido (%s) antes de la creación de la cuenta actual (%s).",
+                            event_dt,
+                            account_dt,
+                        )
+                        return
+                except Exception as exc:
+                    logger.warning("Error comparando timestamps en ACCOUNT DELETE: %s", exc)
+
             from backend.database.componentes.sqlite_crud import SQLiteRepository
             repo = SQLiteRepository(db)
             repo.reset_joint_account()
@@ -754,6 +794,88 @@ class JointSyncService:
             except Exception as exc:
                 logger.warning("Error inspeccionando posible invitación en %s: %s", file_path.name, exc)
         return None
+
+    def get_pending_account_deletion(self, db: Session) -> Optional[Dict[str, Any]]:
+        """
+        Inspecciona sync/inbox/ buscando si hay un evento entrante ACCOUNT DELETE
+        emitido por la pareja y posterior a la creación de la cuenta local.
+        """
+        if not self.inbox_dir.exists():
+            return None
+        account = db.query(JointAccount).filter(JointAccount.id == 1).first()
+        if not account:
+            return None
+
+        inbox_files = [
+            f for f in self.inbox_dir.iterdir()
+            if f.is_file() and f.suffix == ".json" and not f.name.endswith(".tmp") and f.name != ".gitkeep"
+        ]
+        for file_path in inbox_files:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                entity = data.get("entity_type")
+                action = data.get("action")
+                if (entity == SyncEntityType.ACCOUNT.value or entity == "ACCOUNT") and (action in (SyncAction.DELETE.value, "DELETE")):
+                    origin = data.get("origin_device_id")
+                    if origin != self.local_device_id and origin != "LOCAL_DEVICE":
+                        event_dt_str = data.get("timestamp_utc", "")
+                        event_dt = datetime.fromisoformat(event_dt_str.replace("Z", "+00:00"))
+                        account_dt = account.created_at
+                        if account_dt and account_dt.tzinfo is None:
+                            account_dt = account_dt.replace(tzinfo=timezone.utc)
+                        if not account_dt or event_dt >= account_dt:
+                            partner_name = account.member_b_name if account.local_profile == "MEMBER_A" else account.member_a_name
+                            return {
+                                "event_id": data.get("event_id"),
+                                "filename": file_path.name,
+                                "origin_device_id": origin,
+                                "timestamp_utc": event_dt_str,
+                                "household_name": account.household_name,
+                                "partner_name": partner_name,
+                            }
+            except Exception as exc:
+                logger.warning("Error inspeccionando posible borrado remoto en %s: %s", file_path.name, exc)
+        return None
+
+    def resolve_remote_account_deletion(self, db: Session, accept: bool) -> Dict[str, Any]:
+        """
+        Resuelve una petición de borrado remoto pendiente:
+        - accept=True: Purga la cuenta conjunta local, vuelve a Estado Cero y archiva el evento.
+        - accept=False: Conserva la cuenta conjunta local y archiva el evento sin tocar la base de datos.
+        """
+        pending = self.get_pending_account_deletion(db)
+        if not pending:
+            return {"status": "error", "message": "No hay ninguna petición de borrado remoto pendiente."}
+
+        event_id = pending["event_id"]
+        filename = pending["filename"]
+        file_path = self.inbox_dir / filename
+
+        if file_path.exists():
+            self._archive_file(file_path)
+
+        if accept:
+            from backend.database.componentes.sqlite_crud import SQLiteRepository
+            repo = SQLiteRepository(db)
+            repo.reset_joint_account()
+            self.clear_sync_folders(keep_outbox=False)
+            logger.info("Borrado remoto aceptado por el usuario: cuenta reseteada a Estado Cero.")
+        else:
+            logger.info("Borrado remoto rechazado por el usuario: se conservan los datos locales.")
+            applied_record = JointAppliedSyncEvent(
+                event_id=event_id,
+                entity_type="ACCOUNT",
+                action="DELETE",
+            )
+            db.add(applied_record)
+            db.commit()
+
+        return {
+            "status": "success",
+            "accepted": accept,
+            "message": "Cuenta reseteada a Estado Cero." if accept else "Datos locales conservados.",
+        }
 
     def get_sync_events_detail(self, max_processed: int = 30) -> Dict[str, Any]:
         """

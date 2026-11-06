@@ -199,12 +199,18 @@ def render_updater_view() -> None:
 
                         if apply_res.get("requires_rebuild"):
                             st.warning(
-                                "⚠️ **Cambios en dependencias detectados:** Se han modificado librerías en `requirements/`. "
-                                "Si ejecutas la aplicación con Docker Compose, se recomienda reiniciar los contenedores "
-                                "(`docker compose restart`) para activar los nuevos paquetes."
+                                "⚠️ **Nuevas dependencias detectadas:** Se han modificado librerías en `requirements/`. "
+                                "Si ejecutas la aplicación con Docker Compose, es necesario reconstruir los contenedores "
+                                "(`docker compose up --build`) para instalar y activar los nuevos paquetes."
+                            )
+                        else:
+                            st.info(
+                                "🐳 **Si estás utilizando Docker:** Para que el servidor backend cargue los nuevos cambios "
+                                "de Python en memoria, se recomienda reiniciar los contenedores ejecutando `docker compose restart` "
+                                "(o pulsando el botón de reinicio en la aplicación de Docker Desktop)."
                             )
 
-                        st.info("💡 Por favor, pulsa el botón a continuación para recargar la aplicación y cargar los nuevos cambios.")
+                        st.info("💡 Por favor, pulsa el botón a continuación para recargar la interfaz visual.")
                         if st.button("🔄 Recargar Aplicación Ahora", key="btn_reload_after_update", type="primary"):
                             st.session_state.pop("updater_check_result", None)
                             st.rerun()

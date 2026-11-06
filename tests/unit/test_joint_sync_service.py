@@ -578,7 +578,7 @@ def test_outbox_rotation(temp_sync_dir: str):
 
 
 def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
-    """Verifica que un evento remoto ACCOUNT (DELETE) restablezca la base local a Estado Cero."""
+    """Verifica que un evento remoto ACCOUNT (DELETE) quede retenido y al ser aceptado restablezca a Estado Cero."""
     repo = SQLiteRepository(db_session)
 
     # Configurar cuenta local previa
@@ -608,11 +608,106 @@ def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
     with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
         json.dump(reset_evt, f)
 
+    # process_inbox retiene el evento sin borrar automáticamente la cuenta local
     res = service.process_inbox(db_session)
-    assert res["processed_count"] == 1
+    assert res["processed_count"] == 0
+    assert repo.get_joint_account() is not None
+
+    # Inspeccionar petición de borrado pendiente
+    pending = service.get_pending_account_deletion(db_session)
+    assert pending is not None
+    assert pending["household_name"] == "Casa Test Reset Remoto"
+
+    # Usuario acepta el borrado remoto
+    resolve_res = service.resolve_remote_account_deletion(db_session, accept=True)
+    assert resolve_res["status"] == "success"
+    assert resolve_res["accepted"] is True
+
     # La cuenta ha sido reseteada al Estado Cero y no quedan eventos aplicados huérfanos
     assert repo.get_joint_account() is None
     assert db_session.query(JointAppliedSyncEvent).count() == 0
+
+
+def test_account_delete_rejected_preserves_local_data(temp_sync_dir: str, db_session: Session):
+    """Verifica que si el usuario rechaza el borrado remoto, se conservan intactos los datos locales."""
+    repo = SQLiteRepository(db_session)
+
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Conservada",
+        cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2000.0,
+        member_b_reference_income=2000.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+    assert repo.get_joint_account() is not None
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    reset_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "payload": {"household_name": "Casa Conservada"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
+        json.dump(reset_evt, f)
+
+    service.process_inbox(db_session)
+    pending = service.get_pending_account_deletion(db_session)
+    assert pending is not None
+
+    # Usuario rechaza el borrado remoto
+    resolve_res = service.resolve_remote_account_deletion(db_session, accept=False)
+    assert resolve_res["status"] == "success"
+    assert resolve_res["accepted"] is False
+
+    # Datos locales preservados
+    account = repo.get_joint_account()
+    assert account is not None
+    assert account.household_name == "Casa Conservada"
+    # Ya no hay peticiones pendientes
+    assert service.get_pending_account_deletion(db_session) is None
+
+
+def test_account_delete_stale_ignored(temp_sync_dir: str, db_session: Session):
+    """Verifica que un evento remoto ACCOUNT (DELETE) con timestamp anterior a la creación de la cuenta local sea descartado."""
+    repo = SQLiteRepository(db_session)
+
+    setup_req = JointAccountSetupRequest(
+        household_name="Casa Nueva Post-Reset",
+        cohabitation_stage=CohabitationStage.PRE_COHABITATION,
+        contribution_strategy=ContributionStrategy.NOMINAL_TEMPLATE,
+        split_mode=SplitMode.EQUAL_50_50,
+        member_a_reference_income=2000.0,
+        member_b_reference_income=2000.0,
+        local_profile=ProfileIdentifier.MEMBER_B,
+        remote_profile=ProfileIdentifier.MEMBER_A,
+    )
+    repo.create_joint_account(setup_req)
+    assert repo.get_joint_account() is not None
+
+    service = JointSyncService(base_sync_dir=temp_sync_dir, local_device_id="PC_RECEIVER")
+    stale_reset_evt = {
+        "event_id": str(uuid.uuid4()),
+        "entity_type": "ACCOUNT",
+        "action": "DELETE",
+        "origin_device_id": "PARTNER_PC",
+        "timestamp_utc": "2020-01-01T10:00:00Z",  # Fecha pasada
+        "payload": {"household_name": "Casa Vieja"},
+    }
+    with open(Path(temp_sync_dir) / "inbox" / "evt_stale_reset.json", "w", encoding="utf-8") as f:
+        json.dump(stale_reset_evt, f)
+
+    res = service.process_inbox(db_session)
+    # Debe procesarlo (archivarlo) pero sin destruir la cuenta local
+    account = repo.get_joint_account()
+    assert account is not None
+    assert account.household_name == "Casa Nueva Post-Reset"
 
 
 def test_subcategory_sync_upsert_and_delete(temp_sync_dir: str, db_session: Session):

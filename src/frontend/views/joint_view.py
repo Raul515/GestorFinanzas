@@ -83,6 +83,13 @@ def _render_zero_state_wizard() -> None:
         h_name = inv.get("household_name", "Hogar Compartido")
         creator = inv.get("member_a_name", "tu pareja")
         split_lbl = "Al 50%" if "50" in str(inv.get("split_mode", "50")) else "Proporcional a Ingresos"
+        strat_val = inv.get("contribution_strategy", "NOMINAL_TEMPLATE")
+        custom_budget_val = float(inv.get("custom_total_monthly_budget", 0.0) or 0.0)
+        strat_lbl = (
+            f"Presupuesto Fijo Global ({custom_budget_val:,.2f} €/mes)"
+            if strat_val == "GLOBAL_FIXED"
+            else "Calculado por Conceptos (Necesidades + Huchas)"
+        )
         cohab_lbl = "Convivencia Inicial" if "DATING" in str(inv.get("cohabitation_stage", "")) or "PRE" in str(inv.get("cohabitation_stage", "")) else "Matrimonio / Proyecto a Largo Plazo"
 
         st.markdown(
@@ -94,6 +101,7 @@ def _render_zero_state_wizard() -> None:
                 </p>
                 <p style="color: #cbd5e1; margin: 0 0 14px 0; font-size: 0.9rem;">
                     • <b>Modo de Reparto pactado</b>: {split_lbl}<br>
+                    • <b>Estrategia de Presupuesto</b>: {strat_lbl}<br>
                     • <b>Etapa de Convivencia</b>: {cohab_lbl}
                 </p>
                 <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">
@@ -107,6 +115,9 @@ def _render_zero_state_wizard() -> None:
             with st.spinner("Conectando con la cuenta conjunta de tu pareja..."):
                 res_acc = api_client.accept_joint_invitation()
                 if res_acc:
+                    api_client.clear_joint_cache()
+                    api_client.clear_annual_cache()
+                    st.cache_data.clear()
                     st.success("🎉 ¡Te has unido a la cuenta conjunta exitosamente!")
                     st.rerun()
                 else:
@@ -230,6 +241,9 @@ def _render_zero_state_wizard() -> None:
                 with st.spinner("Configurando el espacio del hogar..."):
                     res = api_client.setup_joint_account(payload)
                     if res:
+                        api_client.clear_joint_cache()
+                        api_client.clear_annual_cache()
+                        st.cache_data.clear()
                         st.success("🎉 ¡Cuenta conjunta configurada exitosamente!")
                         st.rerun()
                     else:
@@ -248,6 +262,47 @@ def _render_configured_joint_view(selected_year: int, account: Dict[str, Any], s
     if sync_status.get("inbox_pending_count", 0) > 0:
         api_client.trigger_process_inbox()
         sync_status = api_client.get_sync_status()
+
+    # Comprobar si existe una solicitud de borrado remoto pendiente emitida por la pareja
+    pending_del = api_client.get_pending_remote_deletion()
+    if pending_del:
+        partner_name = pending_del.get("partner_name", "Tu pareja")
+        hh_name = pending_del.get("household_name", "el hogar")
+        st.markdown(
+            f"""
+            <div style="background: linear-gradient(135deg, #7f1d1d, #450a0a); border: 2px solid #ef4444; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <h3 style="color: #fca5a5; margin: 0 0 8px 0;">⚠️ Solicitud de Desactivación del Hogar Detectada</h3>
+                <p style="color: #fef2f2; margin: 0 0 10px 0; font-size: 1rem;">
+                    Tu pareja (<b>{partner_name}</b>) ha desactivado la cuenta conjunta de <b>'{hh_name}'</b> en su dispositivo.
+                </p>
+                <p style="color: #fecaca; margin: 0 0 14px 0; font-size: 0.9rem;">
+                    ¿Qué deseas hacer en este dispositivo? Puedes aceptar el borrado para volver al Estado Cero, o rechazarlo para conservar tus datos locales intactos.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_acc, col_rej = st.columns(2)
+        with col_acc:
+            if st.button("🗑️ Aceptar Borrado y Volver al Estado Cero", type="primary", width="stretch", key="btn_accept_remote_del"):
+                with st.spinner("Restableciendo cuenta conjunta al Estado Cero..."):
+                    if api_client.accept_remote_deletion():
+                        api_client.clear_joint_cache()
+                        api_client.clear_annual_cache()
+                        st.cache_data.clear()
+                        st.success("✅ Cuenta conjunta restablecida al Estado Cero.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al procesar el restablecimiento.")
+        with col_rej:
+            if st.button("🛡️ Rechazar y Conservar Mis Datos Locales", width="stretch", key="btn_reject_remote_del"):
+                with st.spinner("Conservando datos locales..."):
+                    if api_client.reject_remote_deletion():
+                        st.info("🛡️ Solicitud de borrado descartada. Tus datos locales se mantienen intactos.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al descartar la solicitud.")
+        st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px dashed #ef4444;'>", unsafe_allow_html=True)
 
     is_synced = sync_status.get("is_synchronized", True)
     inbox_cnt = sync_status.get("inbox_pending_count", 0)
@@ -1827,6 +1882,9 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
             with st.spinner("Purgando cuenta conjunta y limpiando sincronización..."):
                 ok = api_client.reset_joint_account()
                 if ok:
+                    api_client.clear_joint_cache()
+                    api_client.clear_annual_cache()
+                    st.cache_data.clear()
                     st.success("✅ Cuenta conjunta desactivada con éxito. Volviendo al estado inicial...")
                     st.rerun()
                 else:

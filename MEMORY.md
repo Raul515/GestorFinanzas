@@ -127,7 +127,7 @@
 
 ---
 
-| **2026-11-06** | Onboarding de Presupuesto Fijo y Limpieza de Errores de Sincronización | Inclusión de la estrategia de contribución (`GLOBAL_FIXED`) e importe en el formulario de bienvenida de la cuenta conjunta. Propagación en invitaciones Syncthing. Corrección de import de `JointAccount` en `joint_sync_service.py` y nuevo botón en UI para purgar eventos fallidos de la carpeta de error. Suite pasando al 100%. |
+| **2026-11-06** | Robustecimiento de Sincronización Conjunta, LWW y Borrado Remoto Interactivo | Inclusión de la estrategia de contribución (`GLOBAL_FIXED` / cuota) en el formulario de bienvenida de la cuenta conjunta y en la tarjeta de invitación Syncthing detectada. Resolución de datos huérfanos/fantasma al resetear mediante invalidación total de caché frontend (`st.cache_data.clear()`). Protección LWW en `ACCOUNT DELETE` descartando eventos obsoletos y habilitando banner interactivo en Streamlit con confirmación de usuario para aceptar o rechazar el borrado remoto conservando los datos locales. Endpoint `POST /joint/sync/clear-errors` y botón en UI para purgar eventos en error. Suite pasando al 100% (60/60 tests). |
 
 ---
 
