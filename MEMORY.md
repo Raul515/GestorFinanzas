@@ -127,6 +127,10 @@
 
 ---
 
+| **2026-11-06** | Onboarding de Presupuesto Fijo y Limpieza de Errores de Sincronización | Inclusión de la estrategia de contribución (`GLOBAL_FIXED`) e importe en el formulario de bienvenida de la cuenta conjunta. Propagación en invitaciones Syncthing. Corrección de import de `JointAccount` en `joint_sync_service.py` y nuevo botón en UI para purgar eventos fallidos de la carpeta de error. Suite pasando al 100%. |
+
+---
+
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
