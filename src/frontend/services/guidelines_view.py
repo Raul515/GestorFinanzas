@@ -533,14 +533,12 @@ def render_monthly_guidelines_expander(
                                         st.error("No se pudo aplicar la estrategia en el backend.")
 
                         # --- ESTRATEGIAS DE BONUS / PAGA EXTRA ---
-                        elif scen_type == "EXTRAORDINARY_INCOME":
-                            sub_opts_sav = {s["id"]: s["nombre"] for s in savings_subcats}
-                            sub_opts_wants = {s["id"]: s["nombre"] for s in wants_subcats}
-
+                        # Estrategia 0: Inyección a Fondo de Emergencia
+                        elif scen_type == "EXTRAORDINARY_INCOME" and s_idx == 0:
                             if not is_ef_completed:
-                                st.caption("🔒 **Inyección a Fondo de Emergencia**: El extra se canaliza al fondo para completar los 3 meses.")
+                                st.caption("🔒 **Inyección a Fondo de Emergencia**: El extra se canaliza forzosamente al fondo hasta completar los 3 meses.")
                                 target_bonus_sub = emergency_subcat_id or (savings_subcats[0]["id"] if savings_subcats else 1)
-                                if st.button(f"⚡ Inyectar al Fondo ({eff_amount:,.2f} €)", key=f"btn_bonus_ef_{m_key}_{g_idx}", type="primary"):
+                                if st.button(f"⚡ Inyectar al Fondo ({eff_amount:,.2f} €)", key=f"btn_bonus_ef_{m_key}_{g_idx}_{s_idx}", type="primary"):
                                     if api_client:
                                         payload = {
                                             "month_key": m_key,
@@ -554,20 +552,44 @@ def render_monthly_guidelines_expander(
                                             st.toast("¡Fondo de Emergencia fortalecido con éxito!", icon="🛡️")
                                             st.rerun()
                             else:
+                                st.caption("✅ **Fondo Completo**: Ya cubres la meta de 3 meses. Recomendamos la opción 2 (Regla 80/20), pero puedes reforzarlo si lo deseas.")
+                                target_bonus_sub = emergency_subcat_id or (savings_subcats[0]["id"] if savings_subcats else 1)
+                                if st.button(f"⚡ Reforzar Fondo ({eff_amount:,.2f} €)", key=f"btn_bonus_ef_{m_key}_{g_idx}_{s_idx}"):
+                                    if api_client:
+                                        payload = {
+                                            "month_key": m_key,
+                                            "strategy_type": "EXTRAORDINARY_INCOME",
+                                            "is_partial": False,
+                                            "savings_allocations": [{"subcategory_id": target_bonus_sub, "amount": eff_amount}],
+                                            "wants_allocations": [],
+                                        }
+                                        res = api_client.apply_guideline_strategy(payload)
+                                        if res and res.get("success"):
+                                            st.toast("¡Fondo de Emergencia reforzado con éxito!", icon="🛡️")
+                                            st.rerun()
+
+                        # Estrategia 1: Regla de Bonus (80% Inversión / 20% Disfrute)
+                        elif scen_type == "EXTRAORDINARY_INCOME" and s_idx == 1:
+                            sub_opts_sav = {s["id"]: s["nombre"] for s in savings_subcats}
+                            sub_opts_wants = {s["id"]: s["nombre"] for s in wants_subcats}
+
+                            if not is_ef_completed:
+                                st.caption("🔒 **Bloqueado por Salvaguarda Patrimonial**: No se puede destinar capital extraordinario a ocio/disfrute mientras el Fondo de Emergencia no cubra los 3 meses mínimos obligatorios.")
+                            else:
                                 st.caption("🎉 **Regla de Bonus (80/20)**: 80% a inversión y 20% a ocio para celebrarlo.")
                                 target_inv_id = st.selectbox(
                                     f"Inversión (80% = {eff_amount * 0.8:,.2f} €):",
                                     options=list(sub_opts_sav.keys()),
                                     format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
-                                    key=f"bonus_inv_{m_key}_{g_idx}",
+                                    key=f"bonus_inv_{m_key}_{g_idx}_{s_idx}",
                                 )
                                 target_wants_id = st.selectbox(
                                     f"Presupuesto Deseos (20% = {eff_amount * 0.2:,.2f} €):",
                                     options=list(sub_opts_wants.keys()),
                                     format_func=lambda x: sub_opts_wants.get(x, f"Subcat {x}"),
-                                    key=f"bonus_wants_{m_key}_{g_idx}",
+                                    key=f"bonus_wants_{m_key}_{g_idx}_{s_idx}",
                                 )
-                                if st.button(f"⚡ Aplicar Distribución de Bonus ({eff_amount:,.2f} €)", key=f"btn_bonus_split_{m_key}_{g_idx}"):
+                                if st.button(f"⚡ Aplicar Distribución de Bonus ({eff_amount:,.2f} €)", key=f"btn_bonus_split_{m_key}_{g_idx}_{s_idx}"):
                                     if api_client:
                                         payload = {
                                             "month_key": m_key,
@@ -748,7 +770,7 @@ def render_monthly_guidelines_expander(
                             options=list(sub_opts_sav.keys()),
                             index=list(sub_opts_sav.keys()).index(default_target) if default_target in sub_opts_sav else 0,
                             format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
-                            key=f"sweep_target_{m_key}",
+                            key=f"sweep_target_cushion_{m_key}",
                         )
                     with sweep_col2:
                         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
@@ -783,7 +805,7 @@ def render_monthly_guidelines_expander(
                         options=list(sub_opts_sav.keys()),
                         index=list(sub_opts_sav.keys()).index(default_target) if default_target in sub_opts_sav else 0,
                         format_func=lambda x: sub_opts_sav.get(x, f"Subcat {x}"),
-                        key=f"sweep_target_{m_key}",
+                        key=f"sweep_target_trad_{m_key}",
                     )
                 with sweep_col2:
                     st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)

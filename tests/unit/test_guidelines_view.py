@@ -701,5 +701,87 @@ def test_render_suppressed_recommendations_when_sweep_active(
     assert "Pautas Operativas y Asignación con Cifras Reales" not in combined_html
 
 
+@patch("streamlit.expander")
+@patch("streamlit.markdown")
+@patch("streamlit.columns")
+@patch("streamlit.caption")
+@patch("streamlit.button")
+@patch("streamlit.selectbox")
+def test_render_extraordinary_income_ef_incomplete_keys_are_unique(
+    mock_selectbox, mock_button, mock_caption, mock_cols, mock_markdown, mock_expander
+):
+    """Verifica que el renderizado de Ingreso Extraordinario con fondo incompleto no duplique claves de widgets."""
+    mock_exp_ctx = MagicMock()
+    mock_expander.return_value.__enter__.return_value = mock_exp_ctx
+
+    def _mock_cols_handler(spec):
+        n = spec if isinstance(spec, int) else len(spec)
+        res = []
+        for _ in range(n):
+            c = MagicMock()
+            c.__enter__.return_value = c
+            res.append(c)
+        return res
+
+    mock_cols.side_effect = _mock_cols_handler
+
+    captured_keys = []
+
+    def _button_spy(*args, **kwargs):
+        if "key" in kwargs:
+            captured_keys.append(kwargs["key"])
+        return False
+
+    def _selectbox_spy(*args, **kwargs):
+        if "key" in kwargs:
+            captured_keys.append(kwargs["key"])
+        return args[0] if args else None
+
+    mock_button.side_effect = _button_spy
+    mock_selectbox.side_effect = _selectbox_spy
+
+    cats = [
+        {"id": 1, "nombre": "Ingresos Netos", "tipo": "ingreso"},
+        {"id": 2, "nombre": "Necesidades Básicas", "tipo": "gasto"},
+        {"id": 3, "nombre": "Deseos", "tipo": "gasto"},
+        {"id": 4, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+    ]
+    subcats = [
+        {"id": 10, "nombre": "Fondo de emergencia", "categoria_id": 4},
+        {"id": 20, "nombre": "Ocio", "categoria_id": 3},
+    ]
+
+    # Ingresos reales (2500 €) > presupuesto (2000 €) en un 25% con Fondo de Emergencia incompleto
+    report = evaluate_monthly_guidelines(
+        month_key="2026-11",
+        month_name="Noviembre",
+        real_income=2500.0,
+        budget_income=2000.0,
+        real_needs=1000.0,
+        real_wants=500.0,
+        real_savings=500.0,
+        safety_status={"is_completed": False, "coverage_months": 1.2, "target_months": 3.0, "gap": 1500.0},
+    )
+
+    render_monthly_guidelines_expander(
+        report,
+        expanded=True,
+        subcategories=subcats,
+        categories=cats,
+    )
+
+    # Verificar que se capturaron claves y que NINGUNA está duplicada
+    assert len(captured_keys) > 0
+    assert len(captured_keys) == len(set(captured_keys)), f"Claves duplicadas encontradas: {captured_keys}"
+    assert "btn_bonus_ef_2026-11_0_0" in captured_keys or any("btn_bonus_ef" in k for k in captured_keys)
+
+    # Verificar que las captions de bloqueo y canalización aparecieron
+    caption_calls = [call[0][0] for call in mock_caption.call_args_list if call[0]]
+    combined_captions = " ".join(caption_calls)
+    assert "Inyección a Fondo de Emergencia" in combined_captions
+    assert "Bloqueado por Salvaguarda Patrimonial" in combined_captions
+
+
+
 
 
