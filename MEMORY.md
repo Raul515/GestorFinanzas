@@ -136,6 +136,10 @@
 
 ---
 
+| **2026-11-13** | Spec 016 Aprobada: Micro-App Móvil Ligera "Quick-Capture" (PWA + APK Android) | Especificación formal y plan técnico aprobados para la captura de gastos personales en 5 segundos. Operativa 100% offline (cola en IndexedDB), sincronización directa por Wi-Fi doméstica al llegar a casa (sin necesidad de Syncthing en el móvil), despliegue dual (PWA servida en FastAPI `/mobile` para iOS/Android y APK compilada vía GitHub Actions), y arquitectura modular extensible a la Cuenta Conjunta y futuros módulos IA. Rama `feat/spec-016-micro-app-movil-quick-capture`. |
+
+---
+
 ## 4. Deuda Técnica y Estado de las Especificaciones
 
 1. **Spec 000 Completada**: Infraestructura de pruebas automatizadas y servicios financieros desacoplados.
@@ -203,7 +207,15 @@
       - *Protección en Traspasos*: Bloqueo estricto si origen == destino (UI + API con HTTP 400).
       - *Batería de Pruebas*: 18/18 tests en `test_joint_accounting_service.py` y 6/6 en `test_personal_ux_frontend.py` pasando al 100%.
 
-17. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
+17. **Spec 016 Aprobada**: Micro-App Móvil Ligera "Quick-Capture" para Gastos Personales (PWA + APK Android vía GitHub Actions). Plan técnico desglosado en 6 fases estrictamente secuenciales:
+    - *Fase 1*: Backend — Esquemas de datos y servicio de sincronización móvil (`MobileSyncService`).
+    - *Fase 2*: Backend — Router REST, endpoints móviles (`/api/mobile/*`) y servidor PWA estático.
+    - *Fase 3*: Frontend Móvil — Micro-app Quick-Capture en `src/mobile/` (Vite, React 19, TypeScript, Tailwind, teclado táctil, chips rápidos y UX en 5 segundos).
+    - *Fase 4*: Persistencia offline móvil y motor de sincronización Wi-Fi (IndexedDB, cola de sincronización, auto-flush y exportador JSON).
+    - *Fase 5*: Empaquetado APK con Capacitor y pipeline CI/CD en GitHub Actions (`build-mobile-apk.yml` y `guia_companion_movil.md`).
+    - *Fase 6*: Integración en panel de ajustes de Streamlit (código QR, IP local, monitor de sincronización) y verificación E2E.
+
+18. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
    - **Optimizaciones Avanzadas de Rendimiento y Streaming (Post-Spec 014)**:
      - *Streaming de Respuestas de IA*: Implementación de SSE (Server-Sent Events) en endpoints de agentes (`/advisor`, `/copilot`) y consumo mediante `st.write_stream()` en Streamlit para reducir la latencia percibida (Time-to-First-Token < 500 ms) frente al actual modo por lotes.
      - *Paginación en el Buscador Global de Gastos*: Incorporación de `limit` y `offset` en `/joint/transactions/search` para proteger la memoria RAM y el ancho de banda cuando los históricos familiares superen los miles de movimientos.
