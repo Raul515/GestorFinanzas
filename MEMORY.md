@@ -125,6 +125,7 @@
 ---
 
 | **2026-11-05** | Modalidad de Presupuesto Fijo Global del Hogar (`GLOBAL_FIXED`) | En Parámetros de la Cuenta Conjunta, permite fijar un presupuesto mensual total (`custom_total_monthly_budget`) repartido equitativa (50/50) o proporcionalmente a ingresos. Asigna primero a necesidades y remanente a huchas activas. Incluye migración SQLite y sincronización P2P vía Syncthing. |
+| **2026-11-13** | Spec 016 Fases 1 a 6 Implementadas | Micro-app móvil "Quick-Capture" (< 5s por gasto): servicio de sincronización idempotente `MobileSyncService`, router REST `/api/mobile/*`, interfaz táctil PWA autocontenida de 30 ms en `src/mobile/dist/index.html`, motor de cola offline (`localStorage`/IndexedDB) con Service Worker, tipado ambiental TypeScript, workflow CI/CD de compilación APK en GitHub Actions (`build-mobile-apk.yml`), generador QR SVG puro en Python (0 dependencias) e integración en Streamlit con pruebas unitarias y E2E (19/19 tests pasando). Mantenida abierta para análisis de auto-actualización APK y ajustes personales móviles. |
 
 ---
 
@@ -207,13 +208,14 @@
       - *Protección en Traspasos*: Bloqueo estricto si origen == destino (UI + API con HTTP 400).
       - *Batería de Pruebas*: 18/18 tests en `test_joint_accounting_service.py` y 6/6 en `test_personal_ux_frontend.py` pasando al 100%.
 
-17. **Spec 016 Aprobada**: Micro-App Móvil Ligera "Quick-Capture" para Gastos Personales (PWA + APK Android vía GitHub Actions). Plan técnico desglosado en 6 fases estrictamente secuenciales:
-    - *Fase 1*: Backend — Esquemas de datos y servicio de sincronización móvil (`MobileSyncService`).
-    - *Fase 2*: Backend — Router REST, endpoints móviles (`/api/mobile/*`) y servidor PWA estático.
-    - *Fase 3*: Frontend Móvil — Micro-app Quick-Capture en `src/mobile/` (Vite, React 19, TypeScript, Tailwind, teclado táctil, chips rápidos y UX en 5 segundos).
-    - *Fase 4*: Persistencia offline móvil y motor de sincronización Wi-Fi (IndexedDB, cola de sincronización, auto-flush y exportador JSON).
-    - *Fase 5*: Empaquetado APK con Capacitor y pipeline CI/CD en GitHub Actions (`build-mobile-apk.yml` y `guia_companion_movil.md`).
-    - *Fase 6*: Integración en panel de ajustes de Streamlit (código QR, IP local, monitor de sincronización) y verificación E2E.
+17. **Spec 016 (Fases 1 a 6 Implementadas — Pendiente de Cierre)**: Micro-App Móvil Ligera "Quick-Capture" para Gastos Personales (PWA + APK Android vía GitHub Actions). Desarrollada en 6 fases estrictamente secuenciales con 19 pruebas automatizadas pasando al 100%:
+    - *Fase 1 (Backend - Esquemas y Servicio de Sincronización)*: Esquemas Pydantic `MobileTransactionPayload`, `MobileSyncRequest`, `MobileSyncResponse`, `MobileCatalogResponse`, `MobileSyncStatusResponse`. Modelo SQLAlchemy `Transaction` con columna `mobile_event_id: Mapped[Optional[str]]`, índice B-Tree `idx_transactions_mobile_event_id` y servicio desacoplado `MobileSyncService` con ingesta idempotente O(1), cálculo de frecuencias/conceptos y rotación de deltas JSON. 7 tests unitarios pasando.
+    - *Fase 2 (Backend - Router REST y Montaje Estático)*: Router `/api/mobile/catalog`, `/api/mobile/sync`, `/api/mobile/status`, `/api/mobile/process-folder`. Montaje estático de `/mobile` y worker lifespan asíncrono `run_periodic_mobile_sync_checker()` en `main.py`. 6 tests de integración pasando.
+    - *Fase 3 (Frontend Móvil - Quick-Capture UI)*: Micro-app táctil ultraligera en `src/mobile/` (React 19, TypeScript, teclado numérico con haptic feedback, selector modal de subcategorías con emojis, chips de conceptos frecuentes y guardado en < 5s). PWA autocontenida de 30 ms en `src/mobile/dist/index.html`.
+    - *Fase 4 (Offline Engine y Service Worker PWA)*: Persistencia offline en `localStorage`/IndexedDB con cola FIFO, auto-flush inmediato al detectar la Wi-Fi de casa o el backend activo, `sw.js` para carga 100% offline y declaraciones de tipos ambientales en `react-ambient.d.ts` (0 errores de compilación, 0 node_modules en local/Docker). 2 tests unitarios pasando.
+    - *Fase 5 (Capacitor y CI/CD GitHub Actions)*: Configuración nativa `capacitor.config.ts`, workflow `.github/workflows/build-mobile-apk.yml` para compilación desatendida de `app-debug.apk` con Java 17 y Gradle sin requerir SDKs en local, y manual de despliegue en `docs/guia_companion_movil.md`.
+    - *Fase 6 (Integración Streamlit, Generador QR Puro y E2E)*: Métodos de cliente en `api_client.py`, generador de códigos QR SVG en Python puro con `Enum` sin dependencias externas (`qrcodegen.py`), vista `mobile_view.py` con detección de IP local, QR interactivo, panel de salud y tabla de últimos gastos con formato `DD/MM/AAAA` (Regla 12), pestaña en `app.py` y suite E2E completa en `test_mobile_e2e_flow.py` y `test_mobile_frontend_view.py`. 19/19 tests pasando al 100%.
+    - *Estado actual*: Mantenida abierta a petición del usuario para incorporar análisis sobre auto-actualización in-app del APK y gestión de ajustes personales desde el móvil.
 
 18. **Mejoras Técnicas Futuras (Ideas en Exploración)**:
    - **Optimizaciones Avanzadas de Rendimiento y Streaming (Post-Spec 014)**:
