@@ -46,6 +46,10 @@ def init_db():
             if cols and "joint_contribution_uuid" not in cols:
                 conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN joint_contribution_uuid TEXT")
                 conn.commit()
+            if cols and "mobile_event_id" not in cols:
+                conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN mobile_event_id TEXT")
+                conn.commit()
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_transactions_mobile_event_id ON transactions (mobile_event_id)")
 
             cursor_acc = conn.exec_driver_sql("PRAGMA table_info(joint_accounts)")
             acc_cols = [row[1] for row in cursor_acc.fetchall()]
