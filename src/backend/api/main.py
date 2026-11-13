@@ -26,9 +26,12 @@ from backend.api.routers import (
     joint,
     backup,
     updater,
+    mobile,
 )
 from backend.database.componentes.sqlite_db import SessionLocal, init_db
 from backend.services import backup_service
+from backend.services.mobile_sync_service import MobileSyncService
+from fastapi.staticfiles import StaticFiles
 
 # Configurar logging persistente rotativo con filtro de privacidad
 backend_log_file = os.getenv("BACKEND_LOG_FILE", "logs/backend.log")
@@ -57,24 +60,46 @@ async def run_periodic_backup_checker():
             logger.warning("Error en verificación periódica de copias de seguridad: %s", exc)
 
 
+async def run_periodic_mobile_sync_checker():
+    """Worker no bloqueante que evalúa periódicamente (cada 30s) el buzón móvil."""
+    while True:
+        try:
+            await asyncio.sleep(30)
+            db = SessionLocal()
+            try:
+                sync_service = MobileSyncService()
+                sync_service.process_mobile_inbox_folder(db)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("Error en verificación periódica de sincronización móvil: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida de la aplicación con comprobación inicial y worker de copias en background."""
+    """Ciclo de vida de la aplicación con comprobación inicial y workers en background."""
     try:
         db = SessionLocal()
         try:
             backup_service.check_and_run_scheduled_backup(db)
+            sync_service = MobileSyncService()
+            sync_service.process_mobile_inbox_folder(db)
+            sync_service.export_catalog_file(db)
         finally:
             db.close()
     except Exception as exc:
-        logger.warning("Fallo al comprobar copias programadas en arranque: %s", exc)
+        logger.warning("Fallo al ejecutar comprobaciones iniciales en arranque: %s", exc)
 
-    worker_task = asyncio.create_task(run_periodic_backup_checker())
+    backup_task = asyncio.create_task(run_periodic_backup_checker())
+    mobile_task = asyncio.create_task(run_periodic_mobile_sync_checker())
     yield
-    worker_task.cancel()
+    backup_task.cancel()
+    mobile_task.cancel()
     try:
-        await worker_task
-    except asyncio.CancelledError:
+        await asyncio.gather(backup_task, mobile_task, return_exceptions=True)
+    except Exception:
         pass
 
 
@@ -128,7 +153,16 @@ app.include_router(metrics.router)
 app.include_router(joint.router)
 app.include_router(backup.router)
 app.include_router(updater.router)
+app.include_router(mobile.router)
 
+# Montaje de la aplicación móvil estática (PWA)
+mobile_dist_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "mobile", "dist")
+os.makedirs(mobile_dist_dir, exist_ok=True)
+placeholder_index = os.path.join(mobile_dist_dir, "index.html")
+if not os.path.exists(placeholder_index):
+    with open(placeholder_index, "w", encoding="utf-8") as f:
+        f.write("<!DOCTYPE html><html><head><title>Gestor Finanzas Mobile</title></head><body><h1>Gestor Finanzas Quick-Capture</h1></body></html>")
+app.mount("/mobile", StaticFiles(directory=mobile_dist_dir, html=True), name="mobile_pwa")
 
 
 @app.get("/")
