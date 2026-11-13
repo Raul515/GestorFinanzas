@@ -73,3 +73,14 @@ declare module "lucide-react" {
   export const Download: any;
   export const ArrowUpRight: any;
 }
+
+declare module "@capacitor/cli" {
+  export interface CapacitorConfig {
+    appId?: string;
+    appName?: string;
+    webDir?: string;
+    server?: any;
+    android?: any;
+    [key: string]: any;
+  }
+}
