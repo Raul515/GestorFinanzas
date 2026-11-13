@@ -11,3 +11,10 @@ if (rootElement) {
     </React.StrictMode>
   );
 }
+
+// Registro de Service Worker para capacidades PWA Offline
+if ("serviceWorker" in navigator && !window.location.host.includes("5173")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/mobile/sw.js").catch(console.error);
+  });
+}
