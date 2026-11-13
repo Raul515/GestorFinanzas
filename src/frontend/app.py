@@ -43,6 +43,7 @@ try:
     _render_personal_assisted_contribution_banner = _jv_mod._render_personal_assisted_contribution_banner
     from frontend.views.backup_view import render_backup_view
     from frontend.views.updater_view import render_updater_view
+    from frontend.views.mobile_view import render_mobile_view
 except ImportError:
     from services.financial_calculator import (  # type: ignore
         calculate_category_totals,
@@ -59,6 +60,7 @@ except ImportError:
     _render_personal_assisted_contribution_banner = _jv_mod._render_personal_assisted_contribution_banner  # type: ignore
     from views.backup_view import render_backup_view  # type: ignore
     from views.updater_view import render_updater_view  # type: ignore
+    from views.mobile_view import render_mobile_view  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -2350,11 +2352,13 @@ elif modulo_personal == "⚙️ Ajustes y Sistema":
         "📝 Presupuesto Base y Fondo de Emergencia",
         "💾 Base de Datos y Copias de Seguridad",
         "🚀 Actualizaciones del Sistema",
+        "📱 Companion Móvil Quick-Capture",
     ]
     tabs = st.tabs(tabs_list)
     tab_base = tabs[0]
     tab_backup = tabs[1]
     tab_updater = tabs[2]
+    tab_mobile = tabs[3]
 
     # ==========================================
     # PESTAÑA: CONFIGURACIÓN DEL PRESUPUESTO BASE
@@ -2637,6 +2641,12 @@ elif modulo_personal == "⚙️ Ajustes y Sistema":
     # ==========================================
     with tab_updater:
         render_updater_view()
+
+    # ==========================================
+    # PESTAÑA 21: COMPANION MÓVIL QUICK-CAPTURE
+    # ==========================================
+    with tab_mobile:
+        render_mobile_view()
 
 
 

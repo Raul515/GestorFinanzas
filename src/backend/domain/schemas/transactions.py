@@ -10,6 +10,7 @@ class TransactionBase(BaseModel):
     amount: float
     description: Optional[str] = None
     applied_strategy_id: Optional[int] = None
+    mobile_event_id: Optional[str] = None
 
 
 class TransactionCreate(TransactionBase):

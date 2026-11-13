@@ -2095,3 +2095,48 @@ def clear_all_frontend_cache() -> None:
         st.cache_data.clear()
     except Exception as exc:
         logger.debug("Error limpiando caché global de frontend: %s", exc)
+
+
+def get_mobile_status() -> Optional[Dict[str, Any]]:
+    """Consulta el estado de salud y métricas del servicio de sincronización móvil."""
+    url = f"{API_URL}/api/mobile/status"
+    try:
+        response = _session.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar estado móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar estado móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_status(): %s", e)
+    return None
+
+
+def process_mobile_folder() -> Optional[Dict[str, Any]]:
+    """Dispara el procesamiento manual de ficheros delta en sync/mobile/inbox/."""
+    url = f"{API_URL}/api/mobile/process-folder"
+    try:
+        response = _session.post(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al procesar carpeta móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al procesar carpeta móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en process_mobile_folder(): %s", e)
+    return None
+
+
+def get_mobile_catalog() -> Optional[Dict[str, Any]]:
+    """Consulta el catálogo de subcategorías y conceptos frecuentes para clientes móviles."""
+    url = f"{API_URL}/api/mobile/catalog"
+    try:
+        response = _session.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar catálogo móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar catálogo móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_catalog(): %s", e)
+    return None
