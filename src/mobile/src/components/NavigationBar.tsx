@@ -1,5 +1,4 @@
-import React from "react";
-import { Zap, ListOrdered } from "lucide-react";
+import { Zap, ListOrdered, PieChart } from "lucide-react";
 import { ActiveTab } from "../types";
 
 interface NavigationBarProps {
@@ -8,18 +7,18 @@ interface NavigationBarProps {
   pendingCount: number;
 }
 
-export const NavigationBar: React.FC<NavigationBarProps> = ({
+export const NavigationBar = ({
   activeTab,
   onChangeTab,
   pendingCount,
-}) => {
+}: NavigationBarProps) => {
   return (
     <nav className="w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 py-1.5 px-6 flex items-center justify-around shrink-0 max-w-sm mx-auto select-none">
       {/* Pestaña 1: Captura Rápida */}
       <button
         type="button"
         onClick={() => onChangeTab("capture")}
-        className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+        className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
           activeTab === "capture"
             ? "text-emerald-400 font-bold scale-105"
             : "text-slate-400 hover:text-slate-200"
@@ -33,7 +32,7 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
       <button
         type="button"
         onClick={() => onChangeTab("history")}
-        className={`relative flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition-all ${
+        className={`relative flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
           activeTab === "history"
             ? "text-emerald-400 font-bold scale-105"
             : "text-slate-400 hover:text-slate-200"
@@ -48,6 +47,20 @@ export const NavigationBar: React.FC<NavigationBarProps> = ({
           )}
         </div>
         <span className="text-[11px]">Historial</span>
+      </button>
+
+      {/* Pestaña 3: Mi Mes */}
+      <button
+        type="button"
+        onClick={() => onChangeTab("summary")}
+        className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+          activeTab === "summary"
+            ? "text-emerald-400 font-bold scale-105"
+            : "text-slate-400 hover:text-slate-200"
+        }`}
+      >
+        <PieChart className="w-5 h-5" />
+        <span className="text-[11px]">Mi Mes</span>
       </button>
     </nav>
   );

@@ -1,4 +1,4 @@
-import React from "react";
+import { ChangeEvent } from "react";
 import { Tag } from "lucide-react";
 
 interface ConceptSuggestionsProps {
@@ -7,11 +7,11 @@ interface ConceptSuggestionsProps {
   frequentConcepts: string[];
 }
 
-export const ConceptSuggestions: React.FC<ConceptSuggestionsProps> = ({
+export const ConceptSuggestions = ({
   concept,
   onChangeConcept,
   frequentConcepts,
-}) => {
+}: ConceptSuggestionsProps) => {
   const suggestions = frequentConcepts.slice(0, 6);
 
   return (
@@ -21,7 +21,7 @@ export const ConceptSuggestions: React.FC<ConceptSuggestionsProps> = ({
         <input
           type="text"
           value={concept}
-          onChange={(e) => onChangeConcept(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onChangeConcept(e.target.value)}
           placeholder="Concepto (ej. Café con tostada)..."
           maxLength={100}
           className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"

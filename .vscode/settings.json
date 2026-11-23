@@ -7,5 +7,6 @@
     "${workspaceFolder}/src",
     "${workspaceFolder}/src/backend",
     "${workspaceFolder}/src/frontend"
-  ]
+  ],
+  "css.lint.unknownAtRules": "ignore"
 }

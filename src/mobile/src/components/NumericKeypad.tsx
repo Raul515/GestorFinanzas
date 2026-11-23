@@ -1,4 +1,3 @@
-import React from "react";
 import { Delete } from "lucide-react";
 
 interface NumericKeypadProps {
@@ -6,10 +5,10 @@ interface NumericKeypadProps {
   onChangeAmount: (newAmountString: string) => void;
 }
 
-export const NumericKeypad: React.FC<NumericKeypadProps> = ({
+export const NumericKeypad = ({
   amountString,
   onChangeAmount,
-}) => {
+}: NumericKeypadProps) => {
   const triggerHaptic = (ms: number = 10) => {
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate(ms);

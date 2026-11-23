@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState, ChangeEvent } from "react";
 import { Zap, Calendar, CheckCircle2 } from "lucide-react";
 import { NumericKeypad } from "./NumericKeypad";
 import { CategoryChips } from "./CategoryChips";
@@ -9,13 +9,15 @@ interface QuickCaptureViewProps {
   subcategories: SubcategoryItem[];
   frequentConcepts: string[];
   onSaveExpense: (tx: MobileTransaction) => void;
+  onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
 }
 
-export const QuickCaptureView: React.FC<QuickCaptureViewProps> = ({
+export const QuickCaptureView = ({
   subcategories,
   frequentConcepts,
   onSaveExpense,
-}) => {
+  onCreateSubcategory,
+}: QuickCaptureViewProps) => {
   const [amountStr, setAmountStr] = useState("0");
   const [selectedSubcat, setSelectedSubcat] = useState<SubcategoryItem | null>(() => {
     return subcategories.find((s) => s.is_frequent) || subcategories[0] || null;
@@ -88,7 +90,7 @@ export const QuickCaptureView: React.FC<QuickCaptureViewProps> = ({
           <input
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedDate(e.target.value)}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           />
         </label>
@@ -113,6 +115,7 @@ export const QuickCaptureView: React.FC<QuickCaptureViewProps> = ({
           subcategories={subcategories}
           selectedSubcategoryId={selectedSubcat?.id || null}
           onSelectSubcategory={(subcat) => setSelectedSubcat(subcat)}
+          onCreateSubcategory={onCreateSubcategory}
         />
       </div>
 

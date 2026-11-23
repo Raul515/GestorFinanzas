@@ -223,7 +223,13 @@
      - *Paginación en el Buscador Global de Gastos*: Incorporación de `limit` y `offset` en `/joint/transactions/search` para proteger la memoria RAM y el ancho de banda cuando los históricos familiares superen los miles de movimientos.
      - *Downsampling en Gráficos Altair/Vega-Lite*: Pre-agregación de métricas y sparklines multianuales en Python para evitar transferir payloads pesados de JSON al DOM del navegador.
    - **Companion Móvil para Captura Rápida de Gastos ("Quick-Capture")**:
-     - *Filosofía y Alcance*: Micro-aplicación móvil enfocada exclusivamente en la operativa transaccional rápida del día a día (anotar en 5 segundos un café, cena o supermercado, asignando categoría y si es personal o conjunto). Quedan excluidos del móvil los módulos pesados de IA (Radar Macroeconómico, Deep Dive, Screener y Comité Asesor), que se reservan para el ordenador.
+     - *Filosofía y Alcance*: Micro-aplicación móvil enfocada en la operativa transaccional ágil (< 5 segundos por gasto), 100% offline y con sincronización Wi-Fi local mediante Pairing Token (PWA y APK).
+     - *Hoja de Ruta de Mejoras Futuras Oficiales (Post-Spec 016)*:
+       1. **Selector de Ámbito `👥 Hogar / Cuenta Conjunta` con Elección de Pagador**: Switch táctil `[👤 Personal | 👥 Hogar]`. Si se marca Hogar, selector rápido `[Pagué Yo]` o `[Pagó Mi Pareja]`, con imputación a `joint_transactions` y cálculo automático de compensaciones (Spec 010).
+       2. **Captura con Foto del Ticket de Compra (Cámara del Teléfono)**: Botón `[📷 Foto Ticket]` junto al importe para almacenar el comprobante digital o extraer importe/fecha con OCR.
+       3. **Buscador Rápido de Gastos Históricos**: Buscador táctil offline en milisegundos para responder dudas cotidianas en la calle (*"¿Cuánto pagué en la última revisión del coche?"*).
+       4. **Aportaciones Rápidas a Huchas de Ahorro y Metas**: Botón de 1 tap para transferir remanentes a huchas específicas (`[➕ Aportar 20 € a Vacaciones]`).
+       5. **Semáforo / Alerta Preventiva de Límite Presupuestario en Vivo**: Alerta visual en el momento de anotar el gasto: *"Has alcanzado el 90% de tu presupuesto de Deseos de este mes"*.
      - *Diferenciación Técnica por Plataforma*:
        - **Android (APK Directa / Sideloading - Máxima Viabilidad)**:
          - Desarrollo en framework ligero multiplataforma (ej. Flutter, React Native/Expo o Flet/Capacitor).

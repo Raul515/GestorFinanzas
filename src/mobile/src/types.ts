@@ -25,4 +25,40 @@ export interface MobileTransaction {
   status: "PENDING_SYNC" | "SYNCED";
 }
 
-export type ActiveTab = "capture" | "history";
+export type ActiveTab = "capture" | "history" | "summary";
+
+export interface MobileCategorySummary {
+  category_name: string;
+  rule_percentage: number;
+  spent: number;
+  budget: number;
+  remaining: number;
+  progress_percentage: number;
+}
+
+export interface MobileSubcategorySummary {
+  subcategory_id: number;
+  subcategory_name: string;
+  category_name: string;
+  spent: number;
+  budget: number;
+}
+
+export interface EmergencyFundSummary {
+  current_amount: number;
+  target_amount: number;
+  months_covered: number;
+  is_funded: boolean;
+}
+
+export interface MobileMonthlySummary {
+  month: string;
+  total_income: number;
+  total_spent: number;
+  remaining_budget: number;
+  needs: MobileCategorySummary;
+  wants: MobileCategorySummary;
+  savings: MobileCategorySummary;
+  emergency_fund: EmergencyFundSummary;
+  subcategories: MobileSubcategorySummary[];
+}

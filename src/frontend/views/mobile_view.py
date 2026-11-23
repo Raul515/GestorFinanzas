@@ -75,9 +75,13 @@ def render_mobile_view() -> None:
         "La micro-app funciona **100% offline** y sincroniza automáticamente las transacciones con tu ordenador al conectarte a la Wi-Fi de casa."
     )
 
+    status_data = api_client.get_mobile_status()
+    pairing_token = status_data.get("pairing_token") if status_data else None
+
     local_ip = get_local_ip()
-    mobile_url = f"http://{local_ip}:8000/mobile/"
-    localhost_url = "http://localhost:8000/mobile/"
+    token_query = f"?token={pairing_token}" if pairing_token else ""
+    mobile_url = f"http://{local_ip}:8000/mobile/{token_query}"
+    localhost_url = f"http://localhost:8000/mobile/{token_query}"
 
     # ==============================================================================
     # SECCIÓN 1: ACCESO RÁPIDO CON CÓDIGO QR Y ENLACES
@@ -104,16 +108,21 @@ def render_mobile_view() -> None:
             st.info("Abre la URL en tu navegador móvil.")
 
         st.caption(f"📍 IP local detectada: **`{local_ip}`**")
+        if pairing_token:
+            st.caption(f"🔑 Token de enlace: `...{pairing_token[-8:]}`")
 
     with col_info:
         st.markdown(
             f"""
             <div style="background: #f8fafc; border-left: 5px solid #3b82f6; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px;">
                 <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700;">
-                    URL de la Micro-app PWA en tu red local:
+                    URL de la Micro-app PWA con Token de Emparejamiento:
                 </div>
-                <div style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 4px; word-break: break-all;">
+                <div style="font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-top: 4px; word-break: break-all;">
                     <code>{mobile_url}</code>
+                </div>
+                <div style="font-size: 0.8rem; color: #059669; font-weight: 600; margin-top: 6px;">
+                    🛡️ Vinculación blindada: solo tu teléfono podrá registrar datos en este PC (evita contaminación si otros se conectan a tu Wi-Fi).
                 </div>
             </div>
             """,
@@ -131,11 +140,11 @@ def render_mobile_view() -> None:
         with guide_tabs[0]:
             st.markdown(
                 """
-                1. Asegúrate de que el iPhone esté conectado a la **misma red Wi-Fi** que tu ordenador.
-                2. Escanea el código QR con la cámara del iPhone o escribe la URL en **Safari**.
-                3. Toca el botón **Compartir** (icono cuadrado con flecha hacia arriba en la barra inferior).
-                4. Selecciona **«Añadir a la pantalla de inicio»** (icono `➕`).
-                5. ¡Listo! Se abrirá como una aplicación nativa a pantalla completa y funcionará sin conexión.
+                1. Conecta el iPhone a la **misma red Wi-Fi** que tu ordenador.
+                2. Escanea el código QR con la cámara del iPhone o abre el enlace en **Safari**.
+                3. La app detectará y guardará tu **token de emparejamiento** automáticamente.
+                4. Toca el botón **Compartir** (cuadrado con flecha hacia arriba) y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
+                5. ¡Listo! Se abrirá a pantalla completa como una app nativa y funcionará sin cobertura.
                 """
             )
 
@@ -144,19 +153,19 @@ def render_mobile_view() -> None:
                 """
                 1. Conecta tu teléfono a la **misma Wi-Fi** que el ordenador.
                 2. Escanea el código QR o abre la URL en **Google Chrome**.
-                3. Pulsa el botón de opciones (**tres puntos `⋮`** en la esquina superior derecha).
-                4. Pulsa en **«Instalar aplicación»** o **«Añadir a pantalla principal»**.
-                5. Tendrás el icono en tu escritorio listo para registrar gastos en 1 tap.
+                3. Tu teléfono quedará emparejado automáticamente con este PC.
+                4. Pulsa el botón de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a pantalla principal»**.
+                5. Tendrás el icono en tu pantalla de inicio listo para registrar gastos en 1 tap.
                 """
             )
 
         with guide_tabs[2]:
             st.markdown(
-                """
-                1. Cada vez que actualices el repositorio en GitHub, **GitHub Actions** compila un archivo APK nativo (`app-debug.apk`) automáticamente.
-                2. Entra en tu repositorio en GitHub > pestaña **Actions** > workflow **Build Mobile APK (Capacitor)**.
-                3. En la última ejecución completada, descarga el artefacto **`gestor-finanzas-mobile-apk`**.
-                4. Descomprime el ZIP e instala el APK en tu dispositivo Android.
+                f"""
+                1. Descarga el artefacto **`app-debug.apk`** compilado en GitHub Actions e instálalo en tu Android.
+                2. Al abrir la app por primera vez, escanea el código QR o introduce la URL con tu token:
+                   `{mobile_url}`
+                3. ¡Listo! La app recordará tu servidor y tu token permanentemente.
                 """
             )
 

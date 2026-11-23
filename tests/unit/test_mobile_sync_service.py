@@ -277,3 +277,129 @@ def test_export_catalog_file(populated_db: Session, tmp_path: Path):
 
     assert "personal_subcategories" in data
     assert len(data["personal_subcategories"]) == 5
+
+
+def test_pairing_token_generation_and_validation(tmp_path: Path):
+    """Verifica la generación idempotente y validación criptográfica de tokens de emparejamiento."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    token1 = service.get_or_create_pairing_token()
+    assert token1.startswith("sec_")
+    assert len(token1) >= 20
+
+    # Idempotencia: no debe cambiar entre llamadas
+    token2 = service.get_or_create_pairing_token()
+    assert token1 == token2
+
+    # Validación
+    assert service.validate_pairing_token(token1) is True
+    assert service.validate_pairing_token("sec_token_falso") is False
+    assert service.validate_pairing_token("") is False
+
+
+def test_create_or_get_subcategory_on_the_fly(populated_db: Session):
+    """Verifica la creación al vuelo de subcategorías e idempotencia case-insensitive."""
+    service = MobileSyncService()
+
+    # 1. Crear nueva subcategoría en 'Deseos (30%)'
+    sub1, is_new1 = service.create_or_get_subcategory(
+        populated_db,
+        name="Pádel Semanal",
+        category_name="Deseos (30%)",
+    )
+    assert is_new1 is True
+    assert sub1.id is not None
+    assert sub1.name == "Pádel Semanal"
+    assert sub1.category.name == "Deseos (30%)"
+
+    # 2. Llamada repetida (idempotente sin duplicar)
+    sub2, is_new2 = service.create_or_get_subcategory(
+        populated_db,
+        name="pádel semanal",
+        category_name="Deseos (30%)",
+    )
+    assert is_new2 is False
+    assert sub2.id == sub1.id
+
+    # 3. Categoría de fallback si no existe (asigna Deseos 30% como salvaguarda)
+    sub3, is_new3 = service.create_or_get_subcategory(
+        populated_db,
+        name="Reparación Caldera",
+        category_name="Categoría Inexistente",
+    )
+    assert is_new3 is True
+    assert sub3.id is not None
+    assert sub3.category.name == "Deseos (30%)"
+
+
+def test_process_mobile_sync_creates_subcategory_when_negative_id(populated_db: Session):
+    """Verifica que transacciones offline con subcategoría creada al vuelo (ID <= 0) se creen automáticamente."""
+    service = MobileSyncService()
+
+    request = MobileSyncRequest(
+        device_id="mobile-tester",
+        transactions=[
+            MobileTransactionPayload(
+                event_id="evt-onthefly-01",
+                amount=12.50,
+                description="Clase de Tenis",
+                date=date(2026, 11, 14),
+                subcategory_id=-1,
+                subcategory_name="Tenis y Raquetas",
+            )
+        ],
+    )
+
+    result = service.process_mobile_sync(populated_db, request)
+    assert result.processed_count == 1
+    assert result.ignored_duplicates_count == 0
+
+    # Comprobar que la subcategoría existe
+    sub = populated_db.query(Subcategory).filter(Subcategory.name == "Tenis y Raquetas").first()
+    assert sub is not None
+
+    # Comprobar que la transacción se enlazó a ella
+    tx = populated_db.query(Transaction).filter(Transaction.mobile_event_id == "evt-onthefly-01").first()
+    assert tx is not None
+    assert tx.subcategory_id == sub.id
+    assert tx.amount == 12.50
+
+
+def test_get_mobile_monthly_summary_and_budget_update(populated_db: Session):
+    """Verifica la generación del resumen mensual móvil 50/30/20 y la actualización de presupuestos."""
+    service = MobileSyncService()
+    sub_cafe = populated_db.query(Subcategory).filter(Subcategory.name == "Café y Desayunos").first()
+    sub_nomina = populated_db.query(Subcategory).filter(Subcategory.name == "Nómina").first()
+    assert sub_cafe is not None
+    assert sub_nomina is not None
+
+    # Asignar presupuesto mensual
+    ok_b = service.update_mobile_budget(populated_db, sub_cafe.id, 50.0, month="2026-11")
+    assert ok_b is True
+
+    # Insertar nómina y gasto
+    tx_ing = Transaction(
+        date=date(2026, 11, 1),
+        subcategory_id=sub_nomina.id,
+        amount=2000.0,
+        description="Nómina Noviembre",
+    )
+    tx_gas = Transaction(
+        date=date(2026, 11, 5),
+        subcategory_id=sub_cafe.id,
+        amount=15.0,
+        description="Desayunos semana",
+    )
+    populated_db.add_all([tx_ing, tx_gas])
+    populated_db.commit()
+
+    summary = service.get_mobile_monthly_summary(populated_db, month="2026-11")
+    assert summary.month == "2026-11"
+    assert summary.total_income == 2000.0
+    assert summary.total_spent == 15.0
+    assert summary.wants is not None
+    assert summary.wants.spent == 15.0
+    assert summary.wants.budget == 50.0
+    assert summary.emergency_fund is not None
+    assert summary.emergency_fund.target_amount > 0
+    assert len(summary.subcategories) >= 1

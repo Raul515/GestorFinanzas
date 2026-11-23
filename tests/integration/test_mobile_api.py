@@ -1,11 +1,13 @@
 """
-Pruebas de Integración para los Endpoints REST del Companion Móvil (Spec 016).
-Valida /api/mobile/catalog, /api/mobile/sync, /api/mobile/status,
-/api/mobile/process-folder y el montaje estático de la PWA en /mobile.
+Pruebas de Integración para los Endpoints REST del Companion Móvil (Spec 016 - Fase 7).
+Valida seguridad por Pairing Token, /api/mobile/catalog, /api/mobile/sync,
+/api/mobile/subcategory, /api/mobile/summary, /api/mobile/budget,
+/api/mobile/status, /api/mobile/process-folder y montaje de la PWA.
 """
 
 from datetime import date
 import json
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -14,8 +16,35 @@ from backend.domain.models.transactions import Transaction
 from backend.services.mobile_sync_service import MobileSyncService
 
 
-def test_get_mobile_catalog_api(client: TestClient, db_session: Session):
-    """Verifica que GET /api/mobile/catalog retorne el catálogo formateado con código HTTP 200."""
+@pytest.fixture
+def auth_headers() -> dict:
+    """Retorna las cabeceras con el Pairing Token válido para peticiones del móvil."""
+    token = MobileSyncService().get_or_create_pairing_token()
+    return {"X-Mobile-Pairing-Token": token}
+
+
+def test_pairing_token_security_rejection(client: TestClient):
+    """Verifica que llamadas sin token o con token erróneo sean rechazadas con HTTP 403 Forbidden."""
+    # 1. Sin cabecera
+    resp_no_token = client.get("/api/mobile/catalog")
+    assert resp_no_token.status_code == 403
+    assert "Token de emparejamiento móvil no válido" in resp_no_token.json()["detail"]
+
+    # 2. Con token falso / dispositivo ajeno en la Wi-Fi
+    resp_fake_token = client.get(
+        "/api/mobile/catalog",
+        headers={"X-Mobile-Pairing-Token": "sec_token_ajeno_invalido"},
+    )
+    assert resp_fake_token.status_code == 403
+
+    # 3. /status es público para diagnóstico pero devuelve si está emparejado
+    resp_status = client.get("/api/mobile/status")
+    assert resp_status.status_code == 200
+    assert "pairing_token" in resp_status.json()
+
+
+def test_get_mobile_catalog_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica que GET /api/mobile/catalog retorne el catálogo formateado con código HTTP 200 al usar el token."""
     cat = Category(name="Necesidades Básicas (50%)", type="expense")
     db_session.add(cat)
     db_session.commit()
@@ -25,7 +54,7 @@ def test_get_mobile_catalog_api(client: TestClient, db_session: Session):
     db_session.add(sub)
     db_session.commit()
 
-    resp = client.get("/api/mobile/catalog")
+    resp = client.get("/api/mobile/catalog", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
 
@@ -35,8 +64,8 @@ def test_get_mobile_catalog_api(client: TestClient, db_session: Session):
     assert any(s["name"] == "Supermercado" for s in data["personal_subcategories"])
 
 
-def test_sync_mobile_transactions_api(client: TestClient, db_session: Session):
-    """Verifica la ingesta atómica e idempotente vía POST /api/mobile/sync."""
+def test_sync_mobile_transactions_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica la ingesta atómica e idempotente vía POST /api/mobile/sync con token."""
     cat = Category(name="Deseos (30%)", type="expense")
     db_session.add(cat)
     db_session.commit()
@@ -72,7 +101,7 @@ def test_sync_mobile_transactions_api(client: TestClient, db_session: Session):
     }
 
     # 1. Primera llamada: inserción limpia
-    resp = client.post("/api/mobile/sync", json=payload)
+    resp = client.post("/api/mobile/sync", json=payload, headers=auth_headers)
     assert resp.status_code == 200
     res_data = resp.json()
     assert res_data["success"] is True
@@ -80,7 +109,7 @@ def test_sync_mobile_transactions_api(client: TestClient, db_session: Session):
     assert res_data["ignored_duplicates_count"] == 0
 
     # 2. Reintento idéntico: debe ignorar duplicados
-    resp_dup = client.post("/api/mobile/sync", json=payload)
+    resp_dup = client.post("/api/mobile/sync", json=payload, headers=auth_headers)
     assert resp_dup.status_code == 200
     res_dup_data = resp_dup.json()
     assert res_dup_data["processed_count"] == 0
@@ -93,8 +122,8 @@ def test_sync_mobile_transactions_api(client: TestClient, db_session: Session):
     assert tx_count == 2
 
 
-def test_sync_mobile_transactions_validation_error(client: TestClient):
-    """Verifica que peticiones con importes negativos o datos no válidos respondan HTTP 422."""
+def test_sync_mobile_transactions_validation_error(client: TestClient, auth_headers: dict):
+    """Verifica que peticiones con importes negativos respondan HTTP 422."""
     invalid_payload = {
         "device_id": "test-phone-api",
         "transactions": [
@@ -108,8 +137,62 @@ def test_sync_mobile_transactions_validation_error(client: TestClient):
             }
         ],
     }
-    resp = client.post("/api/mobile/sync", json=invalid_payload)
+    resp = client.post("/api/mobile/sync", json=invalid_payload, headers=auth_headers)
     assert resp.status_code == 422
+
+
+def test_create_subcategory_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica POST /api/mobile/subcategory para alta rápida de categorías."""
+    cat = Category(name="Deseos (30%)", type="expense")
+    db_session.add(cat)
+    db_session.commit()
+
+    payload = {
+        "name": "Pádel con amigos",
+        "category_name": "Deseos (30%)",
+    }
+    resp = client.post("/api/mobile/subcategory", json=payload, headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Pádel con amigos"
+    assert data["category_name"] == "Deseos (30%)"
+    assert data["id"] > 0
+
+    # Idempotencia
+    resp2 = client.post("/api/mobile/subcategory", json=payload, headers=auth_headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["id"] == data["id"]
+
+
+def test_get_monthly_summary_and_update_budget_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica GET /api/mobile/summary y POST /api/mobile/budget."""
+    cat = Category(name="Necesidades Básicas (50%)", type="expense")
+    db_session.add(cat)
+    db_session.commit()
+    assert cat.id is not None
+
+    sub = Subcategory(name="Supermercado", category_id=cat.id)
+    db_session.add(sub)
+    db_session.commit()
+    assert sub.id is not None
+
+    # 1. Actualizar presupuesto
+    budget_payload = {
+        "subcategory_id": sub.id,
+        "allocated_amount": 300.0,
+        "month": "2026-11",
+    }
+    resp_b = client.post("/api/mobile/budget", json=budget_payload, headers=auth_headers)
+    assert resp_b.status_code == 200
+    assert resp_b.json()["success"] is True
+
+    # 2. Consultar resumen
+    resp_s = client.get("/api/mobile/summary?month=2026-11", headers=auth_headers)
+    assert resp_s.status_code == 200
+    s_data = resp_s.json()
+    assert s_data["month"] == "2026-11"
+    assert s_data["needs"]["budget"] == 300.0
+    assert any(item["subcategory_name"] == "Supermercado" for item in s_data["subcategories"])
 
 
 def test_get_mobile_status_api(client: TestClient, db_session: Session):

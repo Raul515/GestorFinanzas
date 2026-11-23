@@ -1,36 +1,54 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { QuickCaptureView } from "./components/QuickCaptureView";
 import { HistoryView } from "./components/HistoryView";
+import { MonthlySummaryView } from "./components/MonthlySummaryView";
 import { NavigationBar } from "./components/NavigationBar";
-import { ActiveTab, MobileTransaction } from "./types";
+import { ActiveTab, MobileTransaction, SubcategoryItem } from "./types";
 import {
   loadStoredTransactions,
   saveStoredTransactions,
   loadStoredCatalog,
   saveStoredCatalog,
+  addSubcategoryToStoredCatalog,
   exportTransactionsToJsonFile,
+  extractAndSavePairingTokenFromUrl,
+  getStoredPairingToken,
+  saveStoredPairingToken,
 } from "./services/storage";
 import {
   fetchCatalog,
   syncTransactionsWithBackend,
   checkServerStatus,
+  createSubcategoryOnTheFly,
 } from "./services/api";
+import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("capture");
   const [catalog, setCatalog] = useState(loadStoredCatalog);
   const [transactions, setTransactions] = useState<MobileTransaction[]>(loadStoredTransactions);
   const [isServerOnline, setIsServerOnline] = useState(false);
+  const [isPaired, setIsPaired] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Modal / Diálogo para introducir el pairing token si no coincide o falta
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [inputToken, setInputToken] = useState("");
 
   const pendingCount = transactions.filter((t) => t.status === "PENDING_SYNC").length;
 
+  // Extraer token de URL si viene en la query string (?token=...)
+  useEffect(() => {
+    extractAndSavePairingTokenFromUrl();
+  }, []);
+
   // Comprobar conectividad y refrescar catálogo
   const refreshConnectivityAndCatalog = useCallback(async () => {
-    const online = await checkServerStatus();
-    setIsServerOnline(online);
+    const status = await checkServerStatus();
+    setIsServerOnline(status.isOnline);
+    setIsPaired(status.isPaired);
 
-    if (online) {
+    if (status.isOnline) {
       const remoteCatalog = await fetchCatalog();
       if (remoteCatalog) {
         setCatalog(remoteCatalog);
@@ -57,6 +75,10 @@ export function App() {
           return updated;
         });
         setIsServerOnline(true);
+        setIsPaired(true);
+      } else if (result && result.isUnauthorized) {
+        setIsPaired(false);
+        setShowPairingModal(true);
       } else {
         setIsServerOnline(false);
       }
@@ -78,12 +100,12 @@ export function App() {
     return () => clearInterval(interval);
   }, [refreshConnectivityAndCatalog]);
 
-  // Auto-sync al detectar servidor online si hay pendientes
+  // Auto-sync al detectar servidor online si hay pendientes y estamos emparejados
   useEffect(() => {
-    if (isServerOnline && pendingCount > 0 && !isSyncing) {
+    if (isServerOnline && isPaired && pendingCount > 0 && !isSyncing) {
       handleTriggerSync();
     }
-  }, [isServerOnline, pendingCount, isSyncing, handleTriggerSync]);
+  }, [isServerOnline, isPaired, pendingCount, isSyncing, handleTriggerSync]);
 
   const handleSaveExpense = (newTx: MobileTransaction) => {
     setTransactions((prev) => {
@@ -92,8 +114,8 @@ export function App() {
       return updated;
     });
 
-    // Intentar sincronizar inmediatamente si estamos conectados
-    if (isServerOnline) {
+    // Intentar sincronizar inmediatamente si estamos conectados y emparejados
+    if (isServerOnline && isPaired) {
       setTimeout(() => {
         handleTriggerSync();
       }, 300);
@@ -112,6 +134,42 @@ export function App() {
     exportTransactionsToJsonFile(transactions);
   };
 
+  const handleCreateSubcategory = async (
+    name: string,
+    categoryName: string
+  ): Promise<SubcategoryItem | null> => {
+    // Si estamos en línea y emparejados, crearla en el backend
+    if (isServerOnline && isPaired) {
+      const remote = await createSubcategoryOnTheFly(name, categoryName);
+      if (remote) {
+        const updatedCat = addSubcategoryToStoredCatalog(remote);
+        setCatalog(updatedCat);
+        return remote;
+      }
+    }
+
+    // Si estamos offline o falló la conexión, crear con ID temporal negativo
+    const tempSubcat: SubcategoryItem = {
+      id: -Date.now(),
+      name,
+      category_id: categoryName.includes("50%") ? 2 : 3,
+      category_name: categoryName,
+      is_frequent: true,
+    };
+    const updatedCat = addSubcategoryToStoredCatalog(tempSubcat);
+    setCatalog(updatedCat);
+    return tempSubcat;
+  };
+
+  const handleSaveManualToken = () => {
+    if (inputToken.trim()) {
+      saveStoredPairingToken(inputToken.trim());
+      setShowPairingModal(false);
+      setInputToken("");
+      refreshConnectivityAndCatalog();
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
       {/* Barra superior de estado */}
@@ -126,13 +184,26 @@ export function App() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              isServerOnline ? "bg-emerald-400" : "bg-slate-600"
-            }`}
-          ></span>
-          <span>{isServerOnline ? "En línea" : "Offline"}</span>
+        <div className="flex items-center gap-2 text-[11px] font-medium">
+          {!isPaired && isServerOnline ? (
+            <button
+              type="button"
+              onClick={() => setShowPairingModal(true)}
+              className="flex items-center gap-1 text-amber-400 font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 active:scale-95"
+            >
+              <KeyRound className="w-3 h-3" />
+              <span>No Vinculado</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 text-slate-400">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isServerOnline ? "bg-emerald-400" : "bg-slate-600"
+                }`}
+              ></span>
+              <span>{isServerOnline ? "En línea" : "Offline"}</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -143,8 +214,9 @@ export function App() {
             subcategories={catalog.personal_subcategories}
             frequentConcepts={catalog.frequent_concepts}
             onSaveExpense={handleSaveExpense}
+            onCreateSubcategory={handleCreateSubcategory}
           />
-        ) : (
+        ) : activeTab === "history" ? (
           <HistoryView
             transactions={transactions}
             isSyncing={isSyncing}
@@ -152,6 +224,8 @@ export function App() {
             onDeletePending={handleDeletePending}
             onExportJson={handleExportJson}
           />
+        ) : (
+          <MonthlySummaryView isServerOnline={isServerOnline} />
         )}
       </main>
 
@@ -161,6 +235,65 @@ export function App() {
         onChangeTab={(tab) => setActiveTab(tab)}
         pendingCount={pendingCount}
       />
+
+      {/* Modal de Token de Emparejamiento (para APK o reconexión) */}
+      {showPairingModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm mx-auto w-full p-4 flex flex-col gap-3 shadow-2xl">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-amber-400">
+                <ShieldAlert className="w-5 h-5" />
+                <h3 className="font-bold text-sm text-slate-100">Vincular con tu PC</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPairingModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Para proteger tu base de datos contra dispositivos ajenos conectados a tu Wi-Fi, introduce el Token de Emparejamiento generado en la app de PC (en <strong>Ajustes &gt; Companion Móvil</strong>):
+            </p>
+
+            <div className="flex flex-col gap-1.5">
+              <input
+                type="text"
+                value={inputToken}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setInputToken(e.target.value)}
+                placeholder="sec_..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
+              />
+              {getStoredPairingToken() && (
+                <span className="text-[10px] text-slate-500 font-mono truncate">
+                  Token actual: {getStoredPairingToken()?.substring(0, 12)}...
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowPairingModal(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveManualToken}
+                disabled={!inputToken.trim()}
+                className="flex-1 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold active:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Guardar Token</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

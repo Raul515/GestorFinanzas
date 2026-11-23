@@ -2127,11 +2127,20 @@ def process_mobile_folder() -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_mobile_catalog() -> Optional[Dict[str, Any]]:
+def get_mobile_catalog(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Consulta el catálogo de subcategorías y conceptos frecuentes para clientes móviles."""
     url = f"{API_URL}/api/mobile/catalog"
+    headers = {}
+    if token:
+        headers["X-Mobile-Pairing-Token"] = token
+    else:
+        # Intentar obtener el token del estado si no se provee
+        st_data = get_mobile_status()
+        if st_data and st_data.get("pairing_token"):
+            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+
     try:
-        response = _session.get(url, timeout=5)
+        response = _session.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al consultar catálogo móvil (%s): %s", response.status_code, response.text)
@@ -2139,4 +2148,52 @@ def get_mobile_catalog() -> Optional[Dict[str, Any]]:
         logger.error("Error de red al consultar catálogo móvil en %s: %s", url, e)
     except Exception as e:
         logger.error("Error inesperado en get_mobile_catalog(): %s", e)
+    return None
+
+
+def get_mobile_monthly_summary(month: Optional[str] = None, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Consulta el resumen de ejecución presupuestaria del mes (50/30/20) para el móvil."""
+    url = f"{API_URL}/api/mobile/summary"
+    params = {"month": month} if month else {}
+    headers = {}
+    if token:
+        headers["X-Mobile-Pairing-Token"] = token
+    else:
+        st_data = get_mobile_status()
+        if st_data and st_data.get("pairing_token"):
+            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+
+    try:
+        response = _session.get(url, params=params, headers=headers, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar resumen móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar resumen móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_monthly_summary(): %s", e)
+    return None
+
+
+def update_mobile_budget(month: str, subcategory_id: int, amount: float, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Ajusta la asignación presupuestaria de una subcategoría para un mes desde el móvil."""
+    url = f"{API_URL}/api/mobile/budget"
+    payload = {"month": month, "subcategory_id": subcategory_id, "amount": amount}
+    headers = {}
+    if token:
+        headers["X-Mobile-Pairing-Token"] = token
+    else:
+        st_data = get_mobile_status()
+        if st_data and st_data.get("pairing_token"):
+            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+
+    try:
+        response = _session.post(url, json=payload, headers=headers, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al actualizar presupuesto móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al actualizar presupuesto móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en update_mobile_budget(): %s", e)
     return None

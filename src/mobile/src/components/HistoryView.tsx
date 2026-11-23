@@ -1,4 +1,3 @@
-import React from "react";
 import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight } from "lucide-react";
 import { MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
@@ -11,13 +10,13 @@ interface HistoryViewProps {
   onExportJson: () => void;
 }
 
-export const HistoryView: React.FC<HistoryViewProps> = ({
+export const HistoryView = ({
   transactions,
   isSyncing,
   onTriggerSync,
   onDeletePending,
   onExportJson,
-}) => {
+}: HistoryViewProps) => {
   const pendingTx = transactions.filter((t) => t.status === "PENDING_SYNC");
   const syncedTx = transactions.filter((t) => t.status === "SYNCED");
 

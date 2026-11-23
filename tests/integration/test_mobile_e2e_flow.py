@@ -1,10 +1,12 @@
 """
 Pruebas de integración End-to-End (E2E) para el flujo completo del Companion Móvil Quick-Capture.
 Simula la interacción de un dispositivo móvil (PWA/APK/Syncthing) con los endpoints del backend:
-1. Consulta de catálogo offline con frecuencias y conceptos automáticos.
-2. Sincronización directa vía Wi-Fi con idempotencia ante reconexiones.
-3. Ingesta desatendida mediante buzón sync/mobile/inbox/ y rotación a processed/.
-4. Verificación de persistencia en SQLite y retorno del mobile_event_id en /transactions/.
+1. Seguridad por Pairing Token (rechazo a dispositivos ajenos).
+2. Consulta de catálogo offline con frecuencias y conceptos automáticos.
+3. Sincronización directa vía Wi-Fi con idempotencia ante reconexiones y subcategorías al vuelo.
+4. Consulta y ajuste de presupuestos mensuales 50/30/20 («Mi Mes»).
+5. Ingesta desatendida mediante buzón sync/mobile/inbox/ y rotación a processed/.
+6. Verificación de persistencia en SQLite y retorno del mobile_event_id en /transactions/.
 """
 
 from datetime import date
@@ -12,6 +14,7 @@ import json
 import os
 import tempfile
 import uuid
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -22,7 +25,16 @@ from backend.domain.models.transactions import Transaction
 from backend.services.mobile_sync_service import MobileSyncService
 
 
-def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_session: Session):
+@pytest.fixture
+def auth_headers() -> dict:
+    """Retorna las cabeceras con el Pairing Token válido para peticiones del móvil."""
+    token = MobileSyncService().get_or_create_pairing_token()
+    return {"X-Mobile-Pairing-Token": token}
+
+
+def test_mobile_e2e_complete_sync_and_persistence_flow(
+    client: TestClient, db_session: Session, auth_headers: dict
+):
     """Flujo E2E 1: Consulta de Catálogo -> Sincronización Wi-Fi -> Idempotencia -> Verificación en BD."""
     # 1. Preparar categorías y subcategorías
     cat_necesidad = Category(name="Necesidades Básicas (50%)", type="expense")
@@ -45,8 +57,8 @@ def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_se
     db_session.add(prev_tx)
     db_session.commit()
 
-    # 2. El móvil se conecta y consulta el catálogo
-    resp_cat = client.get("/api/mobile/catalog")
+    # 2. El móvil se conecta con su Pairing Token y consulta el catálogo
+    resp_cat = client.get("/api/mobile/catalog", headers=auth_headers)
     assert resp_cat.status_code == 200
     cat_data = resp_cat.json()
     assert "personal_subcategories" in cat_data
@@ -56,7 +68,7 @@ def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_se
     assert "frequent_concepts" in cat_data
     assert "Café con leche" in cat_data["frequent_concepts"]
 
-    # 3. El usuario registra 2 transacciones offline en la calle
+    # 3. El usuario registra 2 transacciones offline en la calle (una de ellas con subcategoría creada al vuelo)
     event_id_1 = f"e2e-event-{uuid.uuid4()}"
     event_id_2 = f"e2e-event-{uuid.uuid4()}"
 
@@ -76,16 +88,16 @@ def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_se
                 "event_id": event_id_2,
                 "scope": "PERSONAL",
                 "date": str(date.today()),
-                "amount": 14.80,
-                "description": "Cena rápida",
-                "subcategory_id": sub_super.id,
-                "subcategory_name": "Supermercado",
+                "amount": 25.00,
+                "description": "Partida pádel pista cubierta",
+                "subcategory_id": -1,  # Creada al vuelo offline
+                "subcategory_name": "Pádel y Deportes",
             },
         ],
     }
 
-    # 4. Al llegar a casa, auto-flush a /api/mobile/sync
-    resp_sync = client.post("/api/mobile/sync", json=sync_payload)
+    # 4. Al llegar a casa, auto-flush a /api/mobile/sync con token
+    resp_sync = client.post("/api/mobile/sync", json=sync_payload, headers=auth_headers)
     assert resp_sync.status_code == 200
     sync_res = resp_sync.json()
     assert sync_res["success"] is True
@@ -93,14 +105,14 @@ def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_se
     assert sync_res["ignored_duplicates_count"] == 0
 
     # 5. Reintento (idempotencia y offline sync retry)
-    resp_retry = client.post("/api/mobile/sync", json=sync_payload)
+    resp_retry = client.post("/api/mobile/sync", json=sync_payload, headers=auth_headers)
     assert resp_retry.status_code == 200
     retry_res = resp_retry.json()
     assert retry_res["success"] is True
     assert retry_res["processed_count"] == 0
     assert retry_res["ignored_duplicates_count"] == 2
 
-    # 6. Verificar que /transactions/ retorna las transacciones con mobile_event_id
+    # 6. Verificar que /transactions/ retorna ambas transacciones persistidas
     resp_txs = client.get("/transactions/")
     assert resp_txs.status_code == 200
     all_txs = resp_txs.json()
@@ -111,7 +123,16 @@ def test_mobile_e2e_complete_sync_and_persistence_flow(client: TestClient, db_se
     assert saved_tx1["amount"] == 1.60
     assert saved_tx1["description"] == "Café solo en terraza"
     assert saved_tx2 is not None
-    assert saved_tx2["amount"] == 14.80
+    assert saved_tx2["amount"] == 25.00
+    assert saved_tx2["description"] == "Partida pádel pista cubierta"
+
+    # 7. Consultar «Mi Mes» a través de /api/mobile/summary
+    curr_month = date.today().strftime("%Y-%m")
+    resp_summary = client.get(f"/api/mobile/summary?month={curr_month}", headers=auth_headers)
+    assert resp_summary.status_code == 200
+    sum_data = resp_summary.json()
+    assert sum_data["total_spent"] >= 26.60
+    assert "emergency_fund" in sum_data
 
 
 def test_mobile_e2e_syncthing_inbox_and_file_rotation(client: TestClient, db_session: Session):
@@ -178,6 +199,5 @@ def test_mobile_e2e_syncthing_inbox_and_file_rotation(client: TestClient, db_ses
             resp_status_2 = client.get("/api/mobile/status")
             assert resp_status_2.status_code == 200
             assert resp_status_2.json()["pending_inbox_files"] == 0
-
         finally:
             app.dependency_overrides.pop(get_sync_service, None)

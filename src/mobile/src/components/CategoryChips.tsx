@@ -1,11 +1,12 @@
-import React, { useState } from "react";
-import { Search, X, Check } from "lucide-react";
+import { useState, ChangeEvent } from "react";
+import { Search, X, Check, Plus } from "lucide-react";
 import { SubcategoryItem } from "../types";
 
 interface CategoryChipsProps {
   subcategories: SubcategoryItem[];
   selectedSubcategoryId: number | null;
   onSelectSubcategory: (subcat: SubcategoryItem) => void;
+  onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
 }
 
 export const getSubcategoryEmoji = (name: string): string => {
@@ -27,13 +28,17 @@ export const getSubcategoryEmoji = (name: string): string => {
   return "🏷️";
 };
 
-export const CategoryChips: React.FC<CategoryChipsProps> = ({
+export const CategoryChips = ({
   subcategories,
   selectedSubcategoryId,
   onSelectSubcategory,
-}) => {
+  onCreateSubcategory,
+}: CategoryChipsProps) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [newSubcatName, setNewSubcatName] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("Deseos (30%)");
 
   const frequentSubcategories = subcategories.filter((s) => s.is_frequent);
   const activeSubcategories = frequentSubcategories.length > 0 ? frequentSubcategories : subcategories.slice(0, 6);
@@ -43,6 +48,36 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
     const q = searchQuery.toLowerCase();
     return s.name.toLowerCase().includes(q) || s.category_name.toLowerCase().includes(q);
   });
+
+  const handleOpenCreateForm = () => {
+    setNewSubcatName(searchQuery.trim());
+    setIsCreating(true);
+  };
+
+  const handleSubmitNewSubcategory = async () => {
+    if (!newSubcatName.trim()) return;
+
+    if (onCreateSubcategory) {
+      const created = await onCreateSubcategory(newSubcatName.trim(), newCategoryName);
+      if (created) {
+        onSelectSubcategory(created);
+      }
+    } else {
+      // Fallback local con ID temporal
+      const tempSubcat: SubcategoryItem = {
+        id: -Date.now(),
+        name: newSubcatName.trim(),
+        category_id: newCategoryName.includes("50%") ? 2 : 3,
+        category_name: newCategoryName,
+        is_frequent: true,
+      };
+      onSelectSubcategory(tempSubcat);
+    }
+
+    setIsCreating(false);
+    setSearchQuery("");
+    setModalOpen(false);
+  };
 
   return (
     <div className="w-full">
@@ -71,7 +106,10 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
         {/* Botón para abrir modal de búsqueda completa */}
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={() => {
+            setIsCreating(false);
+            setModalOpen(true);
+          }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap border border-slate-800 bg-slate-900/60 text-slate-400 shrink-0 active:scale-95 active:bg-slate-800"
         >
           <Search className="w-3.5 h-3.5" />
@@ -87,66 +125,167 @@ export const CategoryChips: React.FC<CategoryChipsProps> = ({
             <div className="flex items-center justify-between p-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <Search className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-slate-100 text-base">Seleccionar Categoría</h3>
+                <h3 className="font-bold text-slate-100 text-base">
+                  {isCreating ? "Nueva Subcategoría" : "Seleccionar Categoría"}
+                </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={() => {
+                  setModalOpen(false);
+                  setIsCreating(false);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-100 active:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Input de búsqueda */}
-            <div className="p-3 border-b border-slate-800">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar (ej. gasolina, cena, súper)..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                autoFocus
-              />
-            </div>
-
-            {/* Lista con scroll */}
-            <div className="overflow-y-auto p-3 flex flex-col gap-1.5 divide-y divide-slate-850">
-              {filteredModalList.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-sm">
-                  No se encontraron subcategorías coincidentes.
+            {isCreating ? (
+              /* Mini-formulario de alta rápida al vuelo */
+              <div className="p-4 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-400">Nombre de la subcategoría</label>
+                  <input
+                    type="text"
+                    value={newSubcatName}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewSubcatName(e.target.value)}
+                    placeholder="Ej. Pádel, Sushi, Spotify..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    autoFocus
+                  />
                 </div>
-              ) : (
-                filteredModalList.map((subcat) => {
-                  const isSelected = selectedSubcategoryId === subcat.id;
-                  const emoji = getSubcategoryEmoji(subcat.name);
-                  return (
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-400">Tipo de gasto (Regla 50/30/20)</label>
+                  <div className="grid grid-cols-2 gap-2">
                     <button
-                      key={subcat.id}
                       type="button"
-                      onClick={() => {
-                        onSelectSubcategory(subcat);
-                        setModalOpen(false);
-                      }}
-                      className={`flex items-center justify-between p-3 rounded-xl transition-all text-left ${
-                        isSelected
-                          ? "bg-emerald-500/15 text-emerald-300 font-semibold"
-                          : "hover:bg-slate-800/60 active:bg-slate-800 text-slate-200"
+                      onClick={() => setNewCategoryName("Necesidades Básicas (50%)")}
+                      className={`p-2.5 rounded-xl text-xs font-medium border text-center transition-all ${
+                        newCategoryName.includes("50%")
+                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold"
+                          : "bg-slate-950 border-slate-800 text-slate-400"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{emoji}</span>
-                        <div>
-                          <div className="text-sm font-medium">{subcat.name}</div>
-                          <div className="text-xs text-slate-500">{subcat.category_name}</div>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-5 h-5 text-emerald-400 shrink-0" />}
+                      🛒 Necesidad (50%)
                     </button>
-                  );
-                })
-              )}
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewCategoryName("Deseos (30%)")}
+                      className={`p-2.5 rounded-xl text-xs font-medium border text-center transition-all ${
+                        newCategoryName.includes("30%")
+                          ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
+                          : "bg-slate-950 border-slate-800 text-slate-400"
+                      }`}
+                    >
+                      ☕ Deseo (30%)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreating(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold active:bg-slate-700"
+                  >
+                    Atrás
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitNewSubcategory}
+                    disabled={!newSubcatName.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-slate-950 text-sm font-bold active:bg-emerald-400 disabled:opacity-50"
+                  >
+                    Crear y Usar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Vista normal de búsqueda */
+              <>
+                {/* Input de búsqueda */}
+                <div className="p-3 border-b border-slate-800 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar (ej. gasolina, cena, súper)..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateForm}
+                    className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 active:scale-95 shrink-0"
+                    title="Nueva subcategoría"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Lista con scroll */}
+                <div className="overflow-y-auto p-3 flex flex-col gap-1.5 divide-y divide-slate-850">
+                  {filteredModalList.length === 0 ? (
+                    <div className="py-6 flex flex-col items-center justify-center gap-3 text-center">
+                      <span className="text-slate-500 text-sm">
+                        No se encontró "{searchQuery}".
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateForm}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold active:scale-95"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Crear "{searchQuery || "Nueva"}"</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {filteredModalList.map((subcat) => {
+                        const isSelected = selectedSubcategoryId === subcat.id;
+                        const emoji = getSubcategoryEmoji(subcat.name);
+                        return (
+                          <button
+                            key={subcat.id}
+                            type="button"
+                            onClick={() => {
+                              onSelectSubcategory(subcat);
+                              setModalOpen(false);
+                            }}
+                            className={`flex items-center justify-between p-3 rounded-xl transition-all text-left ${
+                              isSelected
+                                ? "bg-emerald-500/15 text-emerald-300 font-semibold"
+                                : "hover:bg-slate-800/60 active:bg-slate-800 text-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-xl">{emoji}</span>
+                              <div>
+                                <div className="text-sm font-medium">{subcat.name}</div>
+                                <div className="text-xs text-slate-500">{subcat.category_name}</div>
+                              </div>
+                            </div>
+                            {isSelected && <Check className="w-5 h-5 text-emerald-400 shrink-0" />}
+                          </button>
+                        );
+                      })}
+
+                      {/* Botón al final de la lista para crear otra */}
+                      <button
+                        type="button"
+                        onClick={handleOpenCreateForm}
+                        className="flex items-center justify-center gap-2 p-3 mt-2 rounded-xl border border-dashed border-slate-800 text-slate-400 hover:text-emerald-400 text-xs font-semibold"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Añadir otra subcategoría al vuelo</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

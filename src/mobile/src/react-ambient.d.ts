@@ -6,7 +6,15 @@
 
 declare module "react" {
   export type ReactNode = any;
-  export type FC<P = {}> = (props: P) => any;
+  export type FC<P = {}> = (props: P, context?: any) => any;
+  export type FunctionComponent<P = {}> = (props: P, context?: any) => any;
+  export interface ChangeEvent<T = any> {
+    target: { value: string } & T;
+  }
+  export interface MouseEvent<T = any> {
+    preventDefault(): void;
+    stopPropagation(): void;
+  }
   export function useState<T>(initialState: T | (() => T)): [T, (newState: T | ((prev: T) => T)) => void];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useCallback<T extends (...args: any[]) => any>(callback: T, deps: any[]): T;
@@ -72,6 +80,15 @@ declare module "lucide-react" {
   export const RefreshCw: any;
   export const Download: any;
   export const ArrowUpRight: any;
+  export const Plus: any;
+  export const ShieldAlert: any;
+  export const ShieldCheck: any;
+  export const KeyRound: any;
+  export const AlertTriangle: any;
+  export const Edit3: any;
+  export const TrendingUp: any;
+  export const PieChart: any;
+  export const BarChart3: any;
 }
 
 declare module "@capacitor/cli" {

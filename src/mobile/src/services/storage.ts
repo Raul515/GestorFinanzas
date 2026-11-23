@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   TRANSACTIONS: "gestor_mobile_transactions",
   CATALOG: "gestor_mobile_catalog",
   SERVER_URL: "gestor_mobile_server_url",
+  PAIRING_TOKEN: "gestor_mobile_pairing_token",
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
@@ -26,6 +27,57 @@ export const DEFAULT_FALLBACK_CONCEPTS: string[] = [
   "Gasolina",
   "Cena",
 ];
+
+export const getStoredPairingToken = (): string | null => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.PAIRING_TOKEN);
+  } catch {
+    return null;
+  }
+};
+
+export const saveStoredPairingToken = (token: string): void => {
+  try {
+    if (token && token.trim()) {
+      localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, token.trim());
+    }
+  } catch (err) {
+    console.error("Error guardando token de emparejamiento:", err);
+  }
+};
+
+export const clearStoredPairingToken = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.PAIRING_TOKEN);
+  } catch (err) {
+    console.error("Error eliminando token de emparejamiento:", err);
+  }
+};
+
+export const extractAndSavePairingTokenFromUrl = (): string | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get("token");
+
+    if (tokenFromUrl && tokenFromUrl.trim()) {
+      saveStoredPairingToken(tokenFromUrl);
+
+      // Limpiar el parámetro token de la barra de direcciones sin recargar la página
+      urlParams.delete("token");
+      const newQuery = urlParams.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "") + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+
+      return tokenFromUrl.trim();
+    }
+  } catch (err) {
+    console.warn("No se pudo inspeccionar el token en la URL:", err);
+  }
+
+  return getStoredPairingToken();
+};
 
 export const loadStoredTransactions = (): MobileTransaction[] => {
   try {
@@ -72,6 +124,24 @@ export const saveStoredCatalog = (catalog: CatalogData): void => {
   } catch (err) {
     console.error("Error guardando catálogo en almacenamiento local:", err);
   }
+};
+
+export const addSubcategoryToStoredCatalog = (subcat: SubcategoryItem): CatalogData => {
+  const current = loadStoredCatalog();
+  const exists = current.personal_subcategories.some(
+    (s) => s.name.toLowerCase() === subcat.name.toLowerCase()
+  );
+
+  if (!exists) {
+    const updated: CatalogData = {
+      ...current,
+      personal_subcategories: [subcat, ...current.personal_subcategories],
+      last_updated_utc: new Date().toISOString(),
+    };
+    saveStoredCatalog(updated);
+    return updated;
+  }
+  return current;
 };
 
 // Exportar transacciones pendientes a un archivo JSON para Syncthing
