@@ -1,592 +1,610 @@
 <!DOCTYPE html>
 <html lang="es" class="h-full bg-slate-950 text-slate-100">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
-    <title>Gestor Finanzas • Móvil</title>
-    <meta name="theme-color" content="#020617" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Finanzas" />
-    <link rel="manifest" href="/mobile/manifest.json" />
-    <style>
-      * {
-        box-sizing: border-box;
-        -webkit-tap-highlight-color: transparent;
-        margin: 0;
-        padding: 0;
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background-color: #020617;
-        color: #f8fafc;
-        height: 100%;
-        overflow: hidden;
-        user-select: none;
-      }
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      
-      @keyframes popIn {
-        from { opacity: 0; transform: translate(-50%, -10px); }
-        to { opacity: 1; transform: translate(-50%, 0); }
-      }
-      .toast-anim {
-        animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      }
-      .btn-press:active {
-        transform: scale(0.96);
-      }
-      .progress-bar-fill {
-        transition: width 0.3s ease;
-      }
-    </style>
-  </head>
-  <body class="h-full flex flex-col justify-between">
-    <div id="app" class="h-full flex flex-col justify-between max-w-sm mx-auto w-full"></div>
 
-    <script>
-      // ==========================================
-      // ESTADO Y ALMACENAMIENTO OFFLINE
-      // ==========================================
-      const STORAGE_KEYS = {
-        TRANSACTIONS: "gestor_mobile_transactions",
-        CATALOG: "gestor_mobile_catalog",
-        PAIRING_TOKEN: "gestor_mobile_pairing_token",
-        HISTORY_CACHE: "gestor_mobile_history_cache"
-      };
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Gestor Finanzas • Móvil</title>
+  <meta name="theme-color" content="#020617" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Finanzas" />
+  <link rel="manifest" href="/mobile/manifest.json" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      margin: 0;
+      padding: 0;
+    }
 
-      const DEFAULT_SUBCATEGORIES = [
-        { id: 1, name: "Café y Desayunos", category_name: "Deseos (30%)", is_frequent: true, emoji: "☕" },
-        { id: 2, name: "Supermercado", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "🛒" },
-        { id: 3, name: "Restaurante", category_name: "Deseos (30%)", is_frequent: true, emoji: "🍽️" },
-        { id: 4, name: "Gasolina", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "⛽" },
-        { id: 5, name: "Farmacia", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "💊" },
-        { id: 6, name: "Pádel / Ocio", category_name: "Deseos (30%)", is_frequent: true, emoji: "🎾" },
-        { id: 7, name: "Alquiler / Hipoteca", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "🏠" },
-        { id: 8, name: "Suministros (Luz, Agua)", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "💡" },
-        { id: 9, name: "Suscripciones", category_name: "Deseos (30%)", is_frequent: false, emoji: "📱" },
-        { id: 10, name: "Fondo de Emergencia", category_name: "Ahorro e Inversión (20%)", is_frequent: false, emoji: "🛡️" }
-      ];
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      height: 100%;
+      overflow: hidden;
+      user-select: none;
+    }
 
-      const DEFAULT_CONCEPTS = ["Café con tostada", "Desayuno", "Mercadona", "Menú del día", "Gasolina", "Farmacia"];
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
 
-      let state = {
-        activeTab: "capture", // "capture" | "history" | "summary"
-        amountStr: "0",
-        selectedSubcat: DEFAULT_SUBCATEGORIES[0],
-        concept: "",
-        selectedDate: new Date().toISOString().split("T")[0],
-        subcategories: DEFAULT_SUBCATEGORIES,
-        frequentConcepts: DEFAULT_CONCEPTS,
-        transactions: [],
-        pairingToken: "",
-        isOnline: false,
-        isPaired: true,
-        isSyncing: false,
-        modalOpen: false,
-        showTokenModal: false,
-        isCreatingSubcat: false,
-        newSubcatName: "",
-        newSubcatCategory: "Deseos (30%)",
-        searchQuery: "",
-        showToast: false,
-        // Estado de "Mi Mes"
-        summaryMonth: new Date().toISOString().slice(0, 7),
-        monthlySummary: null,
-        loadingSummary: false,
-        editingBudgetSubcatId: null,
-        editBudgetAmount: "",
-        // Estado OTA Updates
-        currentVersionCode: 1,
-        availableUpdate: null,
-        // Estado Buscador Instantáneo e Histórico Offline (Fase 11)
-        historyCache: [],
-        searchQueryHist: "",
-        searchServerResults: null,
-        isSearchingServer: false
-      };
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
 
-      function triggerHaptic(ms = 15) {
-        if (navigator.vibrate) navigator.vibrate(ms);
+    @keyframes popIn {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -10px);
       }
 
-      function loadLocalState() {
-        try {
-          // Extraer token de URL si viene en la query string (?token=sec_...)
-          const params = new URLSearchParams(window.location.search);
-          const urlToken = params.get("token");
-          if (urlToken && urlToken.trim()) {
-            state.pairingToken = urlToken.trim();
-            localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
-            // Limpiar query string sin recargar
-            params.delete("token");
-            const newQuery = params.toString();
-            const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "") + window.location.hash;
-            window.history.replaceState({}, document.title, newUrl);
-          } else {
-            state.pairingToken = localStorage.getItem(STORAGE_KEYS.PAIRING_TOKEN) || "";
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+    }
+
+    .toast-anim {
+      animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .btn-press:active {
+      transform: scale(0.96);
+    }
+
+    .progress-bar-fill {
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+
+<body class="h-full flex flex-col justify-between">
+  <div id="app" class="h-full flex flex-col justify-between max-w-sm mx-auto w-full"></div>
+
+  <script>
+    // ==========================================
+    // ESTADO Y ALMACENAMIENTO OFFLINE
+    // ==========================================
+    const STORAGE_KEYS = {
+      TRANSACTIONS: "gestor_mobile_transactions",
+      CATALOG: "gestor_mobile_catalog",
+      PAIRING_TOKEN: "gestor_mobile_pairing_token",
+      HISTORY_CACHE: "gestor_mobile_history_cache"
+    };
+
+    const DEFAULT_SUBCATEGORIES = [
+      { id: 1, name: "Café y Desayunos", category_name: "Deseos (30%)", is_frequent: true, emoji: "☕" },
+      { id: 2, name: "Supermercado", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "🛒" },
+      { id: 3, name: "Restaurante", category_name: "Deseos (30%)", is_frequent: true, emoji: "🍽️" },
+      { id: 4, name: "Gasolina", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "⛽" },
+      { id: 5, name: "Farmacia", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "💊" },
+      { id: 6, name: "Pádel / Ocio", category_name: "Deseos (30%)", is_frequent: true, emoji: "🎾" },
+      { id: 7, name: "Alquiler / Hipoteca", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "🏠" },
+      { id: 8, name: "Suministros (Luz, Agua)", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "💡" },
+      { id: 9, name: "Suscripciones", category_name: "Deseos (30%)", is_frequent: false, emoji: "📱" },
+      { id: 10, name: "Fondo de Emergencia", category_name: "Ahorro e Inversión (20%)", is_frequent: false, emoji: "🛡️" }
+    ];
+
+    const DEFAULT_CONCEPTS = ["Café con tostada", "Desayuno", "Mercadona", "Menú del día", "Gasolina", "Farmacia"];
+
+    let state = {
+      activeTab: "capture", // "capture" | "history" | "summary"
+      amountStr: "0",
+      selectedSubcat: DEFAULT_SUBCATEGORIES[0],
+      concept: "",
+      selectedDate: new Date().toISOString().split("T")[0],
+      subcategories: DEFAULT_SUBCATEGORIES,
+      frequentConcepts: DEFAULT_CONCEPTS,
+      transactions: [],
+      pairingToken: "",
+      isOnline: false,
+      isPaired: true,
+      isSyncing: false,
+      modalOpen: false,
+      showTokenModal: false,
+      isCreatingSubcat: false,
+      newSubcatName: "",
+      newSubcatCategory: "Deseos (30%)",
+      searchQuery: "",
+      showToast: false,
+      // Estado de "Mi Mes"
+      summaryMonth: new Date().toISOString().slice(0, 7),
+      monthlySummary: null,
+      loadingSummary: false,
+      editingBudgetSubcatId: null,
+      editBudgetAmount: "",
+      // Estado OTA Updates
+      currentVersionCode: 1,
+      availableUpdate: null,
+      // Estado Buscador Instantáneo e Histórico Offline (Fase 11)
+      historyCache: [],
+      searchQueryHist: "",
+      searchServerResults: null,
+      isSearchingServer: false
+    };
+
+    function triggerHaptic(ms = 15) {
+      if (navigator.vibrate) navigator.vibrate(ms);
+    }
+
+    function loadLocalState() {
+      try {
+        // Extraer token de URL si viene en la query string (?token=sec_...)
+        const params = new URLSearchParams(window.location.search);
+        const urlToken = params.get("token");
+        if (urlToken && urlToken.trim()) {
+          state.pairingToken = urlToken.trim();
+          localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
+          // Limpiar query string sin recargar
+          params.delete("token");
+          const newQuery = params.toString();
+          const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "") + window.location.hash;
+          window.history.replaceState({}, document.title, newUrl);
+        } else {
+          state.pairingToken = localStorage.getItem(STORAGE_KEYS.PAIRING_TOKEN) || "";
+        }
+
+        const rawTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+        if (rawTx) state.transactions = JSON.parse(rawTx);
+
+        const rawHist = localStorage.getItem(STORAGE_KEYS.HISTORY_CACHE);
+        if (rawHist) state.historyCache = JSON.parse(rawHist);
+
+        const rawCat = localStorage.getItem(STORAGE_KEYS.CATALOG);
+        if (rawCat) {
+          const parsed = JSON.parse(rawCat);
+          if (parsed.personal_subcategories && parsed.personal_subcategories.length > 0) {
+            state.subcategories = parsed.personal_subcategories.map(s => ({
+              ...s,
+              emoji: getEmojiForName(s.name)
+            }));
+            state.selectedSubcat = state.subcategories.find(s => s.is_frequent) || state.subcategories[0];
           }
-
-          const rawTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-          if (rawTx) state.transactions = JSON.parse(rawTx);
-
-          const rawHist = localStorage.getItem(STORAGE_KEYS.HISTORY_CACHE);
-          if (rawHist) state.historyCache = JSON.parse(rawHist);
-
-          const rawCat = localStorage.getItem(STORAGE_KEYS.CATALOG);
-          if (rawCat) {
-            const parsed = JSON.parse(rawCat);
-            if (parsed.personal_subcategories && parsed.personal_subcategories.length > 0) {
-              state.subcategories = parsed.personal_subcategories.map(s => ({
-                ...s,
-                emoji: getEmojiForName(s.name)
-              }));
-              state.selectedSubcat = state.subcategories.find(s => s.is_frequent) || state.subcategories[0];
-            }
-            if (parsed.frequent_concepts && parsed.frequent_concepts.length > 0) {
-              state.frequentConcepts = parsed.frequent_concepts;
-            }
-          }
-        } catch (e) {
-          console.error("Error cargando estado local:", e);
-        }
-      }
-
-      function saveTransactions() {
-        try {
-          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      function saveCatalogLocally(catData) {
-        try {
-          localStorage.setItem(STORAGE_KEYS.CATALOG, JSON.stringify(catData));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      function getEmojiForName(name) {
-        const lower = name.toLowerCase();
-        if (lower.includes("café") || lower.includes("cafe") || lower.includes("desayun")) return "☕";
-        if (lower.includes("super") || lower.includes("compra") || lower.includes("mercadona") || lower.includes("aliment")) return "🛒";
-        if (lower.includes("restauran") || lower.includes("cen") || lower.includes("comid") || lower.includes("bar")) return "🍽️";
-        if (lower.includes("gasol") || lower.includes("combust") || lower.includes("diesel")) return "⛽";
-        if (lower.includes("farmac") || lower.includes("medic") || lower.includes("salud")) return "💊";
-        if (lower.includes("pádel") || lower.includes("padel") || lower.includes("ocio") || lower.includes("deport")) return "🎾";
-        if (lower.includes("alquiler") || lower.includes("hipoteca") || lower.includes("vivienda")) return "🏠";
-        if (lower.includes("luz") || lower.includes("agua") || lower.includes("suministr")) return "💡";
-        if (lower.includes("suscrip") || lower.includes("netflix") || lower.includes("spotify")) return "📱";
-        if (lower.includes("emergenc") || lower.includes("colch")) return "🛡️";
-        return "🏷️";
-      }
-
-      function getAuthHeaders() {
-        const headers = { Accept: "application/json" };
-        if (state.pairingToken) {
-          headers["X-Mobile-Pairing-Token"] = state.pairingToken;
-        }
-        return headers;
-      }
-
-      // ==========================================
-      // SINCRONIZACIÓN CON EL BACKEND
-      // ==========================================
-      async function checkServer() {
-        try {
-          const res = await fetch("/api/mobile/status", { headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            state.isOnline = true;
-            if (data.pairing_token) {
-              state.isPaired = (state.pairingToken === data.pairing_token);
-            }
-            // Refrescar catálogo
-            fetchCatalog();
-            // Si hay pendientes y está emparejado, sincronizar automáticamente
-            const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
-            if (pending.length > 0 && !state.isSyncing && state.isPaired) {
-              syncTransactions();
-            }
-            if (state.activeTab === "summary" && !state.monthlySummary) {
-              fetchMonthlySummary();
-            }
-            if (state.isPaired) {
-              fetchHistoryCache();
-            }
-            checkOtaVersion();
-          } else if (res.status === 403) {
-            state.isOnline = true;
-            state.isPaired = false;
-          } else {
-            state.isOnline = false;
-          }
-        } catch {
-          state.isOnline = false;
-        }
-        render();
-      }
-
-      async function fetchCatalog() {
-        try {
-          const res = await fetch("/api/mobile/catalog", { headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.personal_subcategories) {
-              state.subcategories = data.personal_subcategories.map(s => ({
-                ...s,
-                emoji: getEmojiForName(s.name)
-              }));
-              saveCatalogLocally(data);
-              render();
-            }
-          } else if (res.status === 403) {
-            state.isPaired = false;
-          }
-        } catch (e) {
-          console.log("Catálogo offline en caché");
-        }
-      }
-
-      async function syncTransactions() {
-        const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
-        if (pending.length === 0 || state.isSyncing) return;
-
-        state.isSyncing = true;
-        render();
-
-        try {
-          const payload = {
-            device_id: "mobile-pwa",
-            transactions: pending.map(t => ({
-              event_id: t.event_id,
-              scope: "PERSONAL",
-              amount: t.amount,
-              description: t.description,
-              date: t.date,
-              subcategory_id: t.subcategory_id,
-              subcategory_name: t.subcategory_name,
-              created_at_utc: t.created_at_utc
-            }))
-          };
-
-          const res = await fetch("/api/mobile/sync", {
-            method: "POST",
-            headers: {
-              ...getAuthHeaders(),
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
-          });
-
-          if (res.ok) {
-            state.transactions = state.transactions.map(t => 
-              t.status === "PENDING_SYNC" ? { ...t, status: "SYNCED" } : t
-            );
-            saveTransactions();
-            state.isOnline = true;
-            state.isPaired = true;
-          } else if (res.status === 403) {
-            state.isPaired = false;
-            state.showTokenModal = true;
-          }
-        } catch (err) {
-          console.error("Error sincronizando:", err);
-          state.isOnline = false;
-        } finally {
-          state.isSyncing = false;
-          render();
-        }
-      }
-
-      async function createSubcategoryOnTheFly() {
-        const name = state.newSubcatName.trim();
-        const catName = state.newSubcatCategory;
-        if (!name) return;
-
-        let newSub = null;
-        if (state.isOnline && state.isPaired) {
-          try {
-            const res = await fetch("/api/mobile/subcategory", {
-              method: "POST",
-              headers: {
-                ...getAuthHeaders(),
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ name, category_name: catName })
-            });
-            if (res.ok) {
-              const data = await res.json();
-              newSub = { ...data, emoji: getEmojiForName(data.name) };
-            }
-          } catch (e) {
-            console.error("Error creando subcategoría online:", e);
+          if (parsed.frequent_concepts && parsed.frequent_concepts.length > 0) {
+            state.frequentConcepts = parsed.frequent_concepts;
           }
         }
-
-        if (!newSub) {
-          newSub = {
-            id: -Date.now(),
-            name,
-            category_id: catName.includes("50%") ? 2 : 3,
-            category_name: catName,
-            is_frequent: true,
-            emoji: getEmojiForName(name)
-          };
-        }
-
-        state.subcategories.unshift(newSub);
-        state.selectedSubcat = newSub;
-        state.isCreatingSubcat = false;
-        state.modalOpen = false;
-        state.newSubcatName = "";
-        state.searchQuery = "";
-        render();
+      } catch (e) {
+        console.error("Error cargando estado local:", e);
       }
+    }
 
-      async function fetchMonthlySummary() {
-        state.loadingSummary = true;
-        render();
-        try {
-          const res = await fetch(`/api/mobile/summary?month=${state.summaryMonth}`, {
-            headers: getAuthHeaders()
-          });
-          if (res.ok) {
-            state.monthlySummary = await res.json();
+    function saveTransactions() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function saveCatalogLocally(catData) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.CATALOG, JSON.stringify(catData));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function getEmojiForName(name) {
+      const lower = name.toLowerCase();
+      if (lower.includes("café") || lower.includes("cafe") || lower.includes("desayun")) return "☕";
+      if (lower.includes("super") || lower.includes("compra") || lower.includes("mercadona") || lower.includes("aliment")) return "🛒";
+      if (lower.includes("restauran") || lower.includes("cen") || lower.includes("comid") || lower.includes("bar")) return "🍽️";
+      if (lower.includes("gasol") || lower.includes("combust") || lower.includes("diesel")) return "⛽";
+      if (lower.includes("farmac") || lower.includes("medic") || lower.includes("salud")) return "💊";
+      if (lower.includes("pádel") || lower.includes("padel") || lower.includes("ocio") || lower.includes("deport")) return "🎾";
+      if (lower.includes("alquiler") || lower.includes("hipoteca") || lower.includes("vivienda")) return "🏠";
+      if (lower.includes("luz") || lower.includes("agua") || lower.includes("suministr")) return "💡";
+      if (lower.includes("suscrip") || lower.includes("netflix") || lower.includes("spotify")) return "📱";
+      if (lower.includes("emergenc") || lower.includes("colch")) return "🛡️";
+      return "🏷️";
+    }
+
+    function getAuthHeaders() {
+      const headers = { Accept: "application/json" };
+      if (state.pairingToken) {
+        headers["X-Mobile-Pairing-Token"] = state.pairingToken;
+      }
+      return headers;
+    }
+
+    // ==========================================
+    // SINCRONIZACIÓN CON EL BACKEND
+    // ==========================================
+    async function checkServer() {
+      try {
+        const res = await fetch("/api/mobile/status", { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          state.isOnline = true;
+          if (data.pairing_token) {
+            state.isPaired = (state.pairingToken === data.pairing_token);
           }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          state.loadingSummary = false;
-          render();
-        }
-      }
-
-      async function updateSubcatBudget(subcatId) {
-        const amount = parseFloat(state.editBudgetAmount.replace(",", ".")) || 0;
-        try {
-          const res = await fetch("/api/mobile/budget", {
-            method: "POST",
-            headers: {
-              ...getAuthHeaders(),
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              subcategory_id: subcatId,
-              allocated_amount: amount,
-              month: state.summaryMonth
-            })
-          });
-          if (res.ok) {
-            state.editingBudgetSubcatId = null;
-            state.editBudgetAmount = "";
+          // Refrescar catálogo
+          fetchCatalog();
+          // Si hay pendientes y está emparejado, sincronizar automáticamente
+          const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
+          if (pending.length > 0 && !state.isSyncing && state.isPaired) {
+            syncTransactions();
+          }
+          if (state.activeTab === "summary" && !state.monthlySummary) {
             fetchMonthlySummary();
           }
-        } catch (e) {
-          alert("Error actualizando presupuesto");
+          if (state.isPaired) {
+            fetchHistoryCache();
+          }
+          checkOtaVersion();
+        } else if (res.status === 403) {
+          state.isOnline = true;
+          state.isPaired = false;
+        } else {
+          state.isOnline = false;
         }
+      } catch {
+        state.isOnline = false;
       }
+      render();
+    }
 
-      async function checkOtaVersion() {
-        try {
-          const res = await fetch("/api/mobile/version", { headers: getAuthHeaders() });
-          if (res.ok) {
-            const v = await res.json();
-            if (v.version_code > state.currentVersionCode && v.apk_available) {
-              state.availableUpdate = v;
-              render();
-            } else {
-              state.availableUpdate = null;
-            }
+    async function fetchCatalog() {
+      try {
+        const res = await fetch("/api/mobile/catalog", { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.personal_subcategories) {
+            state.subcategories = data.personal_subcategories.map(s => ({
+              ...s,
+              emoji: getEmojiForName(s.name)
+            }));
+            saveCatalogLocally(data);
+            render();
           }
-        } catch (e) {}
+        } else if (res.status === 403) {
+          state.isPaired = false;
+        }
+      } catch (e) {
+        console.log("Catálogo offline en caché");
       }
+    }
 
-      async function fetchHistoryCache() {
-        try {
-          const res = await fetch("/api/mobile/transactions/history-cache?months=12", { headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              state.historyCache = data;
-              localStorage.setItem(STORAGE_KEYS.HISTORY_CACHE, JSON.stringify(data));
-            }
-          }
-        } catch (e) {}
-      }
+    async function syncTransactions() {
+      const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
+      if (pending.length === 0 || state.isSyncing) return;
 
-      async function searchServerHistory(query) {
-        if (!query || !query.trim() || !state.isOnline || !state.isPaired) return;
-        state.isSearchingServer = true;
+      state.isSyncing = true;
+      render();
+
+      try {
+        const payload = {
+          device_id: "mobile-pwa",
+          transactions: pending.map(t => ({
+            event_id: t.event_id,
+            scope: "PERSONAL",
+            amount: t.amount,
+            description: t.description,
+            date: t.date,
+            subcategory_id: t.subcategory_id,
+            subcategory_name: t.subcategory_name,
+            created_at_utc: t.created_at_utc
+          }))
+        };
+
+        const res = await fetch("/api/mobile/sync", {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          state.transactions = state.transactions.map(t =>
+            t.status === "PENDING_SYNC" ? { ...t, status: "SYNCED" } : t
+          );
+          saveTransactions();
+          state.isOnline = true;
+          state.isPaired = true;
+        } else if (res.status === 403) {
+          state.isPaired = false;
+          state.showTokenModal = true;
+        }
+      } catch (err) {
+        console.error("Error sincronizando:", err);
+        state.isOnline = false;
+      } finally {
+        state.isSyncing = false;
         render();
+      }
+    }
+
+    async function createSubcategoryOnTheFly() {
+      const name = state.newSubcatName.trim();
+      const catName = state.newSubcatCategory;
+      if (!name) return;
+
+      let newSub = null;
+      if (state.isOnline && state.isPaired) {
         try {
-          const res = await fetch(`/api/mobile/transactions/search?q=${encodeURIComponent(query.trim())}&limit=50`, {
-            headers: getAuthHeaders()
+          const res = await fetch("/api/mobile/subcategory", {
+            method: "POST",
+            headers: {
+              ...getAuthHeaders(),
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ name, category_name: catName })
           });
           if (res.ok) {
             const data = await res.json();
-            state.searchServerResults = data.items || [];
+            newSub = { ...data, emoji: getEmojiForName(data.name) };
           }
         } catch (e) {
-          console.error("Error buscando en servidor:", e);
-        } finally {
-          state.isSearchingServer = false;
-          render();
+          console.error("Error creando subcategoría online:", e);
         }
       }
 
-      function exportJson() {
-        const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
-        const payload = {
-          device_id: "mobile-pwa",
-          exported_at_utc: new Date().toISOString(),
-          transactions: pending
+      if (!newSub) {
+        newSub = {
+          id: -Date.now(),
+          name,
+          category_id: catName.includes("50%") ? 2 : 3,
+          category_name: catName,
+          is_frequent: true,
+          emoji: getEmojiForName(name)
         };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `evt_mob_${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
       }
 
-      // ==========================================
-      // ACCIONES DEL USUARIO
-      // ==========================================
-      function handleKey(k) {
-        triggerHaptic(12);
-        if (k === ",") {
-          if (!state.amountStr.includes(",")) {
-            state.amountStr = (state.amountStr === "0" ? "0," : state.amountStr + ",");
-          }
-        } else if (k === "DEL") {
-          if (state.amountStr.length <= 1) {
-            state.amountStr = "0";
+      state.subcategories.unshift(newSub);
+      state.selectedSubcat = newSub;
+      state.isCreatingSubcat = false;
+      state.modalOpen = false;
+      state.newSubcatName = "";
+      state.searchQuery = "";
+      render();
+    }
+
+    async function fetchMonthlySummary() {
+      state.loadingSummary = true;
+      render();
+      try {
+        const res = await fetch(`/api/mobile/summary?month=${state.summaryMonth}`, {
+          headers: getAuthHeaders()
+        });
+        if (res.ok) {
+          state.monthlySummary = await res.json();
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        state.loadingSummary = false;
+        render();
+      }
+    }
+
+    async function updateSubcatBudget(subcatId) {
+      const amount = parseFloat(state.editBudgetAmount.replace(",", ".")) || 0;
+      try {
+        const res = await fetch("/api/mobile/budget", {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            subcategory_id: subcatId,
+            allocated_amount: amount,
+            month: state.summaryMonth
+          })
+        });
+        if (res.ok) {
+          state.editingBudgetSubcatId = null;
+          state.editBudgetAmount = "";
+          fetchMonthlySummary();
+        }
+      } catch (e) {
+        alert("Error actualizando presupuesto");
+      }
+    }
+
+    async function checkOtaVersion() {
+      try {
+        const res = await fetch("/api/mobile/version", { headers: getAuthHeaders() });
+        if (res.ok) {
+          const v = await res.json();
+          if (v.version_code > state.currentVersionCode && v.apk_available) {
+            state.availableUpdate = v;
+            render();
           } else {
-            state.amountStr = state.amountStr.slice(0, -1);
+            state.availableUpdate = null;
           }
+        }
+      } catch (e) { }
+    }
+
+    async function fetchHistoryCache() {
+      try {
+        const res = await fetch("/api/mobile/transactions/history-cache?months=12", { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            state.historyCache = data;
+            localStorage.setItem(STORAGE_KEYS.HISTORY_CACHE, JSON.stringify(data));
+          }
+        }
+      } catch (e) { }
+    }
+
+    async function searchServerHistory(query) {
+      if (!query || !query.trim() || !state.isOnline || !state.isPaired) return;
+      state.isSearchingServer = true;
+      render();
+      try {
+        const res = await fetch(`/api/mobile/transactions/search?q=${encodeURIComponent(query.trim())}&limit=50`, {
+          headers: getAuthHeaders()
+        });
+        if (res.ok) {
+          const data = await res.json();
+          state.searchServerResults = data.items || [];
+        }
+      } catch (e) {
+        console.error("Error buscando en servidor:", e);
+      } finally {
+        state.isSearchingServer = false;
+        render();
+      }
+    }
+
+    function exportJson() {
+      const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
+      const payload = {
+        device_id: "mobile-pwa",
+        exported_at_utc: new Date().toISOString(),
+        transactions: pending
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `evt_mob_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // ACCIONES DEL USUARIO
+    // ==========================================
+    function handleKey(k) {
+      triggerHaptic(12);
+      if (k === ",") {
+        if (!state.amountStr.includes(",")) {
+          state.amountStr = (state.amountStr === "0" ? "0," : state.amountStr + ",");
+        }
+      } else if (k === "DEL") {
+        if (state.amountStr.length <= 1) {
+          state.amountStr = "0";
         } else {
-          if (state.amountStr === "0") {
-            state.amountStr = k;
-          } else {
-            if (state.amountStr.includes(",")) {
-              const parts = state.amountStr.split(",");
-              if (parts[1] && parts[1].length >= 2) return;
-            }
-            if (state.amountStr.length < 8) {
-              state.amountStr += k;
-            }
+          state.amountStr = state.amountStr.slice(0, -1);
+        }
+      } else {
+        if (state.amountStr === "0") {
+          state.amountStr = k;
+        } else {
+          if (state.amountStr.includes(",")) {
+            const parts = state.amountStr.split(",");
+            if (parts[1] && parts[1].length >= 2) return;
           }
-        }
-        render();
-      }
-
-      function handleQuickAdd(val) {
-        triggerHaptic(15);
-        const current = parseFloat(state.amountStr.replace(",", ".")) || 0;
-        const next = (current + val).toFixed(2).replace(".", ",");
-        state.amountStr = next.endsWith(",00") ? next.replace(",00", "") : next;
-        render();
-      }
-
-      function saveExpense() {
-        const num = parseFloat(state.amountStr.replace(",", ".")) || 0;
-        if (num <= 0 || !state.selectedSubcat) return;
-
-        triggerHaptic(40);
-
-        const newTx = {
-          event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          scope: "PERSONAL",
-          amount: Math.round(num * 100) / 100,
-          description: state.concept.trim() || state.selectedSubcat.name,
-          date: state.selectedDate,
-          subcategory_id: state.selectedSubcat.id,
-          subcategory_name: state.selectedSubcat.name,
-          created_at_utc: new Date().toISOString(),
-          status: "PENDING_SYNC"
-        };
-
-        state.transactions.unshift(newTx);
-        saveTransactions();
-
-        state.amountStr = "0";
-        state.concept = "";
-        state.showToast = true;
-        render();
-
-        setTimeout(() => {
-          state.showToast = false;
-          render();
-        }, 2000);
-
-        if (state.isOnline && state.isPaired) {
-          setTimeout(syncTransactions, 200);
-        }
-      }
-
-      async function deleteTransaction(eventId) {
-        const tx = state.transactions.find(t => t.event_id === eventId);
-        if (!tx) return;
-        if (!confirm(`¿Eliminar este gasto de ${tx.amount.toFixed(2)} € (${tx.description})?`)) return;
-
-        triggerHaptic(20);
-        state.transactions = state.transactions.filter(t => t.event_id !== eventId);
-        saveTransactions();
-        render();
-
-        if (tx.status === "SYNCED") {
-          try {
-            const res = await fetch("/api/mobile/transactions/" + encodeURIComponent(eventId), {
-              method: "DELETE",
-              headers: getHeaders(),
-            });
-            if (!res.ok) {
-              console.warn("No se pudo eliminar en el servidor inmediatamente, encolado para retry");
-            }
-          } catch (e) {
-            console.warn("Error enviando delete al servidor:", e);
+          if (state.amountStr.length < 8) {
+            state.amountStr += k;
           }
         }
       }
+      render();
+    }
 
-      function saveTokenAndReconnect(tokenVal) {
-        if (!tokenVal || !tokenVal.trim()) return;
-        state.pairingToken = tokenVal.trim();
-        localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
-        state.showTokenModal = false;
-        checkServer();
+    function handleQuickAdd(val) {
+      triggerHaptic(15);
+      const current = parseFloat(state.amountStr.replace(",", ".")) || 0;
+      const next = (current + val).toFixed(2).replace(".", ",");
+      state.amountStr = next.endsWith(",00") ? next.replace(",00", "") : next;
+      render();
+    }
+
+    function saveExpense() {
+      const num = parseFloat(state.amountStr.replace(",", ".")) || 0;
+      if (num <= 0 || !state.selectedSubcat) return;
+
+      triggerHaptic(40);
+
+      const newTx = {
+        event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        scope: "PERSONAL",
+        amount: Math.round(num * 100) / 100,
+        description: state.concept.trim() || state.selectedSubcat.name,
+        date: state.selectedDate,
+        subcategory_id: state.selectedSubcat.id,
+        subcategory_name: state.selectedSubcat.name,
+        created_at_utc: new Date().toISOString(),
+        status: "PENDING_SYNC"
+      };
+
+      state.transactions.unshift(newTx);
+      saveTransactions();
+
+      state.amountStr = "0";
+      state.concept = "";
+      state.showToast = true;
+      render();
+
+      setTimeout(() => {
+        state.showToast = false;
+        render();
+      }, 2000);
+
+      if (state.isOnline && state.isPaired) {
+        setTimeout(syncTransactions, 200);
       }
+    }
 
-      function formatEuro(n) {
-        return (n || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+    async function deleteTransaction(eventId) {
+      const tx = state.transactions.find(t => t.event_id === eventId);
+      if (!tx) return;
+      if (!confirm(`¿Eliminar este gasto de ${tx.amount.toFixed(2)} € (${tx.description})?`)) return;
+
+      triggerHaptic(20);
+      state.transactions = state.transactions.filter(t => t.event_id !== eventId);
+      saveTransactions();
+      render();
+
+      if (tx.status === "SYNCED") {
+        try {
+          const res = await fetch("/api/mobile/transactions/" + encodeURIComponent(eventId), {
+            method: "DELETE",
+            headers: getHeaders(),
+          });
+          if (!res.ok) {
+            console.warn("No se pudo eliminar en el servidor inmediatamente, encolado para retry");
+          }
+        } catch (e) {
+          console.warn("Error enviando delete al servidor:", e);
+        }
       }
+    }
 
-      // ==========================================
-      // RENDERIZADO VISUAL
-      // ==========================================
-      function render() {
-        const app = document.getElementById("app");
-        const pendingCount = state.transactions.filter(t => t.status === "PENDING_SYNC").length;
-        const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
-        const canSave = numAmount > 0 && state.selectedSubcat !== null;
+    function saveTokenAndReconnect(tokenVal) {
+      if (!tokenVal || !tokenVal.trim()) return;
+      state.pairingToken = tokenVal.trim();
+      localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
+      state.showTokenModal = false;
+      checkServer();
+    }
 
-        const frequentSubs = state.subcategories.filter(s => s.is_frequent);
-        const activeSubs = frequentSubs.length > 0 ? frequentSubs : state.subcategories.slice(0, 6);
+    function formatEuro(n) {
+      return (n || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+    }
 
-        const [y, m, d] = state.selectedDate.split("-");
-        const dateFormatted = `${d}/${m}/${y}`;
+    // ==========================================
+    // RENDERIZADO VISUAL
+    // ==========================================
+    function render() {
+      const app = document.getElementById("app");
+      const pendingCount = state.transactions.filter(t => t.status === "PENDING_SYNC").length;
+      const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
+      const canSave = numAmount > 0 && state.selectedSubcat !== null;
 
-        app.innerHTML = `
+      const frequentSubs = state.subcategories.filter(s => s.is_frequent);
+      const activeSubs = frequentSubs.length > 0 ? frequentSubs : state.subcategories.slice(0, 6);
+
+      const [y, m, d] = state.selectedDate.split("-");
+      const dateFormatted = `${d}/${m}/${y}`;
+
+      app.innerHTML = `
           <!-- Toast de confirmación -->
           ${state.showToast ? `
             <div style="position:fixed; top:12px; left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:8px 16px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" class="toast-anim">
@@ -631,13 +649,13 @@
 
           <!-- Vista Principal -->
           <main style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-            ${state.activeTab === "capture" 
-              ? renderCaptureView(canSave, dateFormatted, activeSubs) 
-              : state.activeTab === "search"
-                ? renderSearchView()
-                : state.activeTab === "history" 
-                  ? renderHistoryView(pendingCount)
-                  : renderSummaryView()}
+            ${state.activeTab === "capture"
+          ? renderCaptureView(canSave, dateFormatted, activeSubs)
+          : state.activeTab === "search"
+            ? renderSearchView()
+            : state.activeTab === "history"
+              ? renderHistoryView(pendingCount)
+              : renderSummaryView()}
           </main>
 
           <!-- Barra de Navegación Inferior (4 Pestañas) -->
@@ -667,20 +685,20 @@
           ${state.modalOpen ? renderCategoryModal() : ""}
           ${state.showTokenModal ? renderTokenModal() : ""}
         `;
-      }
+    }
 
-      function renderCaptureView(canSave, dateFormatted, activeSubs) {
-        let wantsAlertHtml = "";
-        const sel = state.selectedSubcat;
-        const isWants = sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
-        const wants = state.monthlySummary && state.monthlySummary.wants;
-        if (isWants && wants && wants.budget > 0) {
-          const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
-          const projectedSpent = wants.spent + numAmount;
-          const remaining = wants.budget - projectedSpent;
-          const ratio = projectedSpent / wants.budget;
-          if (ratio >= 1.0) {
-            wantsAlertHtml = `
+    function renderCaptureView(canSave, dateFormatted, activeSubs) {
+      let wantsAlertHtml = "";
+      const sel = state.selectedSubcat;
+      const isWants = sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
+      const wants = state.monthlySummary && state.monthlySummary.wants;
+      if (isWants && wants && wants.budget > 0) {
+        const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
+        const projectedSpent = wants.spent + numAmount;
+        const remaining = wants.budget - projectedSpent;
+        const ratio = projectedSpent / wants.budget;
+        if (ratio >= 1.0) {
+          wantsAlertHtml = `
               <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(225,29,72,0.15); border:1px solid rgba(244,63,94,0.5); display:flex; justify-content:space-between; align-items:center;">
                 <div>
                   <div style="font-size:11px; font-weight:800; color:#fb7185;">🚨 Techo de Deseos Superado</div>
@@ -689,8 +707,8 @@
                 <span style="font-size:9px; background:#f43f5e; color:#fff; font-weight:800; padding:2px 6px; border-radius:9999px;">Déficit</span>
               </div>
             `;
-          } else if (ratio >= 0.8) {
-            wantsAlertHtml = `
+        } else if (ratio >= 0.8) {
+          wantsAlertHtml = `
               <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(245,158,11,0.15); border:1px solid rgba(251,191,36,0.5); display:flex; justify-content:space-between; align-items:center;">
                 <div>
                   <div style="font-size:11px; font-weight:800; color:#fbbf24;">⚠️ Cerca del Límite de Ocio</div>
@@ -699,8 +717,8 @@
                 <span style="font-size:9px; background:#fbbf24; color:#020617; font-weight:800; padding:2px 6px; border-radius:9999px;">Alerta</span>
               </div>
             `;
-          } else {
-            wantsAlertHtml = `
+        } else {
+          wantsAlertHtml = `
               <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); display:flex; justify-content:space-between; align-items:center;">
                 <div>
                   <div style="font-size:11px; font-weight:800; color:#34d399;">🟢 Margen de Ocio Saludable</div>
@@ -709,10 +727,10 @@
                 <span style="font-size:9px; background:rgba(16,185,129,0.2); color:#34d399; font-weight:800; padding:2px 6px; border-radius:9999px;">Margen OK</span>
               </div>
             `;
-          }
         }
+      }
 
-        return `
+      return `
           <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; padding:10px 14px; overflow-y:auto;" class="no-scrollbar">
             <!-- Barra de Ámbito y Fecha -->
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
@@ -741,14 +759,14 @@
             <!-- Chips de Categorías Frecuentes -->
             <div style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 0;" class="no-scrollbar">
               ${activeSubs.map(s => {
-                const isSel = state.selectedSubcat && state.selectedSubcat.id === s.id;
-                return `
+        const isSel = state.selectedSubcat && state.selectedSubcat.id === s.id;
+        return `
                   <button onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); render();" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0f172a'}; border:1px solid ${isSel ? '#10b981' : '#1e293b'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:7px 11px; border-radius:12px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
                     <span>${s.emoji || "🏷️"}</span>
                     <span>${s.name}</span>
                   </button>
                 `;
-              }).join("")}
+      }).join("")}
               <button onclick="state.modalOpen = true; state.isCreatingSubcat = false; render();" class="btn-press" style="background:rgba(15,23,42,0.6); border:1px solid #1e293b; color:#94a3b8; font-size:11px; font-weight:600; padding:7px 11px; border-radius:12px; white-space:nowrap; shrink:0; cursor:pointer;">
                 🔍 Ver todas
               </button>
@@ -777,7 +795,7 @@
 
             <!-- Teclado Numérico 3x4 -->
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin:2px 0;">
-              ${["1","2","3","4","5","6","7","8","9",",","0","DEL"].map(k => `
+              ${["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0", "DEL"].map(k => `
                 <button onclick="handleKey('${k}');" class="btn-press" style="height:50px; background:#0f172a; border:1px solid #1e293b; border-radius:12px; color:${k === 'DEL' ? '#f43f5e' : '#f8fafc'}; font-size:${k === ',' ? '26px' : '20px'}; font-weight:800; display:flex; align-items:center; justify-content:center; cursor:pointer;">
                   ${k === "DEL" ? "⌫" : k}
                 </button>
@@ -793,41 +811,41 @@
             </div>
           </div>
         `;
+    }
+
+    function renderSearchView() {
+      const q = (state.searchQueryHist || "").trim().toLowerCase();
+      let displayResults = [];
+
+      if (state.searchServerResults !== null) {
+        displayResults = state.searchServerResults;
+      } else if (q) {
+        const combined = [
+          ...state.transactions.map((t, idx) => ({
+            id: -(idx + 1),
+            date: t.date,
+            amount: t.amount,
+            description: t.description,
+            subcategory_id: t.subcategory_id,
+            subcategory_name: t.subcategory_name,
+            category_name: "Cuenta Personal"
+          })),
+          ...state.historyCache
+        ];
+        displayResults = combined.filter(item => {
+          const matchDesc = item.description && item.description.toLowerCase().includes(q);
+          const matchSub = item.subcategory_name && item.subcategory_name.toLowerCase().includes(q);
+          return matchDesc || matchSub;
+        }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
       }
 
-      function renderSearchView() {
-        const q = (state.searchQueryHist || "").trim().toLowerCase();
-        let displayResults = [];
+      const formatDate = (iso) => {
+        if (!iso) return "";
+        const parts = iso.split("-");
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+      };
 
-        if (state.searchServerResults !== null) {
-          displayResults = state.searchServerResults;
-        } else if (q) {
-          const combined = [
-            ...state.transactions.map((t, idx) => ({
-              id: -(idx + 1),
-              date: t.date,
-              amount: t.amount,
-              description: t.description,
-              subcategory_id: t.subcategory_id,
-              subcategory_name: t.subcategory_name,
-              category_name: "Cuenta Personal"
-            })),
-            ...state.historyCache
-          ];
-          displayResults = combined.filter(item => {
-            const matchDesc = item.description && item.description.toLowerCase().includes(q);
-            const matchSub = item.subcategory_name && item.subcategory_name.toLowerCase().includes(q);
-            return matchDesc || matchSub;
-          }).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-        }
-
-        const formatDate = (iso) => {
-          if (!iso) return "";
-          const parts = iso.split("-");
-          return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
-        };
-
-        return `
+      return `
           <div style="flex:1; padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;" class="no-scrollbar">
             <!-- Barra de Búsqueda -->
             <div style="position:relative; display:flex; align-items:center;">
@@ -880,9 +898,9 @@
                 ` : `
                   <div style="display:flex; flex-direction:column; gap:6px;">
                     ${displayResults.map((item, idx) => {
-                      const isLatest = idx === 0;
-                      const emoji = getEmojiForName(item.subcategory_name || "");
-                      return `
+        const isLatest = idx === 0;
+        const emoji = getEmojiForName(item.subcategory_name || "");
+        return `
                         <div style="padding:10px 12px; border-radius:14px; background:#0f172a; border:1px solid ${isLatest ? 'rgba(16,185,129,0.4)' : '#1e293b'}; display:flex; align-items:center; justify-content:space-between; gap:8px;">
                           <div style="display:flex; align-items:center; gap:8px; min-width:0;">
                             <span style="font-size:18px;">${emoji}</span>
@@ -901,20 +919,20 @@
                           </div>
                         </div>
                       `;
-                    }).join("")}
+      }).join("")}
                   </div>
                 `}
               </div>
             `}
           </div>
         `;
-      }
+    }
 
-      function renderHistoryView(pendingCount) {
-        const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
-        const synced = state.transactions.filter(t => t.status === "SYNCED");
+    function renderHistoryView(pendingCount) {
+      const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
+      const synced = state.transactions.filter(t => t.status === "SYNCED");
 
-        return `
+      return `
           <div style="flex:1; padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;" class="no-scrollbar">
             <!-- Tarjeta de Estado de Sincronización -->
             <div style="padding:14px; border-radius:16px; background:#0f172a; border:1px solid #1e293b; display:flex; flex-direction:column; gap:10px;">
@@ -993,12 +1011,12 @@
             </div>
           </div>
         `;
-      }
+    }
 
-      function renderSummaryView() {
-        const sum = state.monthlySummary;
+    function renderSummaryView() {
+      const sum = state.monthlySummary;
 
-        return `
+      return `
           <div style="flex:1; padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:12px;" class="no-scrollbar">
             <!-- Barra Superior de Mes y Refresco -->
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1111,8 +1129,8 @@
 
                 <div style="display:flex; flex-direction:column; gap:6px;">
                   ${sum.subcategories.map(sub => {
-                    const isEd = state.editingBudgetSubcatId === sub.subcategory_id;
-                    return `
+        const isEd = state.editingBudgetSubcatId === sub.subcategory_id;
+        return `
                       <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #020617;">
                         <div>
                           <div style="font-size:12px; font-weight:700; color:#f8fafc;">${sub.subcategory_name}</div>
@@ -1133,21 +1151,21 @@
                         `}
                       </div>
                     `;
-                  }).join("")}
+      }).join("")}
                 </div>
               </div>
             `}
           </div>
         `;
-      }
+    }
 
-      function renderCategoryModal() {
-        const q = state.searchQuery.toLowerCase();
-        const filtered = state.subcategories.filter(s => 
-          !q || s.name.toLowerCase().includes(q) || s.category_name.toLowerCase().includes(q)
-        );
+    function renderCategoryModal() {
+      const q = state.searchQuery.toLowerCase();
+      const filtered = state.subcategories.filter(s =>
+        !q || s.name.toLowerCase().includes(q) || s.category_name.toLowerCase().includes(q)
+      );
 
-        return `
+      return `
           <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:flex-end;">
             <div style="background:#0f172a; border-top:1px solid #1e293b; border-radius:24px 24px 0 0; max-height:85vh; display:flex; flex-direction:column; width:100%; max-width:400px; margin:0 auto; padding:16px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -1223,10 +1241,10 @@
             </div>
           </div>
         `;
-      }
+    }
 
-      function renderTokenModal() {
-        return `
+    function renderTokenModal() {
+      return `
           <div style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
             <div style="background:#0f172a; border:1px solid #1e293b; border-radius:20px; max-width:360px; margin:0 auto; padding:18px; display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
               <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1253,38 +1271,39 @@
             </div>
           </div>
         `;
-      }
+    }
 
-      // Inicialización y Registro de Service Worker para PWA Offline
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker.register("/mobile/sw.js").catch((err) => {
-            console.log("Service Worker registro opcional:", err);
-          });
+    // Inicialización y Registro de Service Worker para PWA Offline
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/mobile/sw.js").catch((err) => {
+          console.log("Service Worker registro opcional:", err);
         });
-      }
-
-      window.addEventListener("online", () => {
-        state.isOnline = true;
-        render();
-        checkServer();
       });
+    }
 
-      window.addEventListener("offline", () => {
-        state.isOnline = false;
-        render();
-      });
-
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") {
-          checkServer();
-        }
-      });
-
-      loadLocalState();
+    window.addEventListener("online", () => {
+      state.isOnline = true;
       render();
       checkServer();
-      setInterval(checkServer, 15000);
-    </script>
-  </body>
+    });
+
+    window.addEventListener("offline", () => {
+      state.isOnline = false;
+      render();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        checkServer();
+      }
+    });
+
+    loadLocalState();
+    render();
+    checkServer();
+    setInterval(checkServer, 15000);
+  </script>
+</body>
+
 </html>
