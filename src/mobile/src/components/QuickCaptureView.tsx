@@ -33,7 +33,10 @@ export const QuickCaptureView = ({
   const [concept, setConcept] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split("T")[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   });
   const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
   const [toastInfo, setToastInfo] = useState<{ message: string; eventId?: string } | null>(null);

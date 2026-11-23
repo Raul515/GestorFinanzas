@@ -244,6 +244,16 @@ class SQLiteRepository(IRepository):
                     logger.warning("No se pudo emitir tombstone desde delete_transaction: %s", sync_exc)
                 return True
 
+            # Si la transacción tiene un comprobante físico asociado, eliminarlo directamente del disco
+            receipt_fn = getattr(db_item, "receipt_filename", None)
+            if receipt_fn:
+                try:
+                    from backend.services.mobile_sync_service import MobileSyncService
+                    sync_svc = MobileSyncService()
+                    sync_svc.delete_receipt_file(receipt_fn)
+                except Exception as file_exc:
+                    logger.warning("No se pudo eliminar el comprobante físico %s: %s", receipt_fn, file_exc)
+
             # Si la transacción está vinculada a una estrategia de pautas, revertir la estrategia completa en cascada
             strat_id = getattr(db_item, "applied_strategy_id", None)
             if strat_id:
@@ -259,6 +269,14 @@ class SQLiteRepository(IRepository):
                     .all()
                 )
                 for sib in siblings:
+                    sib_receipt = getattr(sib, "receipt_filename", None)
+                    if sib_receipt:
+                        try:
+                            from backend.services.mobile_sync_service import MobileSyncService
+                            sync_svc = MobileSyncService()
+                            sync_svc.delete_receipt_file(sib_receipt)
+                        except Exception:
+                            pass
                     sub = (
                         self.db.query(cat_model.Subcategory)
                         .filter(cat_model.Subcategory.id == sib.subcategory_id)

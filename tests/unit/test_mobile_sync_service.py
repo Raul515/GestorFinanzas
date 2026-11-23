@@ -730,6 +730,116 @@ def test_mobile_performance_optimizations_and_sql_aggregation(populated_db: Sess
     assert search_res.items[0].subcategory_name == "Café y Desayunos"
 
 
+def test_sync_status_does_not_leak_pairing_token(populated_db, tmp_path: Path):
+    """Verifica que get_sync_status nunca devuelva el pairing_token (SEC-01)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    service.get_or_create_pairing_token()
+
+    status = service.get_sync_status(populated_db, authenticated=True)
+    assert status.pairing_token is None
+
+
+def test_save_receipt_with_non_alphanumeric_event_id(tmp_path: Path):
+    """Verifica que el saneamiento de safe_id evite inyección de nombres de archivo."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    dummy_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    saved_fn = service.save_receipt_base64("../../../exploit_evt", dummy_b64)
+    assert saved_fn is not None
+    assert ".." not in saved_fn
+    assert "/" not in saved_fn
+    assert "\\" not in saved_fn
+    assert saved_fn == "receipt_exploit_evt.jpg"
+
+
+def test_mobile_sync_income_subcategory_auto_assigned_to_income(populated_db, tmp_path: Path):
+    """Verifica que una subcategoría creada al vuelo para INCOME se asigne a Ingresos Netos (Fase 18)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    req = MobileSyncRequest(
+        device_id="mobile-test-income",
+        transactions=[
+            MobileTransactionPayload(
+                event_id="evt-income-vuelo-1",
+                amount=120.0,
+                description="Devolución Hacienda IRPF",
+                date=date(2026, 11, 10),
+                subcategory_name="Devoluciones IRPF",
+                type="INCOME",
+            )
+        ],
+    )
+    res = service.process_mobile_sync(populated_db, req)
+    assert res.success is True
+    assert res.processed_count == 1
+
+    created_sub = populated_db.query(Subcategory).filter(Subcategory.name == "Devoluciones IRPF").first()
+    assert created_sub is not None
+    assert service.is_income_category(created_sub.category) is True
+
+
+def test_delete_transaction_removes_physical_receipt_file(populated_db, tmp_path: Path, monkeypatch):
+    """Verifica que al eliminar una transacción se borre físicamente el comprobante del disco (Fase 18)."""
+    monkeypatch.setenv("BASE_SYNC_DIR", str(tmp_path))
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    dummy_bytes = b"dummy-receipt-image-content"
+    filename = service.save_receipt_file("evt-delete-physical", dummy_bytes)
+    assert filename is not None
+    physical_path = service.get_receipt_path(filename)
+    assert physical_path is not None
+    assert physical_path.exists() is True
+
+    subcat = populated_db.query(Subcategory).first()
+    tx = Transaction(
+        date=date.today(),
+        subcategory_id=subcat.id,
+        amount=45.0,
+        description="Compra ferretería con ticket",
+        mobile_event_id="evt-delete-physical",
+        receipt_filename=filename,
+    )
+    populated_db.add(tx)
+    populated_db.commit()
+    populated_db.refresh(tx)
+
+    deleted_id = service.delete_mobile_transaction(populated_db, "evt-delete-physical")
+    assert deleted_id == tx.id
+    assert physical_path.exists() is False
+
+
+def test_get_mobile_monthly_summary_with_null_subcategory(populated_db, tmp_path: Path, monkeypatch):
+    """Verifica que transacciones huérfanas sin subcategoría se computen en total_spent (Fase 18)."""
+    import types
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    fake_orphan = types.SimpleNamespace(
+        id=999,
+        date=date(2026, 11, 12),
+        subcategory_id=None,
+        amount=65.50,
+        description="Gasto no categorizado móvil",
+    )
+
+    orig_query = populated_db.query
+    def mock_query(model, *args, **kwargs):
+        q = orig_query(model, *args, **kwargs)
+        if model == Transaction:
+            orig_all = q.all
+            def mock_all():
+                items = orig_all()
+                return list(items) + [fake_orphan]
+            q.all = mock_all
+        return q
+
+    monkeypatch.setattr(populated_db, "query", mock_query)
+
+    summary = service.get_mobile_monthly_summary(populated_db, month="2026-11")
+    assert summary.total_spent >= 65.50
+    orphan_item = next((s for s in summary.subcategories if s.get("subcategory_id") == -1), None)
+    assert orphan_item is not None
+    assert orphan_item["spent"] == 65.50
+    assert orphan_item["subcategory_name"] == "Sin Subcategoría"
+
+
+
 
 
 

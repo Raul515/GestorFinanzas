@@ -1,7 +1,8 @@
 import { useState, useMemo, ChangeEvent, KeyboardEvent } from "react";
-import { Search, X, Tag, Calendar } from "lucide-react";
+import { Search, X, Tag, Calendar, Camera } from "lucide-react";
 import { HistoricalTransactionItem, MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
+import { getReceiptImageUrl } from "../services/api";
 
 interface SearchViewProps {
   isServerOnline: boolean;
@@ -21,6 +22,7 @@ export const SearchView = ({
   const [query, setQuery] = useState("");
   const [serverResults, setServerResults] = useState<HistoricalTransactionItem[] | null>(null);
   const [isSearchingServer, setIsSearchingServer] = useState(false);
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
   // Formato español de fecha DD/MM/AAAA
   const formatDateDisplay = (isoDate: string) => {
@@ -41,9 +43,12 @@ export const SearchView = ({
         date: t.date,
         amount: t.amount,
         description: t.description,
-        subcategory_id: t.subcategory_id,
-        subcategory_name: t.subcategory_name,
+        type: t.type || "EXPENSE",
+        subcategory_id: t.subcategory_id || 0,
+        subcategory_name: t.subcategory_name || "",
         category_name: "Cuenta Personal",
+        receipt_filename: t.receipt_filename || undefined,
+        receipt_url: getReceiptImageUrl(t.receipt_filename),
       })),
       ...historyCache,
     ];
@@ -207,9 +212,21 @@ export const SearchView = ({
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-black text-sm text-slate-100">
-                        -{item.amount.toFixed(2)} €
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(item.receipt_filename || item.receipt_url) && (
+                        <button
+                          type="button"
+                          onClick={() => setViewingReceipt(getReceiptImageUrl(item.receipt_filename || item.receipt_url) ?? null)}
+                          className="p-1 rounded-lg text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 transition-all"
+                          title="Ver foto del ticket"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <div className="text-right shrink-0">
+                        <div className={`font-mono font-black text-sm ${item.type === "INCOME" ? "text-emerald-400" : "text-slate-100"}`}>
+                          {item.type === "INCOME" ? "+" : "-"}{item.amount.toFixed(2)} €
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -217,6 +234,40 @@ export const SearchView = ({
               })}
             </div>
           )}
+        </div>
+      )}
+      {/* Modal Visor de Comprobante / Ticket */}
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-800 p-3 shadow-2xl flex flex-col gap-3 max-h-[90vh]">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>Comprobante de Ticket</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setViewingReceipt(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-100 active:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto rounded-xl bg-slate-950 flex items-center justify-center p-1 border border-slate-800">
+              <img
+                src={viewingReceipt}
+                alt="Ticket completo"
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewingReceipt(null)}
+              className="w-full py-2 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold active:scale-95"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -98,13 +98,27 @@
     // ==========================================
     // ESTADO Y ALMACENAMIENTO OFFLINE
     // ==========================================
+    function getLocalDateString(d = new Date()) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function getLocalMonthString(d = new Date()) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      return `${year}-${month}`;
+    }
+
     const STORAGE_KEYS = {
       TRANSACTIONS: "gestor_mobile_transactions",
       CATALOG: "gestor_mobile_catalog",
       PAIRING_TOKEN: "gestor_mobile_pairing_token",
       HISTORY_CACHE: "gestor_mobile_history_cache",
       QUICK_PRESETS: "gestor_mobile_quick_presets",
-      SERVER_URL: "gestor_mobile_server_url"
+      SERVER_URL: "gestor_mobile_server_url",
+      PENDING_DELETES: "gestor_mobile_pending_deletes"
     };
 
     const DEFAULT_QUICK_PRESETS = [
@@ -133,7 +147,7 @@
       amountStr: "0",
       selectedSubcat: DEFAULT_SUBCATEGORIES[0],
       concept: "",
-      selectedDate: new Date().toISOString().split("T")[0],
+      selectedDate: getLocalDateString(),
       subcategories: DEFAULT_SUBCATEGORIES,
       frequentConcepts: DEFAULT_CONCEPTS,
       transactions: [],
@@ -153,7 +167,7 @@
       searchQuery: "",
       showToast: false,
       // Estado de "Mi Mes"
-      summaryMonth: new Date().toISOString().slice(0, 7),
+      summaryMonth: getLocalMonthString(),
       monthlySummary: null,
       loadingSummary: false,
       editingBudgetSubcatId: null,
@@ -354,7 +368,27 @@
       try {
         localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
       } catch (e) {
-        console.error(e);
+        console.warn("Cuota de almacenamiento excedida, intentando purgar comprobantes sincronizados:", e);
+        try {
+          let cleaned = false;
+          state.transactions = state.transactions.map(t => {
+            if (t.status === "SYNCED" && t.receipt_base64) {
+              cleaned = true;
+              return { ...t, receipt_base64: null };
+            }
+            return t;
+          });
+          if (cleaned) {
+            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
+            console.log("Transacciones guardadas con éxito tras purgar base64 de comprobantes sincronizados.");
+            return;
+          }
+          // Purgado defensivo final de todas las fotos si aún excede cuota
+          state.transactions = state.transactions.map(t => ({ ...t, receipt_base64: null }));
+          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(state.transactions));
+        } catch (retryErr) {
+          console.error("Fallo crítico al guardar en localStorage tras purgar comprobantes:", retryErr);
+        }
       }
     }
 
@@ -479,13 +513,14 @@
       }, 4000);
 
       if (state.isOnline && state.isPaired) {
-        setTimeout(syncPendingTransactions, 300);
+        setTimeout(syncTransactions, 300);
       }
     }
 
     function undoDirectSave() {
       if (!state.toastUndoEventId) return;
       const targetId = state.toastUndoEventId;
+      const targetTx = state.transactions.find(t => t.event_id === targetId);
       state.transactions = state.transactions.filter(t => t.event_id !== targetId);
       saveTransactions();
       state.showToast = false;
@@ -493,6 +528,10 @@
       state.toastMessage = "";
       triggerHaptic(20);
       render();
+
+      if (targetTx && targetTx.status === "SYNCED") {
+        deleteTransaction(targetId);
+      }
     }
 
     function updatePresetProp(id, prop, value) {
@@ -631,7 +670,53 @@
       }
     }
 
+    function queuePendingDelete(eventId) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.PENDING_DELETES);
+        const list = raw ? JSON.parse(raw) : [];
+        if (!list.includes(eventId)) {
+          list.push(eventId);
+          localStorage.setItem(STORAGE_KEYS.PENDING_DELETES, JSON.stringify(list));
+        }
+      } catch (e) {
+        console.error("Error encolando borrado offline:", e);
+      }
+    }
+
+    async function processPendingDeletes() {
+      let list = [];
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.PENDING_DELETES);
+        list = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return;
+      }
+      if (!list || list.length === 0) return;
+
+      const remaining = [];
+      for (const eventId of list) {
+        try {
+          const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/` + encodeURIComponent(eventId), {
+            method: "DELETE",
+            headers: getAuthHeaders(),
+          });
+          if (!res.ok && res.status !== 404) {
+            remaining.push(eventId);
+          }
+        } catch (e) {
+          remaining.push(eventId);
+        }
+      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.PENDING_DELETES, JSON.stringify(remaining));
+      } catch (e) {
+        console.error("Error actualizando borrados pendientes:", e);
+      }
+    }
+
     async function syncTransactions() {
+      await processPendingDeletes();
+
       const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
       if (pending.length === 0 || state.isSyncing) return;
 
@@ -677,6 +762,12 @@
         } else if (res.status === 403) {
           state.isPaired = false;
           state.showServerModal = true;
+        } else if (res.status === 422) {
+          console.error("Error 422 de validación en lote móvil; marcando ítems con error para no bloquear la cola.");
+          state.transactions = state.transactions.map(t =>
+            t.status === "PENDING_SYNC" ? { ...t, status: "SYNC_ERROR" } : t
+          );
+          saveTransactions();
         }
       } catch (err) {
         console.error("Error sincronizando:", err);
@@ -989,16 +1080,22 @@
       render();
 
       if (tx.status === "SYNCED") {
+        let deletedOnline = false;
         try {
           const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/` + encodeURIComponent(eventId), {
             method: "DELETE",
             headers: getAuthHeaders(),
           });
-          if (!res.ok) {
-            console.warn("No se pudo eliminar en el servidor inmediatamente, encolado para retry");
+          if (res.ok || res.status === 404) {
+            deletedOnline = true;
           }
         } catch (e) {
-          console.warn("Error enviando delete al servidor:", e);
+          console.warn("Fallo de red al eliminar en servidor:", e);
+        }
+
+        if (!deletedOnline) {
+          console.warn("Encolando borrado offline para sincronización posterior:", eventId);
+          queuePendingDelete(eventId);
         }
       }
     }
@@ -1340,9 +1437,11 @@
             date: t.date,
             amount: t.amount,
             description: t.description,
+            type: t.type || "EXPENSE",
             subcategory_id: t.subcategory_id,
             subcategory_name: t.subcategory_name,
-            category_name: "Cuenta Personal"
+            category_name: "Cuenta Personal",
+            receipt_filename: t.receipt_filename
           })),
           ...state.historyCache
         ];

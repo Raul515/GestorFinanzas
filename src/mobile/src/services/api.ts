@@ -125,12 +125,15 @@ export const syncTransactionsWithBackend = async (
     transactions: pendingTxs.map((t) => ({
       event_id: t.event_id,
       scope: t.scope,
+      type: t.type || "EXPENSE",
       amount: t.amount,
       description: t.description,
       date: t.date,
       subcategory_id: t.subcategory_id,
       subcategory_name: t.subcategory_name,
       created_at_utc: t.created_at_utc,
+      receipt_base64: t.receipt_base64,
+      receipt_filename: t.receipt_filename,
     })),
   };
 
@@ -310,5 +313,18 @@ export const fetchHistoryCache = async (
     return null;
   }
 };
+
+export const getReceiptImageUrl = (urlOrFilename?: string | null): string | undefined => {
+  if (!urlOrFilename) return undefined;
+  if (urlOrFilename.startsWith("data:")) return urlOrFilename;
+  const path = urlOrFilename.startsWith("/api/") ? urlOrFilename : `/api/mobile/receipts/${urlOrFilename}`;
+  let base = `${getBaseApiUrl()}${path}`;
+  const token = getStoredPairingToken();
+  if (token) {
+    base += (base.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+  }
+  return base;
+};
+
 
 

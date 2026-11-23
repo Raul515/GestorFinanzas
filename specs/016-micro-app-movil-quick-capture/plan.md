@@ -220,22 +220,6 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
   5. Pruebas automatizadas:
      - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
 
-### Fase 17: Configuración Dinámica de Servidor Backend y Soporte Nativo APK (Completada)
-- **Objetivo**: Dotar a la aplicación móvil (React y PWA autónoma) de persistencia y resolución dinámica de la URL del backend, permitiendo operar tanto empaquetada como APK nativa de Android (Capacitor) como en redes variables o Hotspot móvil, manteniendo el alto rendimiento de sondeo adaptativo.
-- **Entregables Implementados y Validados**:
-  1. Servicios de persistencia y red móvil (`src/mobile/src/services/`):
-     - `storage.ts`: clave `gestor_mobile_server_url`, `getStoredServerUrl()`, `saveStoredServerUrl()` con sanitización estricta y auto-captura en arranque (`extractAndSaveServerUrlFromUrl()`).
-     - `api.ts`: resolución jerárquica en `getBaseApiUrl()` (URL guardada > origin web > localhost) y utilidad ligera `testServerConnection()` para validación de conectividad a 3s con AbortController.
-  2. Componentes e Interfaz (`src/mobile/src/components/` y `App.tsx`):
-     - `ServerConfigModal.tsx`: modal táctil oscuro con inputs de Servidor Backend y Token de Emparejamiento, botón `[⚡ Probar Conexión]` con feedback visual y guardado atómico.
-     - `App.tsx`: botón de ajustes `[⚙️]` en la cabecera unificado con el indicador de estado de red y auto-detección desatendida desde la URL del QR.
-  3. Paridad total en PWA monolítica estática (`src/mobile/dist/index.html`):
-     - Replicación de la resolución dinámica de URL base en todas las llamadas fetch, modal táctil de ajustes de conexión y preservación rigurosa de las optimizaciones de rendimiento (sondeo a 60s, pausa por `visibilityState` y desacoplamiento de datos pesados).
-  4. Pruebas y verificación:
-     - 0 errores estáticos en TypeScript (`npx tsc --noEmit`) y 100% de tests pasando en pytest (39/39 tests).
-
----
-
 ### Fase 16: Optimización de Rendimiento, Desacoplamiento de Polling y Carga Ansiosa SQL (Completada)
 - **Objetivo**: Implementar de forma integral las soluciones a los 6 hallazgos de la auditoría de rendimiento integral, desacoplando el sondeo de la PWA móvil, eliminando consultas N+1 en SQLite, delegando agregaciones al motor SQL, optimizando los ciclos del worker en segundo plano y memoizando tokens.
 - **Entregables Implementados y Validados**:
@@ -265,6 +249,33 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Replicación de la resolución dinámica de URL base en todas las llamadas fetch, modal táctil de ajustes de conexión y preservación rigurosa de las optimizaciones de rendimiento (sondeo a 60s, pausa por `visibilityState` y desacoplamiento de datos pesados).
   4. Pruebas y verificación:
      - 0 errores estáticos en TypeScript (`npx tsc --noEmit`) y 100% de tests pasando en pytest (39/39 tests).
+
+### Fase 18: Resiliencia de Integración y Casos Límite (Completada)
+- **Objetivo**: Resolver de forma integral los casos límite detectados en la auditoría general de integración, blindando la asignación horaria local sin desfase UTC, asegurando que ingresos al vuelo no se categoricen en Deseos, previniendo desbordamientos de `localStorage` (`QuotaExceededError`), garantizando la propagación de borrados offline, eliminando físicamente archivos de comprobantes huérfanos y mitigando colas envenenadas.
+- **Entregables Implementados y Validados**:
+  1. Corrección de Desfase Horario Local (00:00 - 02:00 CET):
+     - Sustitución de `toISOString().split("T")[0]` por funciones helper de fecha local (`getLocalDateString()` y `getLocalMonthString()`) en `src/mobile/dist/index.html` y `src/mobile/src/components/QuickCaptureView.tsx`, garantizando que gastos capturados de noche o en cambios de mes se imputen a la fecha local real de España (CET/CEST).
+  2. Categorización Correcta de Ingresos al Vuelo:
+     - En `src/backend/services/mobile_sync_service.py` (`process_mobile_sync()`), asignación automática a `category_name="Ingresos Netos"` cuando `item.type == "INCOME"`, evitando que ingresos se registren como gastos en `Deseos (30%)`.
+  3. Protección contra `QuotaExceededError` en Almacenamiento Local:
+     - En `saveTransactions()` de `src/mobile/dist/index.html` y `saveStoredTransactions()` de `src/mobile/src/services/storage.ts`, captura preventiva de la excepción de cuota con purgado automático de `receipt_base64` en transacciones ya sincronizadas (`status === "SYNCED"`), liberando hasta varios megabytes sin perder histórico ni comprobantes (almacenados en disco en el servidor).
+  4. Cola de Borrados Offline (`PENDING_DELETES`) en PWA Monolítica:
+     - Implementación de `STORAGE_KEYS.PENDING_DELETES` (`gestor_mobile_pending_deletes`), `queuePendingDelete()` y `processPendingDeletes()` en `src/mobile/dist/index.html` para persistir los borrados ejecutados sin conexión y aplicarlos atómicamente contra el servidor en la siguiente reconexión.
+  5. Mitigación de Cola Envenenada (*Poisoned Queue*):
+     - Ante errores HTTP 422 en la sincronización por lotes, marcado automático de los ítems en conflicto como `status = "SYNC_ERROR"` para no reintentar en bucle infinito cada 15/60s agotando la batería del dispositivo.
+  6. Limpieza Física Directa de Archivos Huérfanos de Tickets:
+     - Implementación de `delete_receipt_file()` en `MobileSyncService` y llamada en `SQLiteRepository.delete_transaction()` y `delete_mobile_transaction()`, eliminando físicamente el archivo `receipt_filename` del disco en `sync/mobile/receipts/` al borrar transacciones (sin dejar residuos en el sistema de archivos).
+  7. Inclusión de Gastos con `subcategory_id = None` en Resumen Mensual:
+     - Cómputo de transacciones sin subcategoría en `get_mobile_monthly_summary()` bajo `unassigned_spent`, reflejándolas en el gasto total del mes `total_spent` y agregando una entrada representativa "Sin Subcategoría" en `subcategories`.
+  8. Paridad de Contratos y Batería de Pruebas Automatizadas:
+     - Inclusión de campos `type`, `receipt_base64` y `receipt_filename` en `syncTransactionsWithBackend()` de `src/mobile/src/services/api.ts`.
+     - Restauración de pruebas de hardening de token y saneamiento de recibos, y adición de pruebas específicas para los casos límite de la Fase 18 en `tests/unit/test_mobile_sync_service.py`.
+     - 44/44 pruebas pasando al 100% en la suite de la Spec 016 (`test_mobile_sync_service.py`, `test_mobile_quick_presets.py`, `test_mobile_api.py`).
+  9. Blindaje de Integración y Casos de Uso Detectados en Segunda Auditoría:
+     - Reparación del temporizador de auto-sincronización tras 1-Tap directo en `src/mobile/dist/index.html` (`syncPendingTransactions` corregido a `syncTransactions`).
+     - Consistencia bidireccional en `undoDirectSave()`: si el usuario deshace un 1-Tap cuando la transacción ya se sincronizó, se envía `DELETE` al servidor de inmediato.
+     - Resolución canónica de imágenes de comprobantes con token de emparejamiento (`getReceiptImageUrl()`) en `HistoryView.tsx` y `SearchView.tsx` para compatibilidad nativa en Android APK (Capacitor) y redes externas.
+     - Preservación del tipo `type: "INCOME"` y comprobantes en el buscador táctil sobre transacciones locales recientes tanto en React (`SearchView.tsx`) como en la PWA estática (`src/mobile/dist/index.html`).
 
 ---
 

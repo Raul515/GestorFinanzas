@@ -172,7 +172,25 @@ export const saveStoredTransactions = (txs: MobileTransaction[]): void => {
   try {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
   } catch (err) {
-    console.error("Error guardando transacciones en almacenamiento local:", err);
+    console.warn("Cuota de almacenamiento excedida, intentando purgar imágenes sincronizadas:", err);
+    try {
+      let cleaned = false;
+      const stripped = txs.map((t) => {
+        if (t.status === "SYNCED" && t.receipt_base64) {
+          cleaned = true;
+          return { ...t, receipt_base64: undefined };
+        }
+        return t;
+      });
+      if (cleaned) {
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(stripped));
+        return;
+      }
+      const fullyStripped = txs.map((t) => ({ ...t, receipt_base64: undefined }));
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(fullyStripped));
+    } catch (retryErr) {
+      console.error("Fallo crítico al guardar en localStorage tras purgar comprobantes:", retryErr);
+    }
   }
 };
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight, AlertTriangle, Camera, X } from "lucide-react";
 import { MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
+import { getReceiptImageUrl } from "../services/api";
 
 interface HistoryViewProps {
   transactions: MobileTransaction[];
@@ -187,8 +188,7 @@ export const HistoryView = ({
                         type="button"
                         onClick={() =>
                           setViewingReceipt(
-                            tx.receipt_base64 ||
-                              (tx.receipt_filename ? `/api/mobile/receipts/${tx.receipt_filename}` : null)
+                            tx.receipt_base64 || getReceiptImageUrl(tx.receipt_filename) || null
                           )
                         }
                         className="p-1 rounded-lg text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 transition-all"

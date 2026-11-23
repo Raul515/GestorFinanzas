@@ -309,8 +309,10 @@ class MobileSyncService:
                     eff_subcat = subcat_by_name.get(item.subcategory_name.strip().lower())
 
                 if not eff_subcat and item.subcategory_name:
+                    is_income = (getattr(item, "type", None) or "").upper() == "INCOME"
+                    fallback_cat = "Ingresos Netos" if is_income else "Deseos (30%)"
                     eff_subcat, _ = self.create_or_get_subcategory(
-                        db, item.subcategory_name, category_name="Deseos (30%)"
+                        db, item.subcategory_name, category_name=fallback_cat
                     )
                     subcat_by_id[eff_subcat.id] = eff_subcat
                     subcat_by_name[eff_subcat.name.strip().lower()] = eff_subcat
@@ -488,6 +490,7 @@ class MobileSyncService:
         for s in db.query(Subcategory).join(Category).all():
             subcat_to_cat[s.id] = s.category
 
+        unassigned_spent = 0.0
         for t in txs:
             if not t.amount:
                 continue
@@ -497,11 +500,22 @@ class MobileSyncService:
                 income_total += amt
             elif t.subcategory_id:
                 spent_by_subcat[t.subcategory_id] += amt
+            else:
+                unassigned_spent += amt
 
         subcats = db.query(Subcategory).all()
         cat_budgeted: Dict[int, float] = defaultdict(float)
         cat_spent: Dict[int, float] = defaultdict(float)
         subcat_summary_list: List[Dict[str, Any]] = []
+
+        if unassigned_spent > 0:
+            subcat_summary_list.append({
+                "subcategory_id": -1,
+                "subcategory_name": "Sin Subcategoría",
+                "category_name": "General",
+                "spent": round(unassigned_spent, 2),
+                "budget": 0.0,
+            })
 
         for s in subcats:
             cat = subcat_to_cat.get(s.id)
@@ -569,6 +583,14 @@ class MobileSyncService:
             wants_summary = MobileCategorySummary(category_id=0, category_name="Deseos (30%)", budgeted_amount=0, spent_amount=0, remaining_amount=0, rule_percentage=30.0)
         if not savings_summary:
             savings_summary = MobileCategorySummary(category_id=0, category_name="Ahorro e Inversión (20%)", budgeted_amount=0, spent_amount=0, remaining_amount=0, rule_percentage=20.0)
+
+        if unassigned_spent > 0:
+            total_s += unassigned_spent
+            if wants_summary:
+                wants_summary.spent_amount = round(wants_summary.spent_amount + unassigned_spent, 2)
+                wants_summary.spent = wants_summary.spent_amount
+                wants_summary.remaining_amount = round(wants_summary.budgeted_amount - wants_summary.spent_amount, 2)
+                wants_summary.remaining = wants_summary.remaining_amount
 
         ef = db.query(EmergencyFund).first()
         ef_balance = float(ef.current_balance) if ef else 0.0
@@ -750,10 +772,13 @@ class MobileSyncService:
             return None
 
         tx_id = tx.id
+        receipt_to_delete = getattr(tx, "receipt_filename", None)
         from backend.database.componentes.sqlite_crud import SQLiteRepository
         repo = SQLiteRepository(db)
         success = repo.delete_transaction(tx_id)
         if success:
+            if receipt_to_delete:
+                self.delete_receipt_file(receipt_to_delete)
             logger.info("Transacción móvil eliminada con éxito (ID: %s, event_id: %s)", tx_id, tx.mobile_event_id)
             return tx_id
         return None
@@ -896,5 +921,20 @@ class MobileSyncService:
         if target.exists() and target.is_file():
             return target
         return None
+
+    def delete_receipt_file(self, filename: Optional[str]) -> bool:
+        """Elimina físicamente el archivo de comprobante de la carpeta receipts si existe."""
+        if not filename:
+            return False
+        path = self.get_receipt_path(filename)
+        if path and path.is_file():
+            try:
+                path.unlink(missing_ok=True)
+                logger.info("Comprobante físico eliminado del disco: %s", filename)
+                return True
+            except Exception as exc:
+                logger.warning("No se pudo eliminar el comprobante físico %s: %s", filename, exc)
+        return False
+
 
 
