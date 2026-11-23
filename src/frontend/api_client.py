@@ -2097,6 +2097,38 @@ def clear_all_frontend_cache() -> None:
         logger.debug("Error limpiando caché global de frontend: %s", exc)
 
 
+_cached_pairing_token: Optional[str] = None
+
+
+def get_mobile_pairing_token(force_refresh: bool = False) -> Optional[str]:
+    """
+    Retorna el token maestro de emparejamiento desde el endpoint administrativo local
+    (/api/mobile/admin/pairing-token). Cachea el token en memoria para evitar peticiones redundantes.
+    """
+    global _cached_pairing_token
+    if _cached_pairing_token and not force_refresh:
+        return _cached_pairing_token
+    url = f"{API_URL}/api/mobile/admin/pairing-token"
+    try:
+        response = _session.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data and data.get("pairing_token"):
+                _cached_pairing_token = data["pairing_token"]
+                return _cached_pairing_token
+        logger.warning("Fallo al obtener token de emparejamiento administrativo (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar token de emparejamiento en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_pairing_token(): %s", e)
+    return None
+
+
+def get_cached_pairing_token(force_refresh: bool = False) -> Optional[str]:
+    """Alias para compatibilidad retroactiva."""
+    return get_mobile_pairing_token(force_refresh=force_refresh)
+
+
 def get_mobile_status() -> Optional[Dict[str, Any]]:
     """Consulta el estado de salud y métricas del servicio de sincronización móvil."""
     url = f"{API_URL}/api/mobile/status"
@@ -2112,11 +2144,13 @@ def get_mobile_status() -> Optional[Dict[str, Any]]:
     return None
 
 
-def process_mobile_folder() -> Optional[Dict[str, Any]]:
+def process_mobile_folder(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Dispara el procesamiento manual de ficheros delta en sync/mobile/inbox/."""
     url = f"{API_URL}/api/mobile/process-folder"
+    effective_token = token or get_mobile_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
     try:
-        response = _session.post(url, timeout=10)
+        response = _session.post(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al procesar carpeta móvil (%s): %s", response.status_code, response.text)
@@ -2129,20 +2163,17 @@ def process_mobile_folder() -> Optional[Dict[str, Any]]:
 
 def get_mobile_catalog(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Consulta el catálogo de subcategorías y conceptos frecuentes para clientes móviles."""
+    global _cached_pairing_token
     url = f"{API_URL}/api/mobile/catalog"
-    headers = {}
-    if token:
-        headers["X-Mobile-Pairing-Token"] = token
-    else:
-        # Intentar obtener el token del estado si no se provee
-        st_data = get_mobile_status()
-        if st_data and st_data.get("pairing_token"):
-            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+    effective_token = token or get_cached_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
 
     try:
         response = _session.get(url, headers=headers, timeout=5)
         if response.status_code == 200:
             return response.json()
+        if response.status_code in (401, 403):
+            _cached_pairing_token = None
         logger.warning("Fallo al consultar catálogo móvil (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red al consultar catálogo móvil en %s: %s", url, e)
@@ -2153,20 +2184,18 @@ def get_mobile_catalog(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
 
 def get_mobile_monthly_summary(month: Optional[str] = None, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Consulta el resumen de ejecución presupuestaria del mes (50/30/20) para el móvil."""
+    global _cached_pairing_token
     url = f"{API_URL}/api/mobile/summary"
     params = {"month": month} if month else {}
-    headers = {}
-    if token:
-        headers["X-Mobile-Pairing-Token"] = token
-    else:
-        st_data = get_mobile_status()
-        if st_data and st_data.get("pairing_token"):
-            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+    effective_token = token or get_cached_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
 
     try:
         response = _session.get(url, params=params, headers=headers, timeout=5)
         if response.status_code == 200:
             return response.json()
+        if response.status_code in (401, 403):
+            _cached_pairing_token = None
         logger.warning("Fallo al consultar resumen móvil (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red al consultar resumen móvil en %s: %s", url, e)
@@ -2177,20 +2206,18 @@ def get_mobile_monthly_summary(month: Optional[str] = None, token: Optional[str]
 
 def update_mobile_budget(month: str, subcategory_id: int, amount: float, token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Ajusta la asignación presupuestaria de una subcategoría para un mes desde el móvil."""
+    global _cached_pairing_token
     url = f"{API_URL}/api/mobile/budget"
     payload = {"month": month, "subcategory_id": subcategory_id, "amount": amount}
-    headers = {}
-    if token:
-        headers["X-Mobile-Pairing-Token"] = token
-    else:
-        st_data = get_mobile_status()
-        if st_data and st_data.get("pairing_token"):
-            headers["X-Mobile-Pairing-Token"] = st_data["pairing_token"]
+    effective_token = token or get_cached_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
 
     try:
         response = _session.post(url, json=payload, headers=headers, timeout=5)
         if response.status_code == 200:
             return response.json()
+        if response.status_code in (401, 403):
+            _cached_pairing_token = None
         logger.warning("Fallo al actualizar presupuesto móvil (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red al actualizar presupuesto móvil en %s: %s", url, e)
@@ -2220,9 +2247,12 @@ def upload_mobile_apk(
     version_code: int,
     version_name: str,
     release_notes: str = "",
+    token: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Publica una nueva release de APK de Android para distribución OTA."""
     url = f"{API_URL}/api/mobile/upload-apk"
+    effective_token = token or get_mobile_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
     files = {"apk_file": (filename, file_bytes, "application/vnd.android.package-archive")}
     data = {
         "version_code": str(version_code),
@@ -2230,7 +2260,7 @@ def upload_mobile_apk(
         "release_notes": release_notes,
     }
     try:
-        response = _session.post(url, files=files, data=data, timeout=60)
+        response = _session.post(url, headers=headers, files=files, data=data, timeout=60)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al subir APK móvil (%s): %s", response.status_code, response.text)

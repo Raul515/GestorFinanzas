@@ -76,7 +76,7 @@ def render_mobile_view() -> None:
     )
 
     status_data = api_client.get_mobile_status()
-    pairing_token = status_data.get("pairing_token") if status_data else None
+    pairing_token = api_client.get_mobile_pairing_token()
 
     local_ip = get_local_ip()
     token_query = f"?token={pairing_token}" if pairing_token else ""

@@ -17,7 +17,7 @@ import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.domain.models.budgets import MonthlyBudget
 from backend.domain.models.categories import Category, Subcategory
@@ -177,31 +177,26 @@ class MobileSyncService:
         device_id = local_device_id or get_or_create_device_id()
         now_utc = datetime.now(timezone.utc).isoformat()
 
-        # 1. Recuperar todas las subcategorías con su categoría padre
+        # 1. Recuperar todas las subcategorías con su categoría padre cargada ansiosamente
         subcats = (
             db.query(Subcategory)
+            .options(joinedload(Subcategory.category))
             .join(Category)
             .order_by(Category.id, Subcategory.name)
             .all()
         )
 
-        # 2. Análisis de frecuencia de los últimos 90 días
+        # 2. Análisis de frecuencia de los últimos 90 días delegado a SQL (sin cargar objetos en RAM)
         cutoff_date = date.today() - timedelta(days=90)
-        recent_txs = (
-            db.query(Transaction)
-            .filter(Transaction.date >= cutoff_date)
+        top_subcat_rows = (
+            db.query(Transaction.subcategory_id, func.count(Transaction.id).label("freq"))
+            .filter(Transaction.date >= cutoff_date, Transaction.subcategory_id.isnot(None))
+            .group_by(Transaction.subcategory_id)
+            .order_by(func.count(Transaction.id).desc())
+            .limit(6)
             .all()
         )
-
-        subcat_counter = Counter(t.subcategory_id for t in recent_txs if t.subcategory_id)
-        concept_counter = Counter(
-            t.description.strip()
-            for t in recent_txs
-            if t.description and t.description.strip()
-        )
-
-        # Determinar los IDs de las 6 subcategorías más usadas
-        top_subcat_ids = {subcat_id for subcat_id, _ in subcat_counter.most_common(6)}
+        top_subcat_ids = {row[0] for row in top_subcat_rows if row[0] is not None}
 
         # Fallback si no hay transacciones recientes: marcar subcategorías clave cotidianas
         if not top_subcat_ids:
@@ -229,8 +224,20 @@ class MobileSyncService:
         # Ordenar: las frecuentes primero, luego alfabéticamente
         personal_subcategories.sort(key=lambda s: (not s.is_frequent, s.category_id, s.name.lower()))
 
-        # Top 15 conceptos más recurrentes
-        frequent_concepts = [concept for concept, _ in concept_counter.most_common(15)]
+        # Top 15 conceptos más recurrentes calculados en SQL
+        top_concept_rows = (
+            db.query(func.trim(Transaction.description).label("concept"), func.count(Transaction.id).label("freq"))
+            .filter(
+                Transaction.date >= cutoff_date,
+                Transaction.description.isnot(None),
+                func.trim(Transaction.description) != "",
+            )
+            .group_by(func.trim(Transaction.description))
+            .order_by(func.count(Transaction.id).desc())
+            .limit(15)
+            .all()
+        )
+        frequent_concepts = [row[0] for row in top_concept_rows if row[0]]
 
         return MobileCatalogResponse(
             device_id=device_id,
@@ -418,8 +425,11 @@ class MobileSyncService:
         logger.info("Catálogo móvil exportado atómicamente a: %s", final_path.name)
         return final_path
 
-    def get_sync_status(self, db: Session) -> MobileSyncStatusResponse:
-        """Obtiene el estado de salud y métricas de sincronización móvil."""
+    def get_sync_status(self, db: Session, authenticated: bool = False) -> MobileSyncStatusResponse:
+        """
+        Obtiene el estado de salud y métricas de sincronización móvil.
+        Por seguridad (SEC-01), jamás retorna el pairing token maestro en este endpoint público.
+        """
         today = date.today()
         today_count = (
             db.query(func.count(Transaction.id))
@@ -435,14 +445,13 @@ class MobileSyncService:
                 if f.is_file() and not f.name.startswith(".") and f.suffix.lower() == ".json"
             ])
 
-        pairing_tok = self.get_or_create_pairing_token()
         return MobileSyncStatusResponse(
             server_online=True,
             server_time_utc=datetime.now(timezone.utc).isoformat(),
             today_transactions_count=int(today_count),
             pending_inbox_files=pending_files,
-            pairing_token=pairing_tok,
-            authenticated=True,
+            pairing_token=None,
+            authenticated=authenticated,
         )
 
     def get_mobile_monthly_summary(
@@ -766,6 +775,7 @@ class MobileSyncService:
         search_filter = f"%{clean_q}%"
         query = (
             db.query(Transaction)
+            .options(joinedload(Transaction.subcategory).joinedload(Subcategory.category))
             .join(Subcategory, Transaction.subcategory_id == Subcategory.id)
             .join(Category, Subcategory.category_id == Category.id)
             .filter(
@@ -813,6 +823,7 @@ class MobileSyncService:
         cutoff_date = date.today() - timedelta(days=months * 31)
         query = (
             db.query(Transaction)
+            .options(joinedload(Transaction.subcategory).joinedload(Subcategory.category))
             .join(Subcategory, Transaction.subcategory_id == Subcategory.id)
             .join(Category, Subcategory.category_id == Category.id)
             .filter(Transaction.date >= cutoff_date)
@@ -856,6 +867,8 @@ class MobileSyncService:
                 data_str = data_str.split(",", 1)[1]
             raw_bytes = base64.b64decode(data_str)
             safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
+            if not safe_id:
+                safe_id = secrets.token_hex(8)
             filename = f"receipt_{safe_id}.jpg"
             target_path = self.receipts_dir / filename
             target_path.write_bytes(raw_bytes)
@@ -871,6 +884,8 @@ class MobileSyncService:
             return None
         try:
             safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
+            if not safe_id:
+                safe_id = secrets.token_hex(8)
             filename = f"receipt_{safe_id}.jpg"
             target_path = self.receipts_dir / filename
             target_path.write_bytes(file_bytes)

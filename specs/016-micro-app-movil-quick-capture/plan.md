@@ -18,8 +18,9 @@ Rama de trabajo: feat/spec-016-micro-app-movil-quick-capture
 [x] Fase 10: Semáforo y Alerta Preventiva en Vivo para Techo de Presupuesto de Deseos (30%)
 [x] Fase 11: Buscador Instantáneo de Gastos Históricos ("¿Cuánto me costó...?") y Caché Offline
 [x] Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono)
-[ ] Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos
+[x] Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos
 [x] Fase 14: Atajos Rápidos de Importe y Presets Frecuentes (1-Tap y Modo Híbrido)
+[ ] Fase 15: Hardening de Seguridad Integral y Blindaje de Acceso (Post-Auditoría)
 Fusión final: Merge en develop tras 100% de tests y validación completa
 ```
 
@@ -199,6 +200,23 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Soporte completo offline-first con eventos touch/mouse para long-press, modal de ajustes de atajos y botón flotante de Deshacer.
   5. Pruebas automatizadas:
      - Batería de pruebas en `test_mobile_quick_presets_and_wants_safeguard_contract` y `test_mobile_quick_presets_and_hybrid_1tap_pwa_bundle` pasando al 100% (33/33 tests).
+
+### Fase 15: Hardening de Seguridad Integral y Blindaje de Acceso (Post-Auditoría) (Completada)
+- **Objetivo**: Corregir de forma integral las vulnerabilidades detectadas en la auditoría de seguridad ([spec_016_security_audit_report.md](file:///C:/Users/Raul_515/.gemini/antigravity/brain/d8cbd724-334d-4de0-8fa7-b60fc2e87789/spec_016_security_audit_report.md)), erradicando la fuga pública del token en `GET /api/mobile/status`, autenticando los endpoints de subida de APK y procesado, protegiendo nombres de archivo contra colisiones y blindando la PWA contra ataques de XSS almacenado.
+- **Entregables Implementados y Validados**:
+  1. Remedición SEC-01 (Blindaje de `GET /api/mobile/status`):
+     - Eliminación del campo `pairing_token` de la respuesta pública `MobileSyncStatusResponse` (marcado deprecado y forzado a `None`).
+     - `GET /api/mobile/status` ahora solo evalúa si el cliente que llama está autenticado (`authenticated: True/False`) sin revelar jamás el secreto.
+     - Endpoint interno dedicado `GET /api/mobile/admin/pairing-token` protegido con comprobación estricta de loopback local (`127.0.0.1`, `::1`, `localhost`, `testclient`) para la generación de QR en Streamlit, denegando con HTTP 403 a cualquier IP externa de la red.
+     - Actualización de `src/frontend/api_client.py` (`get_mobile_pairing_token()`) y `src/frontend/views/mobile_view.py`.
+  2. Remedición SEC-02 y SEC-05 (Autenticación de Endpoints Críticos):
+     - Exigencia de `_auth: str = Depends(verify_mobile_token)` en `POST /api/mobile/upload-apk` y `POST /api/mobile/process-folder`.
+  3. Remedición SEC-07 (Prevención Defensiva de Colisiones en Comprobantes):
+     - Asignación de identificador aleatorio único seguro mediante `secrets.token_hex(8)` en `save_receipt_file()` y `save_receipt_base64()` si `event_id` no contiene caracteres alfanuméricos válidos.
+  4. Remedición SEC-03 (Sanitización XSS en la PWA Monolítica `dist/index.html`):
+     - Implementación de la función `escapeHtml()` y sanitización rigurosa de todas las cadenas de texto del usuario (`description`, `subcategory_name`, `concept`, `presets`, `searchQueryHist`, `token`) y desacoplamiento de eventos `onclick` a selectores por índice/atributo para prevenir inyecciones de script.
+  5. Pruebas automatizadas:
+     - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
 
 ---
 

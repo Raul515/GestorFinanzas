@@ -38,10 +38,20 @@ def test_pairing_token_security_rejection(client: TestClient):
     )
     assert resp_fake_token.status_code == 403
 
-    # 3. /status es público para diagnóstico pero devuelve si está emparejado
+    # 3. /status es público para diagnóstico pero JAMÁS expone el token (SEC-01)
     resp_status = client.get("/api/mobile/status")
     assert resp_status.status_code == 200
-    assert "pairing_token" in resp_status.json()
+    status_data = resp_status.json()
+    assert status_data.get("pairing_token") is None
+    assert status_data["authenticated"] is False
+
+    # Con cabecera de autenticación válida, /status refleja authenticated=True sin exponer el token
+    token = MobileSyncService().get_or_create_pairing_token()
+    resp_auth_status = client.get("/api/mobile/status", headers={"X-Mobile-Pairing-Token": token})
+    assert resp_auth_status.status_code == 200
+    auth_data = resp_auth_status.json()
+    assert auth_data.get("pairing_token") is None
+    assert auth_data["authenticated"] is True
 
 
 def test_get_mobile_catalog_api(client: TestClient, db_session: Session, auth_headers: dict):
@@ -225,8 +235,8 @@ def test_get_mobile_status_api(client: TestClient, db_session: Session):
     assert data["today_transactions_count"] >= 1
 
 
-def test_process_mobile_folder_api(client: TestClient, db_session: Session):
-    """Verifica que POST /api/mobile/process-folder procese deltas en disco."""
+def test_process_mobile_folder_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica que POST /api/mobile/process-folder procese deltas en disco y requiera token (SEC-05)."""
     cat = Category(name="Deseos (30%)", type="expense")
     db_session.add(cat)
     db_session.commit()
@@ -249,7 +259,12 @@ def test_process_mobile_folder_api(client: TestClient, db_session: Session):
         "subcategory_id": sub.id,
     }), encoding="utf-8")
 
-    resp = client.post("/api/mobile/process-folder")
+    # 1. Sin autenticación -> Rechazado 403 (SEC-05)
+    resp_unauth = client.post("/api/mobile/process-folder")
+    assert resp_unauth.status_code == 403
+
+    # 2. Con autenticación -> 200 OK
+    resp = client.post("/api/mobile/process-folder", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
@@ -263,8 +278,8 @@ def test_static_mobile_mount(client: TestClient):
     assert "Gestor Finanzas" in resp.text
 
 
-def test_mobile_ota_version_and_download_flow(client: TestClient):
-    """Verifica el flujo de comprobación de versión, subida y descarga de APK OTA (Fase 8)."""
+def test_mobile_ota_version_and_download_flow(client: TestClient, auth_headers: dict):
+    """Verifica el flujo de comprobación de versión, subida y descarga de APK OTA (Fase 8 y SEC-02)."""
     # 1. Consulta inicial de versión
     resp_v1 = client.get("/api/mobile/version")
     assert resp_v1.status_code == 200
@@ -285,7 +300,14 @@ def test_mobile_ota_version_and_download_flow(client: TestClient):
         "version_name": "1.2.0",
         "release_notes": "Prueba de actualización in-app OTA",
     }
-    resp_up = client.post("/api/mobile/upload-apk", files=files, data=data)
+    # 3a. Sin autenticación -> Rechazado 403 (SEC-02)
+    resp_unauth = client.post("/api/mobile/upload-apk", files=files, data=data)
+    assert resp_unauth.status_code == 403
+
+    # 3b. Con token válido -> 200 OK
+    files_auth = {"apk_file": ("gestor-finanzas-v1.2.apk", apk_content, "application/vnd.android.package-archive")}
+    token = MobileSyncService().get_or_create_pairing_token()
+    resp_up = client.post("/api/mobile/upload-apk", headers={"X-Mobile-Pairing-Token": token}, files=files_auth, data=data)
     assert resp_up.status_code == 200
     up_data = resp_up.json()
     assert up_data["version_code"] == 3
@@ -298,6 +320,23 @@ def test_mobile_ota_version_and_download_flow(client: TestClient):
     assert resp_down.status_code == 200
     assert resp_down.headers.get("content-type") == "application/vnd.android.package-archive"
     assert resp_down.content == apk_content
+
+
+def test_admin_pairing_token_security_and_loopback_restriction(client: TestClient):
+    """Verifica que /api/mobile/admin/pairing-token esté restringido al host local (SEC-01)."""
+    # 1. Petición desde el cliente local (TestClient/localhost)
+    resp = client.get("/api/mobile/admin/pairing-token")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pairing_token" in data
+    assert data["pairing_token"].startswith("sec_")
+
+    # 2. Petición simulada desde IP externa en la red Wi-Fi
+    from unittest.mock import patch
+    with patch("fastapi.Request.client", new_callable=lambda: property(lambda self: type("Client", (), {"host": "192.168.1.105"})())):
+        resp_ext = client.get("/api/mobile/admin/pairing-token")
+        assert resp_ext.status_code == 403
+        assert "Acceso denegado" in resp_ext.json()["detail"]
 
 
 def test_delete_mobile_transaction_api_flow(client: TestClient, db_session: Session, auth_headers: dict):

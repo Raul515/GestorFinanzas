@@ -68,6 +68,34 @@
 
   <script>
     // ==========================================
+    // SANITIZACIÓN XSS Y UTILIDADES DE SEGURIDAD (SEC-03)
+    // ==========================================
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function selectFrequentConcept(idx) {
+      state.concept = state.frequentConcepts[idx] || "";
+      render();
+    }
+
+    function selectSearchTag(tag) {
+      state.searchQueryHist = tag || "";
+      render();
+    }
+
+    function openReceiptViewer(url) {
+      state.viewingReceiptUrl = getReceiptUrl(url);
+      render();
+    }
+
+    // ==========================================
     // ESTADO Y ALMACENAMIENTO OFFLINE
     // ==========================================
     const STORAGE_KEYS = {
@@ -421,6 +449,9 @@
     // SINCRONIZACIÓN CON EL BACKEND
     // ==========================================
     async function checkServer() {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
       try {
         const res = await fetch("/api/mobile/status", { headers: getAuthHeaders() });
         if (res.ok) {
@@ -429,18 +460,17 @@
           if (data.pairing_token) {
             state.isPaired = (state.pairingToken === data.pairing_token);
           }
-          // Refrescar catálogo
-          fetchCatalog();
+          // Descargar catálogo solo si aún no se tiene en memoria
+          if (!state.subcategories || state.subcategories.length === 0) {
+            fetchCatalog();
+          }
           // Si hay pendientes y está emparejado, sincronizar automáticamente
           const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
           if (pending.length > 0 && !state.isSyncing && state.isPaired) {
             syncTransactions();
           }
-          if (state.activeTab === "summary" && !state.monthlySummary) {
+          if ((state.activeTab === "summary" || state.activeTab === "month") && !state.monthlySummary) {
             fetchMonthlySummary();
-          }
-          if (state.isPaired) {
-            fetchHistoryCache();
           }
           checkOtaVersion();
         } else if (res.status === 403) {
@@ -517,6 +547,8 @@
           saveTransactions();
           state.isOnline = true;
           state.isPaired = true;
+          fetchMonthlySummary();
+          fetchHistoryCache();
         } else if (res.status === 403) {
           state.isPaired = false;
           state.showTokenModal = true;
@@ -883,7 +915,7 @@
           <!-- Toast de confirmación con soporte Deshacer -->
           ${state.showToast ? `
             <div style="position:fixed; top:12px; left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:6px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;" class="toast-anim">
-              <span>✓ ${state.toastMessage || (state.txType === "INCOME" ? "¡Ingreso guardado!" : "¡Gasto guardado!")}</span>
+              <span>✓ ${escapeHtml(state.toastMessage || (state.txType === "INCOME" ? "¡Ingreso guardado!" : "¡Gasto guardado!"))}</span>
               ${state.toastUndoEventId ? `
                 <button onclick="undoDirectSave();" class="btn-press" style="background:#020617; color:#fff; border:none; border-radius:9999px; font-weight:800; font-size:10px; padding:2px 8px; cursor:pointer;">Deshacer</button>
               ` : ''}
@@ -917,7 +949,7 @@
             <div style="background:rgba(16,185,129,0.2); border-bottom:1px solid rgba(16,185,129,0.3); padding:6px 14px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#6ee7b7; shrink:0;">
               <div style="display:flex; align-items:center; gap:6px;">
                 <span>🚀</span>
-                <span>Nueva versión v${state.availableUpdate.version_name}</span>
+                <span>Nueva versión v${escapeHtml(state.availableUpdate.version_name)}</span>
               </div>
               <button onclick="window.open('/api/mobile/download-apk', '_blank');" class="btn-press" style="background:#10b981; color:#020617; border:none; border-radius:8px; font-weight:800; font-size:10px; padding:3px 8px; cursor:pointer;">
                 Actualizar
@@ -1044,7 +1076,7 @@
               </div>
               <div style="display:flex; align-items:baseline; justify-content:center; gap:4px; font-family:monospace;">
                 <span style="font-size:24px; color:#64748b; font-weight:300;">€</span>
-                <span style="font-size:44px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.txType === 'INCOME' ? '+' : ''}${state.amountStr}</span>
+                <span style="font-size:44px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.txType === 'INCOME' ? '+' : ''}${escapeHtml(state.amountStr)}</span>
               </div>
             </div>
 
@@ -1057,8 +1089,8 @@
         const isSel = state.selectedSubcat && state.selectedSubcat.id === s.id;
         return `
                   <button onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); render();" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0f172a'}; border:1px solid ${isSel ? '#10b981' : '#1e293b'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:7px 11px; border-radius:12px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
-                    <span>${s.emoji || "🏷️"}</span>
-                    <span>${s.name}</span>
+                    <span>${escapeHtml(s.emoji || "🏷️")}</span>
+                    <span>${escapeHtml(s.name)}</span>
                   </button>
                 `;
       }).join("")}
@@ -1069,11 +1101,11 @@
 
             <!-- Campo de Concepto y Sugerencias -->
             <div style="margin:4px 0;">
-              <input type="text" placeholder="Concepto (ej. Café con leche)..." value="${state.concept}" oninput="state.concept = this.value;" style="width:100%; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:8px 12px; color:#f8fafc; font-size:13px; outline:none;" />
+              <input type="text" placeholder="Concepto (ej. Café con leche)..." value="${escapeHtml(state.concept)}" oninput="state.concept = this.value;" style="width:100%; background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:8px 12px; color:#f8fafc; font-size:13px; outline:none;" />
               <div style="display:flex; gap:6px; overflow-x:auto; margin-top:5px;" class="no-scrollbar">
-                ${state.frequentConcepts.slice(0, 5).map(c => `
-                  <button onclick="state.concept = '${c}'; render();" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; font-size:10px; padding:3px 8px; border-radius:6px; white-space:nowrap; shrink:0; cursor:pointer;">
-                    ${c}
+                ${state.frequentConcepts.slice(0, 5).map((c, idx) => `
+                  <button onclick="selectFrequentConcept(${idx});" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; font-size:10px; padding:3px 8px; border-radius:6px; white-space:nowrap; shrink:0; cursor:pointer;">
+                    ${escapeHtml(c)}
                   </button>
                 `).join("")}
               </div>
@@ -1166,7 +1198,7 @@
               <span style="position:absolute; left:12px; color:#64748b; font-size:14px; pointer-events:none;">🔍</span>
               <input type="text"
                 placeholder="¿Cuánto me costó... (ej. itv, zara, taller)?"
-                value="${state.searchQueryHist}"
+                value="${escapeHtml(state.searchQueryHist)}"
                 oninput="state.searchQueryHist = this.value; state.searchServerResults = null; render();"
                 onkeydown="if(event.key === 'Enter') searchServerHistory(this.value);"
                 autofocus
@@ -1182,8 +1214,8 @@
                 <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Consultas Frecuentes</div>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">
                   ${[...new Set([...state.frequentConcepts, "Gasolina", "Supermercado", "Restaurante", "Farmacia"])].slice(0, 8).map(tag => `
-                    <button onclick="state.searchQueryHist = '${tag}'; render();" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 10px; border-radius:10px; cursor:pointer;">
-                      ${tag}
+                    <button onclick="selectSearchTag(this.getAttribute('data-tag'));" data-tag="${escapeHtml(tag)}" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 10px; border-radius:10px; cursor:pointer;">
+                      ${escapeHtml(tag)}
                     </button>
                   `).join("")}
                 </div>
@@ -1197,7 +1229,7 @@
               <!-- Resultados -->
               <div style="display:flex; flex-direction:column; gap:8px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8;">
-                  <span>${displayResults.length} resultado${displayResults.length === 1 ? "" : "s"} para "${state.searchQueryHist}"</span>
+                  <span>${displayResults.length} resultado${displayResults.length === 1 ? "" : "s"} para "${escapeHtml(state.searchQueryHist)}"</span>
                   ${state.isOnline && state.isPaired && state.searchServerResults === null ? `
                     <button onclick="searchServerHistory(state.searchQueryHist);" class="btn-press" style="background:none; border:none; color:#34d399; font-weight:800; font-size:11px; cursor:pointer;">
                       ${state.isSearchingServer ? "Buscando en servidor..." : "Buscar en todo el histórico"}
@@ -1207,7 +1239,7 @@
 
                 ${displayResults.length === 0 ? `
                   <div style="padding:20px; text-align:center; background:#0f172a; border-radius:16px; border:1px solid #1e293b; color:#64748b; font-size:12px;">
-                    🔎 No se encontraron gastos para "${state.searchQueryHist}".
+                    🔎 No se encontraron gastos para "${escapeHtml(state.searchQueryHist)}".
                   </div>
                 ` : `
                   <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1217,20 +1249,20 @@
         return `
                         <div style="padding:10px 12px; border-radius:14px; background:#0f172a; border:1px solid ${isLatest ? 'rgba(16,185,129,0.4)' : '#1e293b'}; display:flex; align-items:center; justify-content:space-between; gap:8px;">
                           <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                            <span style="font-size:18px;">${emoji}</span>
+                            <span style="font-size:18px;">${escapeHtml(emoji)}</span>
                             <div style="min-width:0;">
                               <div style="display:flex; align-items:center; gap:6px;">
-                                <span style="font-weight:700; font-size:13px; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.description}</span>
+                                <span style="font-weight:700; font-size:13px; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.description)}</span>
                                 ${isLatest ? `<span style="font-size:9px; font-weight:900; background:rgba(16,185,129,0.15); color:#34d399; padding:1px 5px; border-radius:4px; text-transform:uppercase;">Último</span>` : ""}
                               </div>
                               <div style="font-size:10px; color:#94a3b8; margin-top:1px;">
-                                ${item.subcategory_name} • 📅 ${formatDate(item.date)}
+                                ${escapeHtml(item.subcategory_name)} • 📅 ${formatDate(item.date)}
                               </div>
                             </div>
                           </div>
                           <div style="display:flex; align-items:center; gap:6px;">
                             ${(item.receipt_filename || item.receipt_url) ? `
-                              <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                              <button onclick="openReceiptViewer(this.getAttribute('data-url'));" data-url="${escapeHtml(item.receipt_url || item.receipt_filename)}" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                             ` : ""}
                             <div style="font-family:monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
                               ${item.type === 'INCOME' ? '+' : '-'}${item.amount.toFixed(2)} €
@@ -1289,17 +1321,17 @@
                   ${pending.map(t => `
                     <div style="padding:10px 12px; border-radius:12px; background:#0f172a; border:1px solid rgba(251,191,36,0.3); display:flex; align-items:center; justify-content:space-between;">
                       <div>
-                        <div style="font-weight:700; font-size:13px; color:#f8fafc;">${t.description}</div>
-                        <div style="font-size:10px; color:#94a3b8;">${t.subcategory_name} • ${t.date}</div>
+                        <div style="font-weight:700; font-size:13px; color:#f8fafc;">${escapeHtml(t.description)}</div>
+                        <div style="font-size:10px; color:#94a3b8;">${escapeHtml(t.subcategory_name)} • ${escapeHtml(t.date)}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px;">
                         ${(t.receipt_base64 || t.receipt_filename) ? `
-                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                          <button onclick="openReceiptViewer(this.getAttribute('data-url'));" data-url="${escapeHtml(t.receipt_base64 || t.receipt_filename)}" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                         ` : ""}
                         <span style="font-family:monospace; font-weight:800; color:${t.type === 'INCOME' ? '#34d399' : '#fcd34d'}; font-size:14px;">
                           ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} €
                         </span>
-                        <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:14px; padding:2px;">🗑️</button>
+                        <button onclick="deleteTransaction(this.getAttribute('data-id'));" data-id="${escapeHtml(t.event_id)}" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:14px; padding:2px;">🗑️</button>
                       </div>
                     </div>
                   `).join("")}
@@ -1321,17 +1353,17 @@
                   ${synced.map(t => `
                     <div style="padding:8px 12px; border-radius:12px; background:rgba(15,23,42,0.6); border:1px solid #1e293b; display:flex; align-items:center; justify-content:space-between; font-size:12px;">
                       <div>
-                        <div style="font-weight:600; color:#e2e8f0;">${t.description}</div>
-                        <div style="font-size:10px; color:#64748b;">${t.subcategory_name} • ${t.date}</div>
+                        <div style="font-weight:600; color:#e2e8f0;">${escapeHtml(t.description)}</div>
+                        <div style="font-size:10px; color:#64748b;">${escapeHtml(t.subcategory_name)} • ${escapeHtml(t.date)}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px;">
                         ${(t.receipt_filename || t.receipt_base64) ? `
-                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                          <button onclick="openReceiptViewer(this.getAttribute('data-url'));" data-url="${escapeHtml(t.receipt_base64 || t.receipt_filename)}" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                         ` : ""}
                         <span style="font-family:monospace; font-weight:700; color:${t.type === 'INCOME' ? '#34d399' : '#cbd5e1'};">
                           ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} € ✓
                         </span>
-                        <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#64748b; hover:color:#f43f5e; cursor:pointer; font-size:12px; padding:2px;">🗑️</button>
+                        <button onclick="deleteTransaction(this.getAttribute('data-id'));" data-id="${escapeHtml(t.event_id)}" style="background:none; border:none; color:#64748b; hover:color:#f43f5e; cursor:pointer; font-size:12px; padding:2px;">🗑️</button>
                       </div>
                     </div>
                   `).join("")}
@@ -1462,7 +1494,7 @@
         return `
                       <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #020617;">
                         <div>
-                          <div style="font-size:12px; font-weight:700; color:#f8fafc;">${sub.subcategory_name}</div>
+                          <div style="font-size:12px; font-weight:700; color:#f8fafc;">${escapeHtml(sub.subcategory_name)}</div>
                           <div style="font-size:9px; color:#64748b;">Gastado: ${formatEuro(sub.spent)}</div>
                         </div>
 
@@ -1508,7 +1540,7 @@
                 <div style="display:flex; flex-direction:column; gap:12px; padding:6px 0;">
                   <div>
                     <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Nombre</label>
-                    <input type="text" placeholder="Ej. Pádel, Sushi, Gas..." value="${state.newSubcatName}" oninput="state.newSubcatName = this.value;" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" autofocus />
+                    <input type="text" placeholder="Ej. Pádel, Sushi, Gas..." value="${escapeHtml(state.newSubcatName)}" oninput="state.newSubcatName = this.value;" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" autofocus />
                   </div>
 
                   <div>
@@ -1537,7 +1569,7 @@
                 </div>
               ` : `
                 <div style="display:flex; gap:6px; margin-bottom:10px;">
-                  <input type="text" placeholder="Buscar categoría..." value="${state.searchQuery}" oninput="state.searchQuery = this.value; render();" autofocus style="flex:1; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" />
+                  <input type="text" placeholder="Buscar categoría..." value="${escapeHtml(state.searchQuery)}" oninput="state.searchQuery = this.value; render();" autofocus style="flex:1; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" />
                   <button onclick="state.isCreatingSubcat = true; state.newSubcatName = state.searchQuery; render();" class="btn-press" style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); color:#34d399; font-weight:800; font-size:14px; padding:0 14px; border-radius:12px; cursor:pointer;" title="Crear nueva">
                     ➕
                   </button>
@@ -1546,19 +1578,19 @@
                 <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:4px;" class="no-scrollbar">
                   ${filtered.length === 0 ? `
                     <div style="text-align:center; padding:20px; color:#64748b; font-size:12px;">
-                      No existe "${state.searchQuery}".<br />
+                      No existe "${escapeHtml(state.searchQuery)}".<br />
                       <button onclick="state.isCreatingSubcat = true; state.newSubcatName = state.searchQuery; render();" class="btn-press" style="margin-top:10px; background:#10b981; color:#020617; border:none; border-radius:10px; font-weight:800; font-size:11px; padding:8px 14px; cursor:pointer;">
-                        ➕ Crear "${state.searchQuery || 'Nueva'}"
+                        ➕ Crear "${escapeHtml(state.searchQuery || 'Nueva')}"
                       </button>
                     </div>
                   ` : `
                     ${filtered.map(s => `
                       <div onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); state.modalOpen = false; render();" class="btn-press" style="padding:10px 12px; border-radius:12px; display:flex; align-items:center; justify-content:space-between; background:${state.selectedSubcat && state.selectedSubcat.id === s.id ? 'rgba(16,185,129,0.15)' : 'transparent'}; cursor:pointer;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                          <span style="font-size:18px;">${s.emoji || "🏷️"}</span>
+                          <span style="font-size:18px;">${escapeHtml(s.emoji || "🏷️")}</span>
                           <div>
-                            <div style="font-weight:700; font-size:13px; color:#f8fafc;">${s.name}</div>
-                            <div style="font-size:10px; color:#64748b;">${s.category_name}</div>
+                            <div style="font-weight:700; font-size:13px; color:#f8fafc;">${escapeHtml(s.name)}</div>
+                            <div style="font-size:10px; color:#64748b;">${escapeHtml(s.category_name)}</div>
                           </div>
                         </div>
                         ${state.selectedSubcat && state.selectedSubcat.id === s.id ? `<span style="color:#10b981; font-weight:900;">✓</span>` : ""}
@@ -1589,7 +1621,7 @@
               </p>
 
               <div>
-                <input id="tokenInput" type="text" placeholder="sec_..." value="${state.pairingToken}" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:12px; outline:none;" />
+                <input id="tokenInput" type="text" placeholder="sec_..." value="${escapeHtml(state.pairingToken)}" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:12px; outline:none;" />
               </div>
 
               <div style="display:flex; gap:8px; margin-top:4px;">
@@ -1614,17 +1646,17 @@
               ${state.presets.map(p => `
                 <button
                   type="button"
-                  onmousedown="handlePresetMouseDown('${p.id}');"
-                  onmouseup="handlePresetMouseUp('${p.id}');"
+                  onmousedown="handlePresetMouseDown('${escapeHtml(p.id)}');"
+                  onmouseup="handlePresetMouseUp('${escapeHtml(p.id)}');"
                   onmouseleave="handlePresetMouseCancel();"
-                  ontouchstart="handlePresetMouseDown('${p.id}');"
-                  ontouchend="handlePresetMouseUp('${p.id}');"
+                  ontouchstart="handlePresetMouseDown('${escapeHtml(p.id)}');"
+                  ontouchend="handlePresetMouseUp('${escapeHtml(p.id)}');"
                   ontouchcancel="handlePresetMouseCancel();"
                   class="btn-press"
                   style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#f8fafc; font-size:11px; font-weight:700; cursor:pointer;"
                 >
-                  <span style="font-size:13px;">${p.emoji}</span>
-                  <span>${p.name}</span>
+                  <span style="font-size:13px;">${escapeHtml(p.emoji)}</span>
+                  <span>${escapeHtml(p.name)}</span>
                   <span style="color:#34d399; font-family:monospace; font-weight:800; margin-left:2px;">${p.amount.toFixed(2).replace(".", ",")} €</span>
                 </button>
               `).join("")}
@@ -1658,20 +1690,20 @@
                 <div style="background:rgba(2,6,23,0.6); border:1px solid #1e293b; border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
                   <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
                     <div style="display:flex; align-items:center; gap:6px;">
-                      <span style="font-size:16px;">${p.emoji}</span>
-                      <input type="text" value="${p.name}" onchange="updatePresetProp('${p.id}', 'name', this.value);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:11px; font-weight:700; padding:2px 6px; width:80px;" />
+                      <span style="font-size:16px;">${escapeHtml(p.emoji)}</span>
+                      <input type="text" value="${escapeHtml(p.name)}" onchange="updatePresetProp('${escapeHtml(p.id)}', 'name', this.value);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:11px; font-weight:700; padding:2px 6px; width:80px;" />
                     </div>
                     <div style="display:flex; align-items:center; gap:4px;">
-                      <input type="number" step="0.01" value="${p.amount}" onchange="updatePresetProp('${p.id}', 'amount', parseFloat(this.value)||0);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-size:11px; font-weight:800; padding:2px 6px; width:65px; text-align:right;" />
+                      <input type="number" step="0.01" value="${p.amount}" onchange="updatePresetProp('${escapeHtml(p.id)}', 'amount', parseFloat(this.value)||0);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-size:11px; font-weight:800; padding:2px 6px; width:65px; text-align:right;" />
                       <span style="font-size:11px; color:#64748b; font-weight:800;">€</span>
-                      <button onclick="deletePreset('${p.id}');" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; padding:2px 4px;">🗑️</button>
+                      <button onclick="deletePreset('${escapeHtml(p.id)}');" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; padding:2px 4px;">🗑️</button>
                     </div>
                   </div>
                   <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#64748b; border-top:1px solid #0f172a; padding-top:4px;">
                     <span>📂 Subcategoría:</span>
-                    <select onchange="updatePresetProp('${p.id}', 'subcategory_name', this.value);" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; border-radius:6px; font-size:10px; padding:2px 4px; max-width:160px;">
+                    <select onchange="updatePresetProp('${escapeHtml(p.id)}', 'subcategory_name', this.value);" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; border-radius:6px; font-size:10px; padding:2px 4px; max-width:160px;">
                       ${state.subcategories.map(s => `
-                        <option value="${s.name}" ${s.name === p.subcategory_name ? 'selected' : ''}>${s.name}</option>
+                        <option value="${escapeHtml(s.name)}" ${s.name === p.subcategory_name ? 'selected' : ''}>${escapeHtml(s.name)}</option>
                       `).join("")}
                     </select>
                   </div>
@@ -1688,7 +1720,7 @@
                 <div style="display:flex; gap:6px;">
                   <input id="newPresetAmount" type="number" step="0.01" placeholder="Importe €" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-weight:800; font-size:11px; width:80px; padding:4px 6px;" />
                   <select id="newPresetSubcat" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:10px; flex:1; padding:4px;">
-                    ${state.subcategories.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}
+                    ${state.subcategories.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("")}
                   </select>
                 </div>
                 <button onclick="addNewPresetFromModal();" class="btn-press" style="background:#10b981; color:#020617; font-weight:800; font-size:11px; border:none; border-radius:8px; padding:6px; cursor:pointer; margin-top:2px;">
@@ -1759,7 +1791,14 @@
     loadLocalState();
     render();
     checkServer();
-    setInterval(checkServer, 15000);
+    setTimeout(() => {
+      if (state.isOnline && state.isPaired) {
+        fetchCatalog();
+        fetchMonthlySummary();
+        fetchHistoryCache();
+      }
+    }, 600);
+    setInterval(checkServer, 60000);
   </script>
 </body>
 

@@ -6,12 +6,13 @@ sincronización de transacciones e informes de estado.
 
 import logging
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.database.componentes.sqlite_db import get_db
 from backend.domain.schemas.mobile import (
+    MobileAdminPairingTokenResponse,
     MobileBudgetUpdate,
     MobileCatalogResponse,
     MobileMonthlySummaryResponse,
@@ -163,18 +164,45 @@ def update_budget(
 @router.get("/status", response_model=MobileSyncStatusResponse)
 def get_status(
     db: Session = Depends(get_db),
+    x_mobile_pairing_token: Optional[str] = Header(None, alias="X-Mobile-Pairing-Token"),
+    token: Optional[str] = Query(None),
     service: MobileSyncService = Depends(get_sync_service),
 ) -> MobileSyncStatusResponse:
-    """Verifica la conectividad y métricas de sincronización para clientes móviles."""
-    return service.get_sync_status(db)
+    """
+    Verifica la conectividad y métricas de sincronización para clientes móviles.
+    Indica si la sesión o cabecera actual está autenticada sin filtrar el token maestro (SEC-01).
+    """
+    provided_token = x_mobile_pairing_token or token
+    is_authenticated = bool(provided_token and service.validate_pairing_token(provided_token))
+    return service.get_sync_status(db, authenticated=is_authenticated)
+
+
+@router.get("/admin/pairing-token", response_model=MobileAdminPairingTokenResponse)
+def get_admin_pairing_token(
+    request: Request,
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobileAdminPairingTokenResponse:
+    """
+    Retorna el pairing token maestro exclusivamente para la administración local (Streamlit en el PC).
+    Rechaza peticiones originadas desde direcciones IP externas / no loopback (SEC-01).
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    if client_ip not in ("127.0.0.1", "::1", "localhost", "testclient"):
+        logger.warning("Intento de acceso denegado a /api/mobile/admin/pairing-token desde IP no local: %s", client_ip)
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso denegado. Este endpoint está reservado exclusivamente al host local.",
+        )
+    return MobileAdminPairingTokenResponse(pairing_token=service.get_or_create_pairing_token())
 
 
 @router.post("/process-folder", response_model=Dict[str, Any])
 def process_folder(
     db: Session = Depends(get_db),
     service: MobileSyncService = Depends(get_sync_service),
+    _auth: str = Depends(verify_mobile_token),
 ) -> Dict[str, Any]:
-    """Procesa manualmente deltas JSON pendientes en la carpeta sync/mobile/inbox/."""
+    """Procesa manualmente deltas JSON pendientes en la carpeta sync/mobile/inbox/ (Protegido SEC-05)."""
     processed = service.process_mobile_inbox_folder(db)
     return {"success": True, "processed_count": processed}
 
@@ -212,6 +240,7 @@ async def upload_apk(
     version_name: str = Form(...),
     release_notes: str = Form(""),
     service: MobileSyncService = Depends(get_sync_service),
+    _auth: str = Depends(verify_mobile_token),
 ) -> MobileVersionResponse:
     """Permite publicar una nueva release de la APK de Android desde el panel de control."""
     content = await apk_file.read()

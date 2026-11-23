@@ -65,12 +65,21 @@ async def run_periodic_mobile_sync_checker():
     while True:
         try:
             await asyncio.sleep(30)
-            db = SessionLocal()
-            try:
-                sync_service = MobileSyncService()
-                sync_service.process_mobile_inbox_folder(db)
-            finally:
-                db.close()
+            sync_service = MobileSyncService()
+            # Optimización de I/O: verificar archivos en disco antes de instanciar sesión en SQLite
+            has_pending = (
+                sync_service.inbox_dir.exists()
+                and any(
+                    f.is_file() and not f.name.startswith(".") and f.suffix.lower() == ".json"
+                    for f in sync_service.inbox_dir.iterdir()
+                )
+            )
+            if has_pending:
+                db = SessionLocal()
+                try:
+                    sync_service.process_mobile_inbox_folder(db)
+                finally:
+                    db.close()
         except asyncio.CancelledError:
             break
         except Exception as exc:

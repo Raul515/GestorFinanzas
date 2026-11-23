@@ -690,6 +690,72 @@ def test_mobile_income_transaction_capture_and_summary(populated_db: Session):
     assert service.is_income_category(sub_extra.category) is True
 
 
+def test_mobile_performance_optimizations_and_sql_aggregation(populated_db: Session):
+    """Verifica las optimizaciones de rendimiento de la Fase 15 (SQL aggregation y joinedload)."""
+    service = MobileSyncService()
+
+    # 1. Insertar transacciones para probar agregación en SQL
+    sub_cafe = populated_db.query(Subcategory).filter(Subcategory.name == "Café y Desayunos").first()
+    assert sub_cafe is not None
+
+    for i in range(5):
+        populated_db.add(
+            Transaction(
+                date=date.today(),
+                subcategory_id=sub_cafe.id,
+                amount=1.50,
+                description="Café matutino",
+                mobile_event_id=f"evt_perf_cafe_{i}",
+            )
+        )
+    populated_db.commit()
+
+    # 2. Catálogo generado mediante SQL GROUP BY
+    catalog = service.get_mobile_catalog(populated_db)
+    top_cafe = next((s for s in catalog.personal_subcategories if s.id == sub_cafe.id), None)
+    assert top_cafe is not None
+    assert top_cafe.is_frequent is True
+    assert "Café matutino" in catalog.frequent_concepts
+
+    # 3. Caché histórica con joinedload (comprobar que resuelve categoría y subcategoría sin fallos)
+    cache = service.get_historical_cache(populated_db, months=1)
+    assert len(cache) >= 5
+    first_item = cache[0]
+    assert first_item.subcategory_name != ""
+    assert first_item.category_name != ""
+
+    # 4. Búsqueda con joinedload
+    search_res = service.search_transactions(populated_db, query_text="Café matutino")
+    assert search_res.total_found >= 5
+    assert search_res.items[0].subcategory_name == "Café y Desayunos"
+
+
+def test_sync_status_does_not_leak_pairing_token(populated_db: Session):
+    """Verifica que get_sync_status no retorne jamás el token en el modelo (SEC-01)."""
+    service = MobileSyncService()
+    status_unauth = service.get_sync_status(populated_db, authenticated=False)
+    assert status_unauth.pairing_token is None
+    assert status_unauth.authenticated is False
+
+    status_auth = service.get_sync_status(populated_db, authenticated=True)
+    assert status_auth.pairing_token is None
+    assert status_auth.authenticated is True
+
+
+def test_save_receipt_with_non_alphanumeric_event_id(tmp_path: Path):
+    """Verifica que safe_id genere un token aleatorio seguro si event_id no contiene caracteres válidos (SEC-07)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    file_bytes = b"\xff\xd8\xff\xe0testjpegcontent"
+
+    saved_name = service.save_receipt_file(event_id="???///###", file_bytes=file_bytes)
+    assert saved_name is not None
+    assert saved_name.startswith("receipt_")
+    assert saved_name != "receipt_.jpg"
+    assert len(saved_name) > len("receipt_.jpg")
+    assert (service.receipts_dir / saved_name).exists()
+
+
+
 
 
 

@@ -182,6 +182,13 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Ergonomía y Micro-guía de Uso:
     - Indicador informativo visible en la interfaz: *"💡 Toca para rellenar · Mantén pulsado para guardar directo"*.
 
+- **RF-19 (Hardening de Seguridad Integral y Blindaje de Acceso Post-Auditoría)**:
+  - Fuga Cero de Credenciales: El endpoint público `GET /api/mobile/status` no debe retornar jamás el secreto maestro `pairing_token` en texto claro. Solo evaluará y reportará si la petición entrante está autenticada (`authenticated: True/False`).
+  - Endpoint de Emparejamiento Administrativo: Se implementa `GET /api/mobile/admin/pairing-token` protegido para uso del panel Streamlit en el host o peticiones autenticadas.
+  - Autenticación Obligatoria en Operaciones Sensibles: `POST /api/mobile/upload-apk` y `POST /api/mobile/process-folder` exigen de forma estricta el token de emparejamiento maestro mediante `verify_mobile_token`.
+  - Prevención de XSS en PWA: La PWA monolítica estática (`dist/index.html`) escapa rigurosamente cualquier dato introducido por el usuario (`escapeHtml()`) antes de interpolarlo en el DOM vía `innerHTML` (`description`, `subcategory_name`, `concept`, `presets`, `searchQueryHist`).
+  - Nombres Defensivos en Comprobantes: Si un `event_id` carece de caracteres alfanuméricos válidos, `save_receipt_file()` genera un identificador aleatorio criptográficamente seguro (`secrets.token_hex(8)`) para evitar colisiones en `receipt_.jpg`.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

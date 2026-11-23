@@ -71,8 +71,13 @@ class MobileSyncStatusResponse(BaseModel):
     pending_inbox_files: int = 0
     today_transactions_count: int = 0
     catalog_last_updated_utc: Optional[str] = None
-    pairing_token: Optional[str] = None
-    authenticated: bool = True
+    pairing_token: Optional[str] = Field(None, description="Deprecated: Always None for security (SEC-01)")
+    authenticated: bool = False
+
+
+class MobileAdminPairingTokenResponse(BaseModel):
+    """Pairing token payload reserved exclusively for local administration (PC UI)."""
+    pairing_token: str
 
 
 class MobileSubcategoryCreate(BaseModel):

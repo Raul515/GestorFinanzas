@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useRef, ChangeEvent } from "react";
 import { QuickCaptureView } from "./components/QuickCaptureView";
 import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
@@ -59,6 +59,7 @@ export function App() {
   // Modal / Diálogo para introducir el pairing token si no coincide o falta
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [inputToken, setInputToken] = useState("");
+  const lastDataFetchRef = useRef<number>(0);
 
   const pendingCount = transactions.filter((t) => t.status === "PENDING_SYNC").length;
 
@@ -67,48 +68,70 @@ export function App() {
     extractAndSavePairingTokenFromUrl();
   }, []);
 
-  // Comprobar conectividad y refrescar catálogo
-  const refreshConnectivityAndCatalog = useCallback(async () => {
-    const status = await checkServerStatus();
-    setIsServerOnline(status.isOnline);
-    setIsPaired(status.isPaired);
+  // Carga desacoplada de catálogo, resumen mensual e histórico (solo bajo demanda o arranque)
+  const refreshHeavyData = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastDataFetchRef.current < 60000) {
+      return;
+    }
+    lastDataFetchRef.current = now;
 
-    if (status.isOnline) {
+    try {
       const remoteCatalog = await fetchCatalog();
       if (remoteCatalog) {
         setCatalog(remoteCatalog);
         saveStoredCatalog(remoteCatalog);
       }
 
-      // Si estamos emparejados, refrescar el resumen mensual para predicción en vivo (Fase 10)
-      if (status.isPaired) {
-        const remoteSummary = await fetchMonthlySummary();
-        if (remoteSummary) {
-          setMonthlySummary(remoteSummary);
-          saveStoredMonthlySummary(remoteSummary);
-        }
-
-        // Cargar/actualizar caché histórica de 12 meses para el buscador instantáneo offline (Fase 11)
-        const remoteHistory = await fetchHistoryCache(12);
-        if (remoteHistory && remoteHistory.length > 0) {
-          setHistoryCache(remoteHistory);
-          saveStoredHistoryCache(remoteHistory);
-        }
+      const remoteSummary = await fetchMonthlySummary();
+      if (remoteSummary) {
+        setMonthlySummary(remoteSummary);
+        saveStoredMonthlySummary(remoteSummary);
       }
 
-      // Comprobar si hay una nueva versión de APK para auto-actualización OTA
-      const versionInfo = await fetchLatestVersion();
-      if (
-        versionInfo &&
-        versionInfo.version_code > CURRENT_APP_VERSION.code &&
-        versionInfo.apk_available
-      ) {
-        setAvailableUpdate(versionInfo);
-      } else {
-        setAvailableUpdate(null);
+      const remoteHistory = await fetchHistoryCache(12);
+      if (remoteHistory && remoteHistory.length > 0) {
+        setHistoryCache(remoteHistory);
+        saveStoredHistoryCache(remoteHistory);
       }
+    } catch (e) {
+      console.warn("Fallo en sincronización secundaria de datos móviles:", e);
     }
   }, []);
+
+  // Comprobar conectividad y estado básico de salud de forma ligera
+  const checkConnectivity = useCallback(async () => {
+    // Pausar sondeo si la pestaña móvil está en segundo plano para ahorrar batería y red
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      return;
+    }
+
+    try {
+      const status = await checkServerStatus();
+      setIsServerOnline(status.isOnline);
+      setIsPaired(status.isPaired);
+
+      if (status.isOnline && status.isPaired) {
+        if (lastDataFetchRef.current === 0) {
+          refreshHeavyData();
+        }
+
+        // Comprobar si hay una nueva versión de APK para auto-actualización OTA
+        const versionInfo = await fetchLatestVersion();
+        if (
+          versionInfo &&
+          versionInfo.version_code > CURRENT_APP_VERSION.code &&
+          versionInfo.apk_available
+        ) {
+          setAvailableUpdate(versionInfo);
+        } else {
+          setAvailableUpdate(null);
+        }
+      }
+    } catch {
+      setIsServerOnline(false);
+    }
+  }, [refreshHeavyData]);
 
   // Función de sincronización con el backend
   const handleTriggerSync = useCallback(async () => {
@@ -145,6 +168,8 @@ export function App() {
         });
         setIsServerOnline(true);
         setIsPaired(true);
+        // Refrescar reactivamente tras la mutación exitosa
+        refreshHeavyData(true);
       } else if (result && result.isUnauthorized) {
         setIsPaired(false);
         setShowPairingModal(true);
@@ -156,18 +181,39 @@ export function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, [transactions, isSyncing]);
+  }, [transactions, isSyncing, refreshHeavyData]);
 
-  // Al montar la app: comprobar servidor e intentar auto-sync si hay pendientes
+  // Sondeo adaptativo cada 60s con pausa en segundo plano
   useEffect(() => {
-    refreshConnectivityAndCatalog();
+    checkConnectivity();
 
     const interval = setInterval(() => {
-      refreshConnectivityAndCatalog();
-    }, 15000);
+      checkConnectivity();
+    }, 60000);
 
-    return () => clearInterval(interval);
-  }, [refreshConnectivityAndCatalog]);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkConnectivity();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [checkConnectivity]);
+
+  // Refrescar datos pesados al cambiar de pestaña si están obsoletos
+  useEffect(() => {
+    if (
+      (activeTab === "month" || activeTab === "history" || activeTab === "search") &&
+      isServerOnline &&
+      isPaired
+    ) {
+      refreshHeavyData();
+    }
+  }, [activeTab, isServerOnline, isPaired, refreshHeavyData]);
 
   // Auto-sync al detectar servidor online si hay pendientes y estamos emparejados
   useEffect(() => {
