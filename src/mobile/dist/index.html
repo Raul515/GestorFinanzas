@@ -74,8 +74,15 @@
       TRANSACTIONS: "gestor_mobile_transactions",
       CATALOG: "gestor_mobile_catalog",
       PAIRING_TOKEN: "gestor_mobile_pairing_token",
-      HISTORY_CACHE: "gestor_mobile_history_cache"
+      HISTORY_CACHE: "gestor_mobile_history_cache",
+      QUICK_PRESETS: "gestor_mobile_quick_presets"
     };
+
+    const DEFAULT_QUICK_PRESETS = [
+      { id: "preset-cafe", name: "Café", emoji: "☕", amount: 1.50, subcategory_name: "Café y Desayunos", concept: "Café" },
+      { id: "preset-cena", name: "Cena", emoji: "🍽️", amount: 20.00, subcategory_name: "Restaurante", concept: "Cena" },
+      { id: "preset-cine", name: "Cine", emoji: "🎬", amount: 5.50, subcategory_name: "Ocio y Cultura", concept: "Cine" }
+    ];
 
     const DEFAULT_SUBCATEGORIES = [
       { id: 1, name: "Café y Desayunos", category_name: "Deseos (30%)", is_frequent: true, emoji: "☕" },
@@ -128,7 +135,14 @@
       isSearchingServer: false,
       // Estado Foto Ticket (Fase 12)
       receiptBase64: null,
-      viewingReceiptUrl: null
+      viewingReceiptUrl: null,
+      // Conmutador Gasto / Ingreso (Fase 13)
+      txType: "EXPENSE",
+      // Atajos Rápidos 1-Tap (Fase 14)
+      presets: DEFAULT_QUICK_PRESETS,
+      managePresetsModalOpen: false,
+      toastMessage: "",
+      toastUndoEventId: null
     };
 
     function triggerHaptic(ms = 15) {
@@ -157,6 +171,14 @@
 
         const rawHist = localStorage.getItem(STORAGE_KEYS.HISTORY_CACHE);
         if (rawHist) state.historyCache = JSON.parse(rawHist);
+
+        const rawPresets = localStorage.getItem(STORAGE_KEYS.QUICK_PRESETS);
+        if (rawPresets) {
+          const parsedP = JSON.parse(rawPresets);
+          if (Array.isArray(parsedP) && parsedP.length > 0) {
+            state.presets = parsedP;
+          }
+        }
 
         const rawCat = localStorage.getItem(STORAGE_KEYS.CATALOG);
         if (rawCat) {
@@ -193,8 +215,187 @@
       }
     }
 
+    function savePresetsLocally() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.QUICK_PRESETS, JSON.stringify(state.presets));
+      } catch (e) {
+        console.error("Error guardando atajos:", e);
+      }
+    }
+
+    let presetPressTimer = null;
+    let didTriggerPresetLongPress = false;
+
+    function handlePresetMouseDown(presetId) {
+      didTriggerPresetLongPress = false;
+      presetPressTimer = setTimeout(() => {
+        didTriggerPresetLongPress = true;
+        handleDirectSavePreset(presetId);
+      }, 500);
+    }
+
+    function handlePresetMouseUp(presetId) {
+      if (presetPressTimer) {
+        clearTimeout(presetPressTimer);
+        presetPressTimer = null;
+      }
+      if (!didTriggerPresetLongPress) {
+        handleSelectPreset(presetId);
+      }
+      didTriggerPresetLongPress = false;
+    }
+
+    function handlePresetMouseCancel() {
+      if (presetPressTimer) {
+        clearTimeout(presetPressTimer);
+        presetPressTimer = null;
+      }
+      didTriggerPresetLongPress = false;
+    }
+
+    function handleSelectPreset(presetId) {
+      triggerHaptic(15);
+      const p = state.presets.find(x => x.id === presetId);
+      if (!p) return;
+      state.txType = "EXPENSE";
+      state.amountStr = String(p.amount).replace(".", ",");
+      const matched = state.subcategories.find(s =>
+        (p.subcategory_id && s.id === p.subcategory_id) ||
+        (s.name.toLowerCase() === p.subcategory_name.toLowerCase())
+      );
+      if (matched) {
+        state.selectedSubcat = matched;
+      }
+      state.concept = p.concept || p.name;
+      render();
+    }
+
+    function handleDirectSavePreset(presetId) {
+      const p = state.presets.find(x => x.id === presetId);
+      if (!p) return;
+
+      const targetSub = state.subcategories.find(s =>
+        (p.subcategory_id && s.id === p.subcategory_id) ||
+        (s.name.toLowerCase() === p.subcategory_name.toLowerCase())
+      ) || state.selectedSubcat || state.subcategories[0];
+
+      // Salvaguarda del Techo de Presupuesto de Deseos (Fase 10)
+      const isWants = targetSub && ((targetSub.category_name && targetSub.category_name.toLowerCase().includes("deseo")) || targetSub.category_id === 3);
+      const wants = state.monthlySummary && state.monthlySummary.wants;
+      if (isWants && wants && wants.budget > 0) {
+        const projected = wants.spent + p.amount;
+        if (projected >= wants.budget) {
+          triggerHaptic(50);
+          handleSelectPreset(presetId);
+          return;
+        }
+      }
+
+      triggerHaptic(40);
+      const newTx = {
+        event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        scope: "PERSONAL",
+        type: "EXPENSE",
+        amount: Math.round(p.amount * 100) / 100,
+        description: p.concept || p.name,
+        date: state.selectedDate,
+        subcategory_id: targetSub.id,
+        subcategory_name: targetSub.name,
+        created_at_utc: new Date().toISOString(),
+        status: "PENDING_SYNC"
+      };
+
+      state.transactions.unshift(newTx);
+      saveTransactions();
+
+      if (isWants && wants) {
+        wants.spent += newTx.amount;
+        wants.remaining = wants.budget - wants.spent;
+      }
+
+      state.toastMessage = `${p.emoji} ${p.name} (${p.amount.toFixed(2).replace(".", ",")} €) guardado`;
+      state.toastUndoEventId = newTx.event_id;
+      state.showToast = true;
+      render();
+
+      setTimeout(() => {
+        if (state.toastUndoEventId === newTx.event_id) {
+          state.showToast = false;
+          state.toastUndoEventId = null;
+          state.toastMessage = "";
+          render();
+        }
+      }, 4000);
+
+      if (state.isOnline && state.isPaired) {
+        setTimeout(syncPendingTransactions, 300);
+      }
+    }
+
+    function undoDirectSave() {
+      if (!state.toastUndoEventId) return;
+      const targetId = state.toastUndoEventId;
+      state.transactions = state.transactions.filter(t => t.event_id !== targetId);
+      saveTransactions();
+      state.showToast = false;
+      state.toastUndoEventId = null;
+      state.toastMessage = "";
+      triggerHaptic(20);
+      render();
+    }
+
+    function updatePresetProp(id, prop, value) {
+      state.presets = state.presets.map(p => p.id === id ? { ...p, [prop]: value } : p);
+      savePresetsLocally();
+      render();
+    }
+
+    function deletePreset(id) {
+      state.presets = state.presets.filter(p => p.id !== id);
+      savePresetsLocally();
+      render();
+    }
+
+    function restoreDefaultPresets() {
+      state.presets = JSON.parse(JSON.stringify(DEFAULT_QUICK_PRESETS));
+      savePresetsLocally();
+      render();
+    }
+
+    function addNewPresetFromModal() {
+      const emojiInput = document.getElementById("newPresetEmoji");
+      const nameInput = document.getElementById("newPresetName");
+      const amountInput = document.getElementById("newPresetAmount");
+      const subcatInput = document.getElementById("newPresetSubcat");
+
+      const name = (nameInput ? nameInput.value : "").trim();
+      const amount = parseFloat(amountInput ? amountInput.value.replace(",", ".") : "0") || 0;
+      const emoji = (emojiInput ? emojiInput.value.trim() : "") || "⚡";
+      const subcatName = subcatInput ? subcatInput.value : (state.subcategories[0]?.name || "General");
+
+      if (!name || amount <= 0) return;
+
+      const newP = {
+        id: `preset-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name,
+        emoji,
+        amount: Math.round(amount * 100) / 100,
+        subcategory_name: subcatName,
+        concept: name
+      };
+
+      state.presets.push(newP);
+      savePresetsLocally();
+      render();
+    }
+
     function getEmojiForName(name) {
       const lower = name.toLowerCase();
+      if (lower.includes("nómina") || lower.includes("nomina") || lower.includes("salario") || lower.includes("sueldo")) return "💰";
+      if (lower.includes("bizum")) return "📲";
+      if (lower.includes("devoluc") || lower.includes("reembols")) return "🔄";
+      if (lower.includes("venta") || lower.includes("vinted") || lower.includes("wallapop")) return "🏷️";
+      if (lower.includes("ingreso") || lower.includes("interes") || lower.includes("dividend")) return "💵";
       if (lower.includes("café") || lower.includes("cafe") || lower.includes("desayun")) return "☕";
       if (lower.includes("super") || lower.includes("compra") || lower.includes("mercadona") || lower.includes("aliment")) return "🛒";
       if (lower.includes("restauran") || lower.includes("cen") || lower.includes("comid") || lower.includes("bar")) return "🍽️";
@@ -288,6 +489,7 @@
           transactions: pending.map(t => ({
             event_id: t.event_id,
             scope: "PERSONAL",
+            type: t.type || "EXPENSE",
             amount: t.amount,
             description: t.description,
             date: t.date,
@@ -521,6 +723,19 @@
       render();
     }
 
+    function handleTypeSwitch(t) {
+      state.txType = t;
+      triggerHaptic(15);
+      const isIncome = t === "INCOME";
+      const filtered = state.subcategories.filter(s =>
+        isIncome
+          ? (s.category_type === "income" || (s.category_name && s.category_name.toLowerCase().includes("ingreso")))
+          : (s.category_type !== "income" && (!s.category_name || !s.category_name.toLowerCase().includes("ingreso")))
+      );
+      state.selectedSubcat = filtered.find(s => s.is_frequent) || filtered[0] || state.subcategories[0] || null;
+      render();
+    }
+
     function saveExpense() {
       const num = parseFloat(state.amountStr.replace(",", ".")) || 0;
       if (num <= 0 || !state.selectedSubcat) return;
@@ -530,6 +745,7 @@
       const newTx = {
         event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         scope: "PERSONAL",
+        type: state.txType,
         amount: Math.round(num * 100) / 100,
         description: state.concept.trim() || state.selectedSubcat.name,
         date: state.selectedDate,
@@ -650,17 +866,27 @@
       const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
       const canSave = numAmount > 0 && state.selectedSubcat !== null;
 
-      const frequentSubs = state.subcategories.filter(s => s.is_frequent);
-      const activeSubs = frequentSubs.length > 0 ? frequentSubs : state.subcategories.slice(0, 6);
+      const isIncome = state.txType === "INCOME";
+      const typedSubs = state.subcategories.filter(s =>
+        isIncome
+          ? (s.category_type === "income" || (s.category_name && s.category_name.toLowerCase().includes("ingreso")))
+          : (s.category_type !== "income" && (!s.category_name || !s.category_name.toLowerCase().includes("ingreso")))
+      );
+      const subListToUse = typedSubs.length > 0 ? typedSubs : state.subcategories;
+      const frequentSubs = subListToUse.filter(s => s.is_frequent);
+      const activeSubs = frequentSubs.length > 0 ? frequentSubs : subListToUse.slice(0, 6);
 
       const [y, m, d] = state.selectedDate.split("-");
       const dateFormatted = `${d}/${m}/${y}`;
 
       app.innerHTML = `
-          <!-- Toast de confirmación -->
+          <!-- Toast de confirmación con soporte Deshacer -->
           ${state.showToast ? `
-            <div style="position:fixed; top:12px; left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:8px 16px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" class="toast-anim">
-              ✓ ¡Gasto guardado en 5s!
+            <div style="position:fixed; top:12px; left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:6px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;" class="toast-anim">
+              <span>✓ ${state.toastMessage || (state.txType === "INCOME" ? "¡Ingreso guardado!" : "¡Gasto guardado!")}</span>
+              ${state.toastUndoEventId ? `
+                <button onclick="undoDirectSave();" class="btn-press" style="background:#020617; color:#fff; border:none; border-radius:9999px; font-weight:800; font-size:10px; padding:2px 8px; cursor:pointer;">Deshacer</button>
+              ` : ''}
             </div>
           ` : ""}
 
@@ -737,13 +963,14 @@
           ${state.modalOpen ? renderCategoryModal() : ""}
           ${state.showTokenModal ? renderTokenModal() : ""}
           ${state.viewingReceiptUrl ? renderReceiptModal() : ""}
+          ${state.managePresetsModalOpen ? renderManagePresetsModal() : ""}
         `;
     }
 
     function renderCaptureView(canSave, dateFormatted, activeSubs) {
       let wantsAlertHtml = "";
       const sel = state.selectedSubcat;
-      const isWants = sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
+      const isWants = state.txType === "EXPENSE" && sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
       const wants = state.monthlySummary && state.monthlySummary.wants;
       if (isWants && wants && wants.budget > 0) {
         const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
@@ -797,12 +1024,27 @@
               </label>
             </div>
 
+            <!-- Selector Gasto / Ingreso (Fase 13) -->
+            <div style="display:flex; background:#0f172a; padding:3px; border-radius:12px; border:1px solid #1e293b; gap:4px; margin:4px 0;">
+              <button onclick="handleTypeSwitch('EXPENSE');" class="btn-press" style="flex:1; padding:6px; border-radius:8px; border:${state.txType === 'EXPENSE' ? '1px solid rgba(244,63,94,0.5)' : 'none'}; background:${state.txType === 'EXPENSE' ? 'rgba(244,63,94,0.15)' : 'transparent'}; color:${state.txType === 'EXPENSE' ? '#fb7185' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
+                🔴 Gasto
+              </button>
+              <button onclick="handleTypeSwitch('INCOME');" class="btn-press" style="flex:1; padding:6px; border-radius:8px; border:${state.txType === 'INCOME' ? '1px solid rgba(16,185,129,0.5)' : 'none'}; background:${state.txType === 'INCOME' ? 'rgba(16,185,129,0.15)' : 'transparent'}; color:${state.txType === 'INCOME' ? '#34d399' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
+                🟢 Ingreso / Bizum
+              </button>
+            </div>
+
+            <!-- Atajos Rápidos 1-Tap (Fase 14) -->
+            ${renderQuickPresets()}
+
             <!-- Display del Importe -->
             <div style="text-align:center; padding:6px 0;">
-              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; font-weight:700; color:#64748b; margin-bottom:2px;">Importe del Gasto</div>
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; font-weight:700; color:#64748b; margin-bottom:2px;">
+                ${state.txType === 'INCOME' ? 'Importe del Ingreso' : 'Importe del Gasto'}
+              </div>
               <div style="display:flex; align-items:baseline; justify-content:center; gap:4px; font-family:monospace;">
                 <span style="font-size:24px; color:#64748b; font-weight:300;">€</span>
-                <span style="font-size:44px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.amountStr}</span>
+                <span style="font-size:44px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.txType === 'INCOME' ? '+' : ''}${state.amountStr}</span>
               </div>
             </div>
 
@@ -878,7 +1120,7 @@
             <div style="margin-top:6px;">
               <button onclick="saveExpense();" ${!canSave ? "disabled" : ""} class="btn-press" style="width:100%; padding:14px; border-radius:16px; border:none; background:${canSave ? '#10b981' : '#0f172a'}; color:${canSave ? '#020617' : '#475569'}; font-weight:900; font-size:15px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:${canSave ? 'pointer' : 'not-allowed'}; box-shadow:${canSave ? '0 6px 20px rgba(16,185,129,0.3)' : 'none'};">
                 <span>⚡</span>
-                <span>${canSave ? `Guardar Gasto (${state.amountStr} €)` : "Introduce un importe"}</span>
+                <span>${canSave ? (state.txType === 'INCOME' ? `Guardar Ingreso (+${state.amountStr} €)` : `Guardar Gasto (${state.amountStr} €)`) : "Introduce un importe"}</span>
               </button>
             </div>
           </div>
@@ -990,8 +1232,8 @@
                             ${(item.receipt_filename || item.receipt_url) ? `
                               <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                             ` : ""}
-                            <div style="font-family:monospace; font-weight:800; font-size:14px; color:#f8fafc; white-space:nowrap;">
-                              -${item.amount.toFixed(2)} €
+                            <div style="font-family:monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
+                              ${item.type === 'INCOME' ? '+' : '-'}${item.amount.toFixed(2)} €
                             </div>
                           </div>
                         </div>
@@ -1054,7 +1296,9 @@
                         ${(t.receipt_base64 || t.receipt_filename) ? `
                           <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                         ` : ""}
-                        <span style="font-family:monospace; font-weight:800; color:#fcd34d; font-size:14px;">-${t.amount.toFixed(2)} €</span>
+                        <span style="font-family:monospace; font-weight:800; color:${t.type === 'INCOME' ? '#34d399' : '#fcd34d'}; font-size:14px;">
+                          ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} €
+                        </span>
                         <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:14px; padding:2px;">🗑️</button>
                       </div>
                     </div>
@@ -1084,7 +1328,9 @@
                         ${(t.receipt_filename || t.receipt_base64) ? `
                           <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
                         ` : ""}
-                        <span style="font-family:monospace; font-weight:700; color:#cbd5e1;">-${t.amount.toFixed(2)} € ✓</span>
+                        <span style="font-family:monospace; font-weight:700; color:${t.type === 'INCOME' ? '#34d399' : '#cbd5e1'};">
+                          ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} € ✓
+                        </span>
                         <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#64748b; hover:color:#f43f5e; cursor:pointer; font-size:12px; padding:2px;">🗑️</button>
                       </div>
                     </div>
@@ -1266,13 +1512,16 @@
                   </div>
 
                   <div>
-                    <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Tipo de Gasto (50/30/20)</label>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                      <button onclick="state.newSubcatCategory = 'Necesidades Básicas (50%)'; render();" class="btn-press" style="padding:10px; border-radius:12px; font-size:11px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('50%') ? '#10b981' : '#1e293b'}; background:${state.newSubcatCategory.includes('50%') ? 'rgba(16,185,129,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('50%') ? '#34d399' : '#94a3b8'}; cursor:pointer;">
-                        🛒 Necesidad (50%)
+                    <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Tipo (Regla 50/30/20 o Ingreso)</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                      <button onclick="state.newSubcatCategory = 'Necesidades Básicas (50%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('50%') ? '#10b981' : '#1e293b'}; background:${state.newSubcatCategory.includes('50%') ? 'rgba(16,185,129,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('50%') ? '#34d399' : '#94a3b8'}; cursor:pointer;">
+                        🛒 Necesidad
                       </button>
-                      <button onclick="state.newSubcatCategory = 'Deseos (30%)'; render();" class="btn-press" style="padding:10px; border-radius:12px; font-size:11px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('30%') ? '#f59e0b' : '#1e293b'}; background:${state.newSubcatCategory.includes('30%') ? 'rgba(245,158,11,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('30%') ? '#fbbf24' : '#94a3b8'}; cursor:pointer;">
-                        ☕ Deseo (30%)
+                      <button onclick="state.newSubcatCategory = 'Deseos (30%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('30%') ? '#f59e0b' : '#1e293b'}; background:${state.newSubcatCategory.includes('30%') ? 'rgba(245,158,11,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('30%') ? '#fbbf24' : '#94a3b8'}; cursor:pointer;">
+                        ☕ Deseo
+                      </button>
+                      <button onclick="state.newSubcatCategory = 'Ingresos Netos'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('Ingreso') ? '#38bdf8' : '#1e293b'}; background:${state.newSubcatCategory.includes('Ingreso') ? 'rgba(56,189,248,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('Ingreso') ? '#38bdf8' : '#94a3b8'}; cursor:pointer;">
+                        💰 Ingreso
                       </button>
                     </div>
                   </div>
@@ -1354,6 +1603,110 @@
             </div>
           </div>
         `;
+    }
+
+    function renderQuickPresets() {
+      if (state.txType !== "EXPENSE") return "";
+      return `
+        <div style="margin:4px 0; display:flex; flex-direction:column; gap:4px;">
+          <div style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:2px 0;" class="no-scrollbar">
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              ${state.presets.map(p => `
+                <button
+                  type="button"
+                  onmousedown="handlePresetMouseDown('${p.id}');"
+                  onmouseup="handlePresetMouseUp('${p.id}');"
+                  onmouseleave="handlePresetMouseCancel();"
+                  ontouchstart="handlePresetMouseDown('${p.id}');"
+                  ontouchend="handlePresetMouseUp('${p.id}');"
+                  ontouchcancel="handlePresetMouseCancel();"
+                  class="btn-press"
+                  style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#f8fafc; font-size:11px; font-weight:700; cursor:pointer;"
+                >
+                  <span style="font-size:13px;">${p.emoji}</span>
+                  <span>${p.name}</span>
+                  <span style="color:#34d399; font-family:monospace; font-weight:800; margin-left:2px;">${p.amount.toFixed(2).replace(".", ",")} €</span>
+                </button>
+              `).join("")}
+            </div>
+            <button
+              onclick="state.managePresetsModalOpen = true; render();"
+              class="btn-press"
+              style="padding:6px 8px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#94a3b8; font-size:11px; cursor:pointer; margin-left:auto; flex-shrink:0;"
+              title="Gestionar atajos"
+            >
+              ⚙️
+            </button>
+          </div>
+          <div style="font-size:9.5px; color:#64748b; font-weight:600; padding:0 2px;">
+            💡 Toca para rellenar · Mantén pulsado para 1-Tap directo
+          </div>
+        </div>
+      `;
+    }
+
+    function renderManagePresetsModal() {
+      return `
+        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
+          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:20px; max-width:360px; margin:0 auto; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.8); overflow:hidden;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #1e293b;">
+              <span style="font-weight:900; font-size:14px; color:#34d399;">⚙️ Atajos 1-Tap (${state.presets.length})</span>
+              <button onclick="state.managePresetsModalOpen = false; render();" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer;">✕</button>
+            </div>
+            <div style="padding:12px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;" class="no-scrollbar">
+              ${state.presets.map((p) => `
+                <div style="background:rgba(2,6,23,0.6); border:1px solid #1e293b; border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      <span style="font-size:16px;">${p.emoji}</span>
+                      <input type="text" value="${p.name}" onchange="updatePresetProp('${p.id}', 'name', this.value);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:11px; font-weight:700; padding:2px 6px; width:80px;" />
+                    </div>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                      <input type="number" step="0.01" value="${p.amount}" onchange="updatePresetProp('${p.id}', 'amount', parseFloat(this.value)||0);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-size:11px; font-weight:800; padding:2px 6px; width:65px; text-align:right;" />
+                      <span style="font-size:11px; color:#64748b; font-weight:800;">€</span>
+                      <button onclick="deletePreset('${p.id}');" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; padding:2px 4px;">🗑️</button>
+                    </div>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#64748b; border-top:1px solid #0f172a; padding-top:4px;">
+                    <span>📂 Subcategoría:</span>
+                    <select onchange="updatePresetProp('${p.id}', 'subcategory_name', this.value);" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; border-radius:6px; font-size:10px; padding:2px 4px; max-width:160px;">
+                      ${state.subcategories.map(s => `
+                        <option value="${s.name}" ${s.name === p.subcategory_name ? 'selected' : ''}>${s.name}</option>
+                      `).join("")}
+                    </select>
+                  </div>
+                </div>
+              `).join("")}
+
+              <!-- Añadir nuevo -->
+              <div style="background:#020617; border:1px dashed #334155; border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+                <div style="font-size:11px; font-weight:800; color:#34d399;">+ Añadir nuevo atajo</div>
+                <div style="display:flex; gap:6px;">
+                  <input id="newPresetEmoji" type="text" placeholder="Emoji" value="⚡" maxlength="2" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:12px; text-align:center; width:36px; padding:4px;" />
+                  <input id="newPresetName" type="text" placeholder="Nombre (ej. Pan)" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:11px; flex:1; padding:4px 8px;" />
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <input id="newPresetAmount" type="number" step="0.01" placeholder="Importe €" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-weight:800; font-size:11px; width:80px; padding:4px 6px;" />
+                  <select id="newPresetSubcat" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:10px; flex:1; padding:4px;">
+                    ${state.subcategories.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}
+                  </select>
+                </div>
+                <button onclick="addNewPresetFromModal();" class="btn-press" style="background:#10b981; color:#020617; font-weight:800; font-size:11px; border:none; border-radius:8px; padding:6px; cursor:pointer; margin-top:2px;">
+                  Añadir Atajo
+                </button>
+              </div>
+            </div>
+            <div style="padding:10px 14px; border-top:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; background:rgba(2,6,23,0.4);">
+              <button onclick="restoreDefaultPresets();" style="background:none; border:1px solid #334155; color:#94a3b8; font-size:10px; border-radius:8px; padding:4px 8px; cursor:pointer;">
+                Restaurar
+              </button>
+              <button onclick="state.managePresetsModalOpen = false; render();" class="btn-press" style="background:#10b981; color:#020617; font-weight:800; font-size:11px; border:none; border-radius:8px; padding:6px 14px; cursor:pointer;">
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function renderReceiptModal() {

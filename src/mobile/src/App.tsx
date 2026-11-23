@@ -346,6 +346,7 @@ export function App() {
             frequentConcepts={catalog.frequent_concepts}
             monthlySummary={monthlySummary}
             onSaveExpense={handleSaveExpense}
+            onDeleteExpense={(eventId) => handleDeleteTransaction({ event_id: eventId } as MobileTransaction)}
             onCreateSubcategory={handleCreateSubcategory}
           />
         ) : activeTab === "search" ? (

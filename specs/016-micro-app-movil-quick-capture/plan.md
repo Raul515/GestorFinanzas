@@ -17,8 +17,9 @@ Rama de trabajo: feat/spec-016-micro-app-movil-quick-capture
 [x] Fase 9: Historial del Mes con Borrado Seguro Offline/Online y Endpoints de Eliminación
 [x] Fase 10: Semáforo y Alerta Preventiva en Vivo para Techo de Presupuesto de Deseos (30%)
 [x] Fase 11: Buscador Instantáneo de Gastos Históricos ("¿Cuánto me costó...?") y Caché Offline
-[ ] Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono)
+[x] Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono)
 [ ] Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos
+[x] Fase 14: Atajos Rápidos de Importe y Presets Frecuentes (1-Tap y Modo Híbrido)
 Fusión final: Merge en develop tras 100% de tests y validación completa
 ```
 
@@ -164,15 +165,42 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Visor modal de comprobantes táctil en la vista de Historial y en el Buscador.
   4. Pruebas: `test_mobile_receipt_saving_and_sync` y `test_mobile_receipts_api_flow` pasando al 100%.
 
-### Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos (Pendiente)
+### Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos (Completada)
 - **Objetivo**: Registrar entradas puntuales de dinero desde el móvil (bizums de amigos, ventas de segunda mano, etc.) con asignación directa al mes contable.
 - **Entregables**:
-  1. Frontend: Conmutador táctil `[🔴 Gasto | 🟢 Ingreso]` en la cabecera de captura rápida.
-  2. Backend: Soporte de transacciones de tipo ingreso en `MobileSyncService`.
-  3. Pruebas: Verificación contable de imputación de ingresos en el presupuesto mensual.
+  1. Frontend (React + PWA monolítica):
+     - Conmutador táctil `[🔴 Gasto | 🟢 Ingreso / Bizum]` en la cabecera de captura rápida (`QuickCaptureView.tsx` y `dist/index.html`).
+     - Filtrado contextual de subcategorías según el modo seleccionado (subcategorías de ingresos con emojis dinámicos 💰 Nómina, 📲 Bizum, 🔄 Reembolso, 🏷️ Ventas).
+     - Desactivación inteligente del semáforo predictivo de Deseos al estar en modo Ingreso.
+     - Indicador y botones con importe positivo `+X,XX €` en verde esmeralda y botón `Guardar Ingreso (+X,XX €)`.
+     - Visualización diferenciada en Historial y Buscador con importes en verde `+X,XX €`.
+  2. Backend:
+     - Soporte para `type: Optional[str] = "EXPENSE"` (o `"INCOME"`) y `category_type: str` en contratos Pydantic v2 (`MobileCatalogSubcategory`, `MobileTransactionPayload`, `MobileHistoricalTransactionItem`).
+     - Detección unificada y robusta de categorías de ingreso (`is_income_category`) en `MobileSyncService`.
+     - Cómputo exacto de ingresos y flujo de caja en `get_mobile_monthly_summary()` y asignación contable al mes correspondiente.
+  3. Pruebas: `test_mobile_income_transaction_capture_and_summary` y `test_mobile_income_sync_and_summary_api` pasando al 100% (31/31 tests).
+
+### Fase 14: Atajos Rápidos de Importe y Presets Frecuentes (1-Tap y Modo Híbrido) (Completada)
+- **Objetivo**: Permitir capturar gastos super-frecuentes en menos de 1 segundo mediante botones preconfigurados con comportamiento híbrido (tap para rellenar, pulsación larga para guardar directo) y protección de presupuesto.
+- **Entregables**:
+  1. Tipos y almacenamiento en `src/mobile/src/types.ts` y `src/mobile/src/services/storage.ts`:
+     - Interfaz `QuickPresetItem`: `id`, `name`, `amount`, `subcategoryId`, `subcategoryName`, `concept`, `icon`.
+     - Presets preconfigurados por defecto: *☕ Café (1,50 €)*, *🍽️ Cena (20,00 €)*, *🎬 Cine (5,50 €)*.
+     - Persistencia offline y utilidades `loadStoredQuickPresets()`, `saveStoredQuickPresets(presets)`, `resetStoredQuickPresets()`.
+  2. Componentes UI en `src/mobile/src/components/`:
+     - `QuickPresetChips.tsx`: Carrusel táctil con barra horizontal deslizable, feedback táctil/visual de pulsación continua (long-press >= 500 ms) y micro-guía informativa *"💡 Toca para rellenar · Mantén pulsado para guardar directo"*.
+     - Modal `ManagePresetsModal.tsx`: Edición de importe, nombre y subcategoría, creación de nuevos atajos o eliminación.
+  3. Integración en `QuickCaptureView.tsx`:
+     - Renderizado de atajos rápidos ergonómicos sobre el display de importe.
+     - Lógica de tap corto (precarga inmediata de campos).
+     - Lógica de pulsación larga (guardado directo 1-Tap con toast de confirmación y opción [Deshacer]).
+     - Salvaguarda: si el preset es de Deseos y supera el presupuesto mensual, la pulsación larga desactiva el guardado directo y abre el formulario alertando con el semáforo rojo.
+  4. Sincronización en la PWA estática (`src/mobile/dist/index.html`):
+     - Soporte completo offline-first con eventos touch/mouse para long-press, modal de ajustes de atajos y botón flotante de Deshacer.
+  5. Pruebas automatizadas:
+     - Batería de pruebas en `test_mobile_quick_presets_and_wants_safeguard_contract` y `test_mobile_quick_presets_and_hybrid_1tap_pwa_bundle` pasando al 100% (33/33 tests).
 
 ---
 
 ## 3. Mejoras Archivadas para Futuras Especificaciones (Post-Spec 016)
-- **Atajos Rápidos de Importe y Presets Frecuentes (1-Tap)**: Botones directos con combinaciones predefinidas (ej. "Café 1,50 €", "Menú 12,00 €").
 - **Aportaciones Móviles a Huchas Conjuntas y Metas del Hogar (Spec 010)**: Conexión con fondos de amortización compartidos.

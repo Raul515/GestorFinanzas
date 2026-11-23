@@ -165,6 +165,23 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Conmutador táctil `[🔴 Gasto | 🟢 Ingreso]` en el formulario de captura rápida.
   - Asignación directa como ingreso contable en el mes activo para registrar bizums recibidos o reembolsos en segundos.
 
+- **RF-18 (Atajos Rápidos de Importe y Presets Frecuentes con Modo Híbrido y 1-Tap)**:
+  - Carrusel horizontal deslizable de botones táctiles situado en la zona de acción ergonómica de `QuickCaptureView`.
+  - Presets preconfigurados por defecto:
+    - *☕ Café*: 1,50 €, concepto "Café".
+    - *🍽️ Cena*: 20,00 €, concepto "Cena".
+    - *🎬 Cine*: 5,50 €, concepto "Cine".
+  - Mecanismo de Interacción Híbrida:
+    - **Tap corto (< 500 ms)**: Precarga instantáneamente el importe, subcategoría y concepto en el formulario para permitir revisión, adjuntar foto de ticket o ajustar antes de guardar.
+    - **Pulsación larga (long-press >= 500 ms)**: Guardado directo e inmediato (1-Tap real) con vibración háptica, feedback visual de carga progresiva durante la pulsación y Toast de confirmación con botón `[Deshacer]`.
+  - Salvaguarda del Techo de Presupuesto de Deseos (30%):
+    - Si el preset corresponde a la categoría de Deseos y su importe provocaría sobrepasar el techo presupuestario o ya está sobrepasado (semáforo rojo), la pulsación larga bloquea el guardado directo: precarga el formulario y muestra la alerta preventiva para que el usuario confirme voluntariamente.
+  - Gestor de Presets Personalizables:
+    - Botón de gestión táctil `[⚙️ Atajos]` para añadir nuevos atajos, modificar importes, cambiar subcategoría o eliminar presets.
+    - Persistencia en el almacenamiento del cliente (`localStorage` bajo `gestor_mobile_quick_presets`).
+  - Ergonomía y Micro-guía de Uso:
+    - Indicador informativo visible en la interfaz: *"💡 Toca para rellenar · Mantén pulsado para guardar directo"*.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

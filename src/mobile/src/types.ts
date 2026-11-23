@@ -3,6 +3,7 @@ export interface SubcategoryItem {
   name: string;
   category_id: number;
   category_name: string;
+  category_type?: "expense" | "income";
   is_frequent: boolean;
 }
 
@@ -16,6 +17,7 @@ export interface CatalogData {
 export interface MobileTransaction {
   event_id: string;
   scope: "PERSONAL";
+  type?: "EXPENSE" | "INCOME";
   amount: number;
   description: string;
   date: string; // YYYY-MM-DD
@@ -81,6 +83,7 @@ export interface HistoricalTransactionItem {
   date: string;
   amount: number;
   description: string;
+  type?: "EXPENSE" | "INCOME";
   subcategory_id: number;
   subcategory_name: string;
   category_name: string;
@@ -92,5 +95,15 @@ export interface SearchResponse {
   query: string;
   total_found: number;
   items: HistoricalTransactionItem[];
+}
+
+export interface QuickPresetItem {
+  id: string;
+  name: string;
+  emoji: string;
+  amount: number;
+  subcategory_id?: number;
+  subcategory_name: string;
+  concept: string;
 }
 

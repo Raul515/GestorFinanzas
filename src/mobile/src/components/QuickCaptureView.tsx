@@ -3,13 +3,17 @@ import { Zap, Calendar, CheckCircle2, AlertTriangle, Sparkles, Camera, X } from 
 import { NumericKeypad } from "./NumericKeypad";
 import { CategoryChips } from "./CategoryChips";
 import { ConceptSuggestions } from "./ConceptSuggestions";
-import { SubcategoryItem, MobileTransaction, MobileMonthlySummary } from "../types";
+import { QuickPresetChips } from "./QuickPresetChips";
+import { ManagePresetsModal } from "./ManagePresetsModal";
+import { SubcategoryItem, MobileTransaction, MobileMonthlySummary, QuickPresetItem } from "../types";
+import { loadStoredQuickPresets, saveStoredQuickPresets } from "../services/storage";
 
 interface QuickCaptureViewProps {
   subcategories: SubcategoryItem[];
   frequentConcepts: string[];
   monthlySummary?: MobileMonthlySummary | null;
   onSaveExpense: (tx: MobileTransaction) => void;
+  onDeleteExpense?: (eventId: string) => void;
   onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
 }
 
@@ -18,8 +22,10 @@ export const QuickCaptureView = ({
   frequentConcepts,
   monthlySummary,
   onSaveExpense,
+  onDeleteExpense,
   onCreateSubcategory,
 }: QuickCaptureViewProps) => {
+  const [txType, setTxType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [amountStr, setAmountStr] = useState("0");
   const [selectedSubcat, setSelectedSubcat] = useState<SubcategoryItem | null>(() => {
     return subcategories.find((s) => s.is_frequent) || subcategories[0] || null;
@@ -30,8 +36,20 @@ export const QuickCaptureView = ({
     return today.toISOString().split("T")[0];
   });
   const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
-  const [showToast, setShowToast] = useState(false);
+  const [toastInfo, setToastInfo] = useState<{ message: string; eventId?: string } | null>(null);
+  const [presets, setPresets] = useState<QuickPresetItem[]>(loadStoredQuickPresets);
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleTypeSwitch = (type: "EXPENSE" | "INCOME") => {
+    setTxType(type);
+    const relevantSubcats = subcategories.filter((s) =>
+      type === "INCOME"
+        ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
+        : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+    );
+    setSelectedSubcat(relevantSubcats.find((s) => s.is_frequent) || relevantSubcats[0] || null);
+  };
 
   // Captura y compresión client-side en Canvas HTML5 (< 200 KB)
   const handlePhotoCapture = (e: ChangeEvent<HTMLInputElement>) => {
@@ -75,8 +93,9 @@ export const QuickCaptureView = ({
   const numericAmount = parseFloat(amountStr.replace(",", ".")) || 0;
   const canSave = numericAmount > 0 && selectedSubcat !== null;
 
-  // Lógica predictiva del semáforo de Deseos (30%)
+  // Lógica predictiva del semáforo de Deseos (30%) - solo aplica en modo Gasto
   const isWants =
+    txType === "EXPENSE" &&
     selectedSubcat !== null &&
     (selectedSubcat.category_name.toLowerCase().includes("deseo") || selectedSubcat.category_id === 3);
 
@@ -135,6 +154,7 @@ export const QuickCaptureView = ({
     const newTx: MobileTransaction = {
       event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       scope: "PERSONAL",
+      type: txType,
       amount: Math.round(numericAmount * 100) / 100,
       description: concept.trim() || selectedSubcat.name,
       date: selectedDate,
@@ -151,8 +171,91 @@ export const QuickCaptureView = ({
     setAmountStr("0");
     setConcept("");
     setReceiptBase64(null);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
+    setToastInfo({
+      message: `¡${txType === "INCOME" ? "Ingreso" : "Gasto"} guardado correctamente!`,
+      eventId: newTx.event_id,
+    });
+    setTimeout(() => setToastInfo(null), 3000);
+  };
+
+  // Atajos Rápidos: Tap corto (precarga de formulario)
+  const handleSelectPreset = (preset: QuickPresetItem) => {
+    setTxType("EXPENSE");
+    setAmountStr(preset.amount.toString().replace(".", ","));
+    const matched = subcategories.find(
+      (s) =>
+        (preset.subcategory_id && s.id === preset.subcategory_id) ||
+        s.name.toLowerCase() === preset.subcategory_name.toLowerCase()
+    );
+    if (matched) {
+      setSelectedSubcat(matched);
+    }
+    setConcept(preset.concept || preset.name);
+  };
+
+  // Atajos Rápidos: Pulsación larga (1-Tap directo con salvaguarda)
+  const handleDirectSavePreset = (preset: QuickPresetItem) => {
+    const targetSubcat =
+      subcategories.find(
+        (s) =>
+          (preset.subcategory_id && s.id === preset.subcategory_id) ||
+          s.name.toLowerCase() === preset.subcategory_name.toLowerCase()
+      ) ||
+      selectedSubcat ||
+      subcategories[0];
+
+    if (!targetSubcat) return;
+
+    // Salvaguarda del Techo de Presupuesto de Deseos (Fase 10)
+    const isWants =
+      targetSubcat.category_name.toLowerCase().includes("deseo") ||
+      targetSubcat.category_id === 3;
+    const wantsBudget = monthlySummary?.wants?.budget || 0;
+    const currentWantsSpent = monthlySummary?.wants?.spent || 0;
+
+    if (isWants && wantsBudget > 0) {
+      const projectedSpent = currentWantsSpent + preset.amount;
+      if (projectedSpent >= wantsBudget) {
+        // Bloqueo de 1-Tap: precargar formulario y alertar con semáforo rojo
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([40, 60, 40]);
+        }
+        handleSelectPreset(preset);
+        return;
+      }
+    }
+
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(40);
+    }
+
+    const newTx: MobileTransaction = {
+      event_id: `mob-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      scope: "PERSONAL",
+      type: "EXPENSE",
+      amount: Math.round(preset.amount * 100) / 100,
+      description: preset.concept.trim() || preset.name,
+      date: selectedDate,
+      subcategory_id: targetSubcat.id,
+      subcategory_name: targetSubcat.name,
+      created_at_utc: new Date().toISOString(),
+      status: "PENDING_SYNC",
+    };
+
+    onSaveExpense(newTx);
+
+    setToastInfo({
+      message: `¡${preset.emoji} ${preset.name} (${preset.amount.toFixed(2).replace(".", ",")} €) guardado!`,
+      eventId: newTx.event_id,
+    });
+    setTimeout(() => {
+      setToastInfo(null);
+    }, 4000);
+  };
+
+  const handleSavePresets = (updated: QuickPresetItem[]) => {
+    setPresets(updated);
+    saveStoredQuickPresets(updated);
   };
 
   // Formatear fecha para mostrar
@@ -163,11 +266,23 @@ export const QuickCaptureView = ({
 
   return (
     <div className="flex-1 flex flex-col justify-between max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar">
-      {/* Toast de confirmación rápida */}
-      {showToast && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-4 duration-150">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>¡Gasto guardado correctamente!</span>
+      {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) */}
+      {toastInfo && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-4 duration-150">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="truncate">{toastInfo.message}</span>
+          {toastInfo.eventId && onDeleteExpense && (
+            <button
+              type="button"
+              onClick={() => {
+                onDeleteExpense(toastInfo.eventId!);
+                setToastInfo(null);
+              }}
+              className="bg-slate-950 text-white font-bold px-2 py-0.5 rounded-full text-[10px] hover:bg-slate-800 active:scale-95 transition-all ml-1 shrink-0"
+            >
+              Deshacer
+            </button>
+          )}
         </div>
       )}
 
@@ -190,21 +305,61 @@ export const QuickCaptureView = ({
         </label>
       </div>
 
+      {/* Selector de Tipo: Gasto / Ingreso (Fase 13) */}
+      <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800 gap-1 my-1">
+        <button
+          type="button"
+          onClick={() => handleTypeSwitch("EXPENSE")}
+          className={`flex-1 py-1 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            txType === "EXPENSE"
+              ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span>🔴</span>
+          <span>Gasto</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTypeSwitch("INCOME")}
+          className={`flex-1 py-1 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            txType === "INCOME"
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <span>🟢</span>
+          <span>Ingreso / Bizum</span>
+        </button>
+      </div>
+
+      {/* Atajos Rápidos de Importe y Presets Frecuentes 1-Tap (Fase 14) */}
+      {txType === "EXPENSE" && (
+        <QuickPresetChips
+          presets={presets}
+          onSelectPreset={handleSelectPreset}
+          onDirectSave={handleDirectSavePreset}
+          onOpenManageModal={() => setIsManageModalOpen(true)}
+        />
+      )}
+
       {/* Display del Importe en Pantalla */}
       <div className="flex flex-col items-center justify-center my-1 py-1">
         <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-0.5">
-          Importe del Gasto
+          {txType === "INCOME" ? "Importe del Ingreso" : "Importe del Gasto"}
         </div>
         <div className="flex items-baseline justify-center gap-1 text-slate-100 font-mono select-none">
           <span className="text-2xl font-light text-slate-500">€</span>
           <span className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${
-            wantsAlert?.level === "OVER_LIMIT"
+            txType === "INCOME"
+              ? "text-emerald-400"
+              : wantsAlert?.level === "OVER_LIMIT"
               ? "text-rose-400"
               : wantsAlert?.level === "WARNING"
               ? "text-amber-400"
               : "text-emerald-400"
           }`}>
-            {amountStr}
+            {txType === "INCOME" ? `+${amountStr}` : amountStr}
           </span>
         </div>
       </div>
@@ -240,7 +395,19 @@ export const QuickCaptureView = ({
       {/* Selector de Chips de Categorías */}
       <div className="my-1">
         <CategoryChips
-          subcategories={subcategories}
+          subcategories={
+            subcategories.filter((s) =>
+              txType === "INCOME"
+                ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
+                : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+            ).length > 0
+              ? subcategories.filter((s) =>
+                  txType === "INCOME"
+                    ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
+                    : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+                )
+              : subcategories
+          }
           selectedSubcategoryId={selectedSubcat?.id || null}
           onSelectSubcategory={(subcat) => setSelectedSubcat(subcat)}
           onCreateSubcategory={onCreateSubcategory}
@@ -313,18 +480,30 @@ export const QuickCaptureView = ({
           onClick={handleSave}
           className={`w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-base transition-all select-none shadow-md ${
             canSave
-              ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98] active:bg-emerald-600"
+              ? txType === "INCOME"
+                ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98] active:bg-emerald-600"
+                : "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98] active:bg-emerald-600"
               : "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-60"
           }`}
         >
           <Zap className="w-5 h-5 fill-current" />
           <span>
             {canSave
-              ? `Guardar Gasto (${amountStr} €)`
+              ? txType === "INCOME"
+                ? `Guardar Ingreso (+${amountStr} €)`
+                : `Guardar Gasto (${amountStr} €)`
               : "Introduce un importe"}
           </span>
         </button>
       </div>
+      {/* Modal de Gestión de Atajos Rápidos */}
+      <ManagePresetsModal
+        isOpen={isManageModalOpen}
+        presets={presets}
+        subcategories={subcategories}
+        onClose={() => setIsManageModalOpen(false)}
+        onSavePresets={handleSavePresets}
+      />
     </div>
   );
 };

@@ -3,6 +3,7 @@ import {
   HistoricalTransactionItem,
   MobileMonthlySummary,
   MobileTransaction,
+  QuickPresetItem,
   SubcategoryItem,
 } from "../types";
 
@@ -14,6 +15,7 @@ const STORAGE_KEYS = {
   PENDING_DELETES: "gestor_mobile_pending_deletes",
   MONTHLY_SUMMARY: "gestor_mobile_monthly_summary",
   HISTORY_CACHE: "gestor_mobile_history_cache",
+  QUICK_PRESETS: "gestor_mobile_quick_presets",
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
@@ -256,3 +258,59 @@ export const exportTransactionsToJsonFile = (transactions: MobileTransaction[]):
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
+
+// Atajos Rápidos por defecto (Spec 016 - Fase 14 / RF-18)
+export const DEFAULT_QUICK_PRESETS: QuickPresetItem[] = [
+  {
+    id: "preset-cafe",
+    name: "Café",
+    emoji: "☕",
+    amount: 1.5,
+    subcategory_name: "Café y Desayunos",
+    concept: "Café",
+  },
+  {
+    id: "preset-cena",
+    name: "Cena",
+    emoji: "🍽️",
+    amount: 20.0,
+    subcategory_name: "Restaurante",
+    concept: "Cena",
+  },
+  {
+    id: "preset-cine",
+    name: "Cine",
+    emoji: "🎬",
+    amount: 5.5,
+    subcategory_name: "Ocio y Cultura",
+    concept: "Cine",
+  },
+];
+
+export const loadStoredQuickPresets = (): QuickPresetItem[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.QUICK_PRESETS);
+    if (!raw) return DEFAULT_QUICK_PRESETS;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return DEFAULT_QUICK_PRESETS;
+  } catch {
+    return DEFAULT_QUICK_PRESETS;
+  }
+};
+
+export const saveStoredQuickPresets = (presets: QuickPresetItem[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.QUICK_PRESETS, JSON.stringify(presets));
+  } catch (err) {
+    console.error("Error guardando atajos rápidos en almacenamiento local:", err);
+  }
+};
+
+export const resetStoredQuickPresets = (): QuickPresetItem[] => {
+  saveStoredQuickPresets(DEFAULT_QUICK_PRESETS);
+  return DEFAULT_QUICK_PRESETS;
+};
+
