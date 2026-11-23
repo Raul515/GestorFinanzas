@@ -1,4 +1,4 @@
-import { CatalogData, MobileMonthlySummary, MobileTransaction, SubcategoryItem } from "../types";
+import { CatalogData, MobileMonthlySummary, MobileTransaction, MobileVersionInfo, SubcategoryItem } from "../types";
 import { getStoredPairingToken } from "./storage";
 
 const getBaseApiUrl = (): string => {
@@ -161,4 +161,20 @@ export const createSubcategoryOnTheFly = async (
   } catch {
     return null;
   }
+};
+
+export const fetchLatestVersion = async (): Promise<MobileVersionInfo | null> => {
+  try {
+    const res = await fetch(`${getBaseApiUrl()}/api/mobile/version`, {
+      headers: getCommonHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+export const getApkDownloadUrl = (): string => {
+  return `${getBaseApiUrl()}/api/mobile/download-apk`;
 };

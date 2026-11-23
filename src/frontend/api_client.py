@@ -2197,3 +2197,45 @@ def update_mobile_budget(month: str, subcategory_id: int, amount: float, token: 
     except Exception as e:
         logger.error("Error inesperado en update_mobile_budget(): %s", e)
     return None
+
+
+def get_mobile_version() -> Optional[Dict[str, Any]]:
+    """Consulta la versión y estado de disponibilidad del APK de Android (OTA Updates)."""
+    url = f"{API_URL}/api/mobile/version"
+    try:
+        response = _session.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al consultar versión móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar versión móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_version(): %s", e)
+    return None
+
+
+def upload_mobile_apk(
+    file_bytes: bytes,
+    filename: str,
+    version_code: int,
+    version_name: str,
+    release_notes: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Publica una nueva release de APK de Android para distribución OTA."""
+    url = f"{API_URL}/api/mobile/upload-apk"
+    files = {"apk_file": (filename, file_bytes, "application/vnd.android.package-archive")}
+    data = {
+        "version_code": str(version_code),
+        "version_name": version_name,
+        "release_notes": release_notes,
+    }
+    try:
+        response = _session.post(url, files=files, data=data, timeout=60)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al subir APK móvil (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al subir APK móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en upload_mobile_apk(): %s", e)
+    return None

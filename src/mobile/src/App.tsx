@@ -3,7 +3,7 @@ import { QuickCaptureView } from "./components/QuickCaptureView";
 import { HistoryView } from "./components/HistoryView";
 import { MonthlySummaryView } from "./components/MonthlySummaryView";
 import { NavigationBar } from "./components/NavigationBar";
-import { ActiveTab, MobileTransaction, SubcategoryItem } from "./types";
+import { ActiveTab, MobileTransaction, MobileVersionInfo, SubcategoryItem } from "./types";
 import {
   loadStoredTransactions,
   saveStoredTransactions,
@@ -20,8 +20,12 @@ import {
   syncTransactionsWithBackend,
   checkServerStatus,
   createSubcategoryOnTheFly,
+  fetchLatestVersion,
+  getApkDownloadUrl,
 } from "./services/api";
 import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
+
+const CURRENT_APP_VERSION = { code: 1, name: "1.0.0" };
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("capture");
@@ -30,6 +34,7 @@ export function App() {
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [isPaired, setIsPaired] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<MobileVersionInfo | null>(null);
 
   // Modal / Diálogo para introducir el pairing token si no coincide o falta
   const [showPairingModal, setShowPairingModal] = useState(false);
@@ -53,6 +58,18 @@ export function App() {
       if (remoteCatalog) {
         setCatalog(remoteCatalog);
         saveStoredCatalog(remoteCatalog);
+      }
+
+      // Comprobar si hay una nueva versión de APK para auto-actualización OTA
+      const versionInfo = await fetchLatestVersion();
+      if (
+        versionInfo &&
+        versionInfo.version_code > CURRENT_APP_VERSION.code &&
+        versionInfo.apk_available
+      ) {
+        setAvailableUpdate(versionInfo);
+      } else {
+        setAvailableUpdate(null);
       }
     }
   }, []);
@@ -206,6 +223,23 @@ export function App() {
           )}
         </div>
       </header>
+
+      {/* Banner de Actualización OTA disponible */}
+      {availableUpdate && (
+        <div className="bg-emerald-500/20 border-b border-emerald-500/30 px-3.5 py-1.5 flex items-center justify-between text-xs text-emerald-300 shrink-0">
+          <div className="flex items-center gap-1.5 font-medium">
+            <span>🚀</span>
+            <span>Nueva versión v{availableUpdate.version_name}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.open(getApkDownloadUrl(), "_blank")}
+            className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-extrabold text-[11px] active:scale-95 shadow-sm"
+          >
+            Actualizar
+          </button>
+        </div>
+      )}
 
       {/* Contenido principal según pestaña activa */}
       <main className="flex-1 flex flex-col overflow-hidden">

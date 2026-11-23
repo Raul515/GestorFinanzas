@@ -105,6 +105,17 @@ Orquestación colegiada mediante un grafo de estados (`StateGraph`) con cinco ag
 - **Onboarding Automático en 1-Clic y Resiliencia**: Detección de invitaciones de la pareja en buzón de entrada y restablecimiento seguro al Estado Cero en 1 clic.
 - 📖 **Documentación**: Consulta el [Manual de Usuario para Parejas](docs/manual_usuario_cuenta_conjunta.md) y la [Guía de Sincronización Syncthing](docs/guia_sincronizacion_syncthing.md).
 
+### 12. 📱 Micro-App Móvil Quick-Capture (Spec 016)
+- **Captura Ultrarrápida y Ergonómica en Menos de 5 Segundos**: Diseñada para registrar gastos en la calle sin fricción mediante teclado numérico gigante, chips táctiles de categorías 50/30/20 y sugerencias inteligentes de conceptos frecuentes.
+- **Arquitectura 100% Offline-First (PWA & APK Android)**: Funciona plenamente sin cobertura de datos ni internet. Los apuntes se encolan de forma segura en `IndexedDB` local y se sincronizan automáticamente en cuanto el móvil detecta el backend en la red Wi-Fi doméstica o mediante intercambio JSON con Syncthing.
+- **Pairing Token de Seguridad Exclusivo**: Blindaje de red local con token criptográfico único generado por el backend (`X-Mobile-Pairing-Token`). Evita que dispositivos de terceros o invitados conectados a la misma Wi-Fi doméstica puedan enviar apuntes o alterar la base de datos personal.
+- **Subcategorías al Vuelo y Panel "Mi Mes"**: Permite dar de alta subcategorías directamente desde el móvil al registrar un gasto imprevisto, además de consultar el progreso del presupuesto 50/30/20 del mes actual y ajustar partidas en tiempo real.
+- **Distribución Universal y Auto-Actualizador OTA (Over-The-Air)**:
+  - Modo PWA instalable al instante escaneando el código QR generado en Streamlit (`http://<IP_LOCAL>:8000/mobile`).
+  - App nativa para Android (`.apk`) compilada con Capacitor / GitHub Actions.
+  - Actualizador in-app OTA: la app detecta automáticamente nuevas versiones publicadas en el backend y permite actualizarse con 1 toque sin pasar por tiendas ni descargas manuales.
+- 📖 **Documentación**: Consulta la [Guía de Compilación de APK Móvil](docs/guia_compilacion_apk_movil.md).
+
 ---
 
 
@@ -180,20 +191,27 @@ GestorFinanzas/
 │   ├── 005-orquestacion-langgraph/
 │   ├── 006-gestion-transacciones/
 │   ├── 007-sistema-logs-rotativos/
-│   └── 008-pautas-gestion-determinista/
+│   ├── 008-pautas-gestion-determinista/
+│   ├── 010-finanzas-compartidas-cuenta-conjunta/
+│   └── 016-micro-app-movil-quick-capture/
 ├── src/
 │   ├── backend/               # Servidor FastAPI y arquitectura cognitiva
 │   │   ├── agents/            # Motor Cognitivo: Especializaciones de BaseAgent
-│   │   ├── api/               # Servidor REST y routers (/guidelines, /committee...)
+│   │   ├── api/               # Servidor REST y routers (/guidelines, /committee, /mobile...)
 │   │   ├── components/        # Nodos LangGraph, orquestador y herramientas
 │   │   ├── database/          # Persistencia SQLite (patrón Repositorio y migraciones)
 │   │   ├── domain/            # Modelos ORM, esquemas Pydantic y estados de agentes
-│   │   └── services/          # Lógica financiera pura (guidelines, safety_guard, screener...)
-│   └── frontend/              # Aplicación web Streamlit
-│       ├── api_client.py      # Cliente HTTP estructurado con observabilidad
-│       ├── app.py             # Interfaz de usuario interactiva
-│       ├── services/          # Componentes de presentación visual (guidelines_view)
-│       └── style.css          # Sistema de diseño y estilos CSS
+│   │   └── services/          # Lógica financiera pura (guidelines, safety_guard, mobile_sync...)
+│   ├── frontend/              # Aplicación web Streamlit
+│   │   ├── api_client.py      # Cliente HTTP estructurado con observabilidad
+│   │   ├── app.py             # Interfaz de usuario interactiva
+│   │   ├── services/          # Componentes de presentación visual (guidelines_view)
+│   │   ├── views/             # Vistas modulares de la aplicación (incluye companion móvil)
+│   │   └── style.css          # Sistema de diseño y estilos CSS
+│   └── mobile/                # Micro-App Móvil Quick-Capture (PWA + Capacitor Android)
+│       ├── capacitor.config.json # Configuración de empaquetado nativo Android
+│       ├── dist/              # Versión PWA estática lista para producción servida por FastAPI
+│       └── src/               # Código fuente React, TypeScript y Tailwind CSS
 └── tests/                     # Suite de pruebas automatizadas (276 pruebas)
     ├── conftest.py            # Fixtures de base de datos SQLite en memoria
     ├── integration/           # Pruebas de integración de endpoints REST
@@ -334,6 +352,23 @@ Si vas a compartir la economía del hogar con tu pareja (ej. tu ordenador con Wi
 4. 📖 **Guías Detalladas**:
    - Para entender el funcionamiento y uso diario: [Manual de Usuario para Parejas](docs/manual_usuario_cuenta_conjunta.md).
    - Para ver la configuración paso a paso de Syncthing con capturas: [Guía de Sincronización Syncthing](docs/guia_sincronizacion_syncthing.md).
+
+---
+
+### 📱 Puesta en Marcha del Companion Móvil Quick-Capture
+
+Para registrar gastos rápidamente en menos de 5 segundos desde tu teléfono móvil estés donde estés:
+
+1. **Acceso Inmediato vía PWA**:
+   - Entra en Streamlit (`http://localhost:8501`) y navega a la pestaña **⚙️ Ajustes -> 📱 Companion Móvil**.
+   - Escanea el **Código QR** con la cámara de tu teléfono (ambos dispositivos en la misma red Wi-Fi o mediante IP local `http://<IP_LOCAL>:8000/mobile`).
+   - El código QR transfiere de forma segura la URL y tu **Pairing Token personal**.
+   - En el navegador del móvil (Chrome o Safari), pulsa en *"Añadir a la pantalla de inicio"* para instalar la PWA como una app nativa con icono propio.
+2. **Instalación como App Nativa Android (APK)**:
+   - Descarga el archivo APK generado por GitHub Actions desde la pestaña de Ajustes o compílalo tú mismo siguiendo la [Guía de Compilación de APK Móvil](docs/guia_compilacion_apk_movil.md).
+   - La app incluye soporte de **actualización OTA in-app**: cuando publiques una nueva versión en el backend, la aplicación mostrará automáticamente un aviso en la barra superior para actualizarse en 1 toque.
+3. **Uso 100% Offline**:
+   - Puedes capturar tus gastos en la calle sin cobertura ni conexión. Se guardarán en la memoria local de tu teléfono y se transferirán automáticamente a tu base de datos en cuanto llegues a casa y te conectes a la Wi-Fi.
 
 ---
 

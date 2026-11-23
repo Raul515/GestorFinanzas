@@ -62,3 +62,14 @@ export interface MobileMonthlySummary {
   emergency_fund: EmergencyFundSummary;
   subcategories: MobileSubcategorySummary[];
 }
+
+export interface MobileVersionInfo {
+  version_code: number;
+  version_name: string;
+  apk_available: boolean;
+  apk_url?: string;
+  apk_filename?: string;
+  apk_size_bytes?: number;
+  release_notes?: string;
+  released_at_utc?: string;
+}

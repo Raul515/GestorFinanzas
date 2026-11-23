@@ -144,3 +144,16 @@ class MobileMonthlySummaryResponse(BaseModel):
     wants: Optional[MobileCategorySummary] = None
     savings: Optional[MobileCategorySummary] = None
     subcategories: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class MobileVersionResponse(BaseModel):
+    """Information about the latest published mobile APK release."""
+    version_code: int = Field(1, description="Integer build version code")
+    version_name: str = Field("1.0.0", description="Semantic version string")
+    apk_available: bool = Field(False, description="Whether an APK binary is ready for OTA download")
+    apk_url: Optional[str] = Field(None, description="Download endpoint URL")
+    apk_filename: Optional[str] = Field(None, description="Name of the APK file")
+    apk_size_bytes: Optional[int] = Field(None, description="File size in bytes")
+    release_notes: Optional[str] = Field(None, description="Release changelog notes")
+    released_at_utc: Optional[str] = None
+

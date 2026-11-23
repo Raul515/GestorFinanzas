@@ -59,6 +59,7 @@ class MobileSyncService:
         self.processed_dir = self.mobile_dir / "processed"
         self.error_dir = self.mobile_dir / "error"
         self.catalog_dir = self.mobile_dir / "catalog"
+        self.apk_dir = self.mobile_dir / "apk"
         self.pairing_file = self.mobile_dir / "pairing_secret.txt"
 
         self._ensure_directories()
@@ -149,7 +150,7 @@ class MobileSyncService:
 
     def _ensure_directories(self) -> None:
         """Asegura la existencia de la jerarquía de carpetas de sincronización móvil."""
-        for d in [self.inbox_dir, self.outbox_dir, self.processed_dir, self.error_dir, self.catalog_dir]:
+        for d in [self.inbox_dir, self.outbox_dir, self.processed_dir, self.error_dir, self.catalog_dir, self.apk_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
     def get_mobile_catalog(self, db: Session, local_device_id: Optional[str] = None) -> MobileCatalogResponse:
@@ -616,3 +617,82 @@ class MobileSyncService:
         db.commit()
         logger.info("Presupuesto móvil actualizado: mes %s, subcat %d, cantidad %.2f", target_month, target_subcat_id, target_amount)
         return True
+
+    def get_mobile_version_info(self) -> Any:
+        """Retorna la versión más reciente publicada de la APK móvil para actualizaciones OTA."""
+        from backend.domain.schemas.mobile import MobileVersionResponse
+        version_file = self.apk_dir / "version.json"
+        code = 1
+        name = "1.0.0"
+        notes = "Versión inicial estable Quick-Capture"
+        released_utc = None
+        apk_filename = None
+
+        if version_file.exists():
+            try:
+                with open(version_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    code = int(data.get("version_code", 1))
+                    name = str(data.get("version_name", "1.0.0"))
+                    notes = data.get("release_notes", notes)
+                    released_utc = data.get("released_at_utc")
+                    apk_filename = data.get("apk_filename")
+            except Exception as e:
+                logger.warning("Error leyendo version.json: %s", e)
+
+        # Buscar APK en el directorio
+        apk_path = self.get_latest_apk_path(apk_filename)
+        apk_available = apk_path is not None and apk_path.exists()
+        apk_size = apk_path.stat().st_size if apk_available and apk_path else None
+        final_filename = apk_path.name if apk_available and apk_path else None
+
+        return MobileVersionResponse(
+            version_code=code,
+            version_name=name,
+            apk_available=apk_available,
+            apk_url="/api/mobile/download-apk" if apk_available else None,
+            apk_filename=final_filename,
+            apk_size_bytes=apk_size,
+            release_notes=notes,
+            released_at_utc=released_utc,
+        )
+
+    def get_latest_apk_path(self, preferred_filename: Optional[str] = None) -> Optional[Path]:
+        """Obtiene la ruta al archivo APK disponible para distribución."""
+        if preferred_filename:
+            candidate = self.apk_dir / preferred_filename
+            if candidate.exists():
+                return candidate
+
+        # Buscar cualquier archivo .apk en self.apk_dir ordenado por fecha de modificación
+        apks = sorted(self.apk_dir.glob("*.apk"), key=lambda p: p.stat().st_mtime, reverse=True)
+        return apks[0] if apks else None
+
+    def publish_apk_release(
+        self,
+        apk_bytes: bytes,
+        filename: str = "app-release.apk",
+        version_code: int = 2,
+        version_name: str = "1.1.0",
+        release_notes: str = "",
+    ) -> Any:
+        """Guarda un nuevo binario APK en disco y actualiza su metadata para actualizaciones OTA."""
+        safe_filename = Path(filename).name
+        target_apk = self.apk_dir / safe_filename
+        with open(target_apk, "wb") as f:
+            f.write(apk_bytes)
+
+        released_utc = datetime.now(timezone.utc).isoformat()
+        metadata = {
+            "version_code": version_code,
+            "version_name": version_name,
+            "release_notes": release_notes or f"Actualización versión {version_name}",
+            "apk_filename": safe_filename,
+            "released_at_utc": released_utc,
+        }
+        version_file = self.apk_dir / "version.json"
+        with open(version_file, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        logger.info("Nueva versión de APK móvil publicada: %s (v%s, código %d)", safe_filename, version_name, version_code)
+        return self.get_mobile_version_info()

@@ -6,7 +6,8 @@ sincronización de transacciones e informes de estado.
 
 import logging
 from typing import Any, Dict, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.database.componentes.sqlite_db import get_db
@@ -19,6 +20,7 @@ from backend.domain.schemas.mobile import (
     MobileSyncRequest,
     MobileSyncResponse,
     MobileSyncStatusResponse,
+    MobileVersionResponse,
 )
 from backend.services.mobile_sync_service import MobileSyncService
 
@@ -129,3 +131,51 @@ def process_folder(
     """Procesa manualmente deltas JSON pendientes en la carpeta sync/mobile/inbox/."""
     processed = service.process_mobile_inbox_folder(db)
     return {"success": True, "processed_count": processed}
+
+
+@router.get("/version", response_model=MobileVersionResponse)
+def get_version(
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobileVersionResponse:
+    """Retorna la versión publicada más reciente del APK para auto-actualizaciones in-app (OTA)."""
+    return service.get_mobile_version_info()
+
+
+@router.get("/download-apk")
+def download_apk(
+    service: MobileSyncService = Depends(get_sync_service),
+):
+    """Descarga directa del binario APK de Android para instalación o actualización."""
+    apk_path = service.get_latest_apk_path()
+    if not apk_path or not apk_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No se encontró ningún binario APK disponible para descarga. Compílalo o deposítalo en sync/mobile/apk/.",
+        )
+    return FileResponse(
+        path=str(apk_path),
+        media_type="application/vnd.android.package-archive",
+        filename=apk_path.name,
+    )
+
+
+@router.post("/upload-apk", response_model=MobileVersionResponse)
+async def upload_apk(
+    apk_file: UploadFile = File(...),
+    version_code: int = Form(...),
+    version_name: str = Form(...),
+    release_notes: str = Form(""),
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobileVersionResponse:
+    """Permite publicar una nueva release de la APK de Android desde el panel de control."""
+    content = await apk_file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo APK subido está vacío.")
+    filename = apk_file.filename or "app-release.apk"
+    return service.publish_apk_release(
+        apk_bytes=content,
+        filename=filename,
+        version_code=version_code,
+        version_name=version_name,
+        release_notes=release_notes,
+    )

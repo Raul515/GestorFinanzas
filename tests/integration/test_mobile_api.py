@@ -260,3 +260,40 @@ def test_static_mobile_mount(client: TestClient):
     resp = client.get("/mobile/")
     assert resp.status_code == 200
     assert "Gestor Finanzas" in resp.text
+
+
+def test_mobile_ota_version_and_download_flow(client: TestClient):
+    """Verifica el flujo de comprobación de versión, subida y descarga de APK OTA (Fase 8)."""
+    # 1. Consulta inicial de versión
+    resp_v1 = client.get("/api/mobile/version")
+    assert resp_v1.status_code == 200
+    v1_data = resp_v1.json()
+    assert "version_code" in v1_data
+    assert "apk_available" in v1_data
+
+    # 2. Si no hay APK disponible, /download-apk responde 404
+    if not v1_data.get("apk_available"):
+        resp_down_404 = client.get("/api/mobile/download-apk")
+        assert resp_down_404.status_code == 404
+
+    # 3. Publicar una nueva versión APK vía /upload-apk
+    apk_content = b"PK\x03\x04test-android-apk-binary-content"
+    files = {"apk_file": ("gestor-finanzas-v1.2.apk", apk_content, "application/vnd.android.package-archive")}
+    data = {
+        "version_code": "3",
+        "version_name": "1.2.0",
+        "release_notes": "Prueba de actualización in-app OTA",
+    }
+    resp_up = client.post("/api/mobile/upload-apk", files=files, data=data)
+    assert resp_up.status_code == 200
+    up_data = resp_up.json()
+    assert up_data["version_code"] == 3
+    assert up_data["version_name"] == "1.2.0"
+    assert up_data["apk_available"] is True
+    assert up_data["apk_filename"] == "gestor-finanzas-v1.2.apk"
+
+    # 4. Descargar el APK publicado
+    resp_down = client.get("/api/mobile/download-apk")
+    assert resp_down.status_code == 200
+    assert resp_down.headers.get("content-type") == "application/vnd.android.package-archive"
+    assert resp_down.content == apk_content

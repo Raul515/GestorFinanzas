@@ -227,7 +227,69 @@ def render_mobile_view() -> None:
     st.markdown("---")
 
     # ==============================================================================
-    # SECCIÓN 3: HISTORIAL DE GASTOS CAPTURADOS DESDE EL MÓVIL
+    # SECCIÓN 3: DISTRIBUCIÓN Y ACTUALIZACIONES OTA DE LA APK
+    # ==============================================================================
+    st.markdown("---")
+    st.subheader("📦 Distribución y Actualizaciones de la App Android (OTA)")
+
+    v_data = api_client.get_mobile_version()
+    if v_data:
+        v_code = v_data.get("version_code", 1)
+        v_name = v_data.get("version_name", "1.0.0")
+        available = v_data.get("apk_available", False)
+        apk_size = v_data.get("apk_size_bytes")
+        notes = v_data.get("release_notes") or "Sin notas de versión"
+        size_mb = f"{apk_size / (1024 * 1024):.2f} MB" if apk_size else "-"
+
+        col_v1, col_v2, col_v3 = st.columns([1, 1, 2])
+        col_v1.metric("Versión Publicada", f"v{v_name} (b{v_code})")
+        col_v2.metric("Estado APK", "🟢 Disponible" if available else "⚪ No subido")
+        col_v3.metric("Tamaño Binario", size_mb)
+
+        st.caption(f"📝 Notas de la versión: {notes}")
+
+        if available:
+            download_url = f"{api_client.API_URL}/api/mobile/download-apk"
+            st.markdown(
+                f"""
+                <a href="{download_url}" target="_blank" style="text-decoration:none;">
+                    <div style="display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:12px; background:#10b981; color:#020617; font-weight:800; font-size:13px; margin-top:6px;">
+                        📥 Descargar APK para Android ({v_data.get('apk_filename') or 'app-release.apk'})
+                    </div>
+                </a>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with st.expander("📤 Publicar Nueva Versión de la APK (OTA Update)", expanded=False):
+            st.markdown(
+                "Sube un archivo `.apk` compilado para que tus teléfonos móviles se auto-actualicen al abrir la app o al pulsar **[Actualizar]**."
+            )
+            up_file = st.file_uploader("Selecciona el archivo APK", type=["apk"], key="uploader_apk_release")
+            c_code, c_name = st.columns(2)
+            new_code = c_code.number_input("Código de versión (entero)", min_value=1, value=v_code + 1, step=1)
+            new_name = c_name.text_input("Nombre de versión (ej. 1.1.0)", value=f"1.{v_code}.0")
+            new_notes = st.text_area("Notas de la versión (changelog)", placeholder="Ej. Nuevas mejoras en la captura rápida...")
+
+            if st.button("🚀 Publicar Release OTA", key="btn_publish_apk", disabled=up_file is None):
+                if up_file:
+                    with st.spinner("Guardando APK y publicando metadata..."):
+                        content = up_file.read()
+                        res = api_client.upload_mobile_apk(
+                            file_bytes=content,
+                            filename=up_file.name,
+                            version_code=int(new_code),
+                            version_name=new_name.strip(),
+                            release_notes=new_notes.strip(),
+                        )
+                        if res:
+                            st.success(f"✅ Versión v{new_name} (código {new_code}) publicada con éxito. Los dispositivos conectados recibirán el aviso de actualización.")
+                            st.rerun()
+                        else:
+                            st.error("Error al publicar la release en el servidor.")
+
+    # ==============================================================================
+    # SECCIÓN 4: HISTORIAL DE GASTOS CAPTURADOS DESDE EL MÓVIL
     # ==============================================================================
     st.subheader("📋 Últimos Gastos Capturados desde el Teléfono")
 

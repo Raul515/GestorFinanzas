@@ -403,3 +403,37 @@ def test_get_mobile_monthly_summary_and_budget_update(populated_db: Session):
     assert summary.emergency_fund is not None
     assert summary.emergency_fund.target_amount > 0
     assert len(summary.subcategories) >= 1
+
+
+def test_mobile_apk_ota_version_and_publish(tmp_path: Path):
+    """Verifica el ciclo de vida de versiones OTA y publicación de binarios APK (Fase 8)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    # 1. Estado inicial sin APK publicado
+    initial_v = service.get_mobile_version_info()
+    assert initial_v.version_code == 1
+    assert initial_v.apk_available is False
+    assert service.get_latest_apk_path() is None
+
+    # 2. Publicar una nueva release de APK
+    dummy_apk = b"PK\x03\x04dummy-android-apk-bytes-gestor-finanzas"
+    published = service.publish_apk_release(
+        apk_bytes=dummy_apk,
+        filename="gestor-finanzas-v1.1.apk",
+        version_code=2,
+        version_name="1.1.0",
+        release_notes="Añadido termómetro 50/30/20 y auto-actualizador OTA",
+    )
+
+    assert published.version_code == 2
+    assert published.version_name == "1.1.0"
+    assert published.apk_available is True
+    assert published.apk_filename == "gestor-finanzas-v1.1.apk"
+    assert published.apk_size_bytes == len(dummy_apk)
+    assert published.apk_url == "/api/mobile/download-apk"
+
+    # 3. Comprobar ruta del archivo APK
+    apk_file = service.get_latest_apk_path()
+    assert apk_file is not None
+    assert apk_file.name == "gestor-finanzas-v1.1.apk"
+    assert apk_file.read_bytes() == dummy_apk
