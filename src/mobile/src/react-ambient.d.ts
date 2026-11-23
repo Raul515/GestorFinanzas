@@ -124,7 +124,9 @@ declare module "lucide-react" {
   export const Image: any;
   export const FileText: any;
   export const RotateCcw: any;
+  export const Settings: any;
   export const Settings2: any;
+  export const Server: any;
 }
 
 declare namespace NodeJS {

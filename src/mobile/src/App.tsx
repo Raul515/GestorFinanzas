@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef, ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { QuickCaptureView } from "./components/QuickCaptureView";
 import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
 import { MonthlySummaryView } from "./components/MonthlySummaryView";
 import { NavigationBar } from "./components/NavigationBar";
+import { ServerConfigModal } from "./components/ServerConfigModal";
 import {
   ActiveTab,
   HistoricalTransactionItem,
@@ -28,8 +29,12 @@ import {
   saveStoredMonthlySummary,
   loadStoredHistoryCache,
   saveStoredHistoryCache,
+  getStoredServerUrl,
+  saveStoredServerUrl,
+  extractAndSaveServerUrlFromUrl,
 } from "./services/storage";
 import {
+  getBaseApiUrl,
   fetchCatalog,
   syncTransactionsWithBackend,
   checkServerStatus,
@@ -41,7 +46,7 @@ import {
   searchMobileTransactions,
   fetchHistoryCache,
 } from "./services/api";
-import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
+import { Settings } from "lucide-react";
 
 const CURRENT_APP_VERSION = { code: 1, name: "1.0.0" };
 
@@ -56,16 +61,16 @@ export function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<MobileVersionInfo | null>(null);
 
-  // Modal / Diálogo para introducir el pairing token si no coincide o falta
-  const [showPairingModal, setShowPairingModal] = useState(false);
-  const [inputToken, setInputToken] = useState("");
+  // Modal / Diálogo para configurar la URL del servidor y el token de emparejamiento
+  const [showServerConfigModal, setShowServerConfigModal] = useState(false);
   const lastDataFetchRef = useRef<number>(0);
 
   const pendingCount = transactions.filter((t) => t.status === "PENDING_SYNC").length;
 
-  // Extraer token de URL si viene en la query string (?token=...)
+  // Extraer token y servidor de URL si vienen en la query string (?token=... o ?server=...)
   useEffect(() => {
     extractAndSavePairingTokenFromUrl();
+    extractAndSaveServerUrlFromUrl();
   }, []);
 
   // Carga desacoplada de catálogo, resumen mensual e histórico (solo bajo demanda o arranque)
@@ -172,7 +177,7 @@ export function App() {
         refreshHeavyData(true);
       } else if (result && result.isUnauthorized) {
         setIsPaired(false);
-        setShowPairingModal(true);
+        setShowServerConfigModal(true);
       } else {
         setIsServerOnline(false);
       }
@@ -322,14 +327,15 @@ export function App() {
     return tempSubcat;
   };
 
-  const handleSaveManualToken = () => {
-    if (inputToken.trim()) {
-      saveStoredPairingToken(inputToken.trim());
-      setShowPairingModal(false);
-      setInputToken("");
-      checkConnectivity();
-      refreshHeavyData(true);
+  const handleSaveServerConfig = (newServerUrl: string, newPairingToken: string) => {
+    if (newServerUrl) {
+      saveStoredServerUrl(newServerUrl);
     }
+    if (newPairingToken) {
+      saveStoredPairingToken(newPairingToken);
+    }
+    checkConnectivity();
+    refreshHeavyData(true);
   };
 
   return (
@@ -347,24 +353,26 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2 text-[11px] font-medium">
-          {!isPaired && isServerOnline ? (
-            <button
-              type="button"
-              onClick={() => setShowPairingModal(true)}
-              className="flex items-center gap-1 text-amber-400 font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 active:scale-95"
-            >
-              <KeyRound className="w-3 h-3" />
-              <span>No Vinculado</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 text-slate-400">
-              <span
-                className={`w-2 h-2 rounded-full ${isServerOnline ? "bg-emerald-400" : "bg-slate-600"
-                  }`}
-              ></span>
-              <span>{isServerOnline ? "En línea" : "Offline"}</span>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowServerConfigModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 active:scale-95 transition-all text-slate-300"
+            title="Configurar servidor y token de conexión"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isServerOnline
+                  ? isPaired
+                    ? "bg-emerald-400 shadow-sm shadow-emerald-400/50"
+                    : "bg-amber-400 shadow-sm shadow-amber-400/50"
+                  : "bg-slate-600"
+              }`}
+            />
+            <span className="text-[10px] font-semibold">
+              {isServerOnline ? (isPaired ? "En línea" : "Sin enlazar") : "Offline"}
+            </span>
+            <Settings className="w-3 h-3 text-slate-400 ml-0.5" />
+          </button>
         </div>
       </header>
 
@@ -424,64 +432,16 @@ export function App() {
         pendingCount={pendingCount}
       />
 
-      {/* Modal de Token de Emparejamiento (para APK o reconexión) */}
-      {showPairingModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm mx-auto w-full p-4 flex flex-col gap-3 shadow-2xl">
-            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-              <div className="flex items-center gap-2 text-amber-400">
-                <ShieldAlert className="w-5 h-5" />
-                <h3 className="font-bold text-sm text-slate-100">Vincular con tu PC</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPairingModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Para proteger tu base de datos contra dispositivos ajenos conectados a tu Wi-Fi, introduce el Token de Emparejamiento generado en la app de PC (en <strong>Ajustes &gt; Companion Móvil</strong>):
-            </p>
-
-            <div className="flex flex-col gap-1.5">
-              <input
-                type="text"
-                value={inputToken}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setInputToken(e.target.value)}
-                placeholder="sec_..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-emerald-500"
-              />
-              {getStoredPairingToken() && (
-                <span className="text-[10px] text-slate-500 font-mono truncate">
-                  Token actual: {getStoredPairingToken()?.substring(0, 12)}...
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowPairingModal(false)}
-                className="flex-1 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveManualToken}
-                disabled={!inputToken.trim()}
-                className="flex-1 py-2 rounded-xl bg-emerald-500 text-slate-950 text-xs font-bold active:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-1.5"
-              >
-                <Check className="w-4 h-4" />
-                <span>Guardar Token</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de Configuración de Servidor Backend y Token */}
+      <ServerConfigModal
+        isOpen={showServerConfigModal}
+        onClose={() => setShowServerConfigModal(false)}
+        currentServerUrl={getStoredServerUrl() || getBaseApiUrl()}
+        currentPairingToken={getStoredPairingToken() || ""}
+        isOnline={isServerOnline}
+        isPaired={isPaired}
+        onSave={handleSaveServerConfig}
+      />
     </div>
   );
 }

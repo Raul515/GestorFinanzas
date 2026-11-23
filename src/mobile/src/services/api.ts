@@ -7,14 +7,87 @@ import {
   SearchResponse,
   SubcategoryItem,
 } from "../types";
-import { getStoredPairingToken } from "./storage";
+import { getStoredPairingToken, getStoredServerUrl } from "./storage";
 
-const getBaseApiUrl = (): string => {
-  if (typeof window !== "undefined") {
-    // Si estamos corriendo en la misma máquina o red (PWA servida desde FastAPI)
-    return window.location.origin;
+export const getBaseApiUrl = (): string => {
+  const customUrl = getStoredServerUrl();
+  if (customUrl) return customUrl;
+
+  if (typeof window !== "undefined" && window.location.origin) {
+    const orig = window.location.origin;
+    if (
+      !orig.includes("localhost") &&
+      !orig.startsWith("capacitor://") &&
+      !orig.startsWith("ionic://") &&
+      !orig.startsWith("file://")
+    ) {
+      return orig;
+    }
   }
   return "http://localhost:8000";
+};
+
+export interface TestConnectionResult {
+  success: boolean;
+  isPaired: boolean;
+  message: string;
+  statusCode?: number;
+}
+
+export const testServerConnection = async (
+  targetUrl: string,
+  token?: string
+): Promise<TestConnectionResult> => {
+  let cleanUrl = targetUrl.trim().replace(/\/+$/, "");
+  if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+    cleanUrl = "http://" + cleanUrl;
+  }
+  if (!cleanUrl) {
+    return { success: false, isPaired: false, message: "La URL del servidor no puede estar vacía" };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    const effectiveToken = token !== undefined ? token.trim() : (getStoredPairingToken() || "");
+    if (effectiveToken) {
+      headers["X-Mobile-Pairing-Token"] = effectiveToken;
+    }
+
+    const res = await fetch(`${cleanUrl}/api/mobile/status`, {
+      signal: controller.signal,
+      headers,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const isPaired = typeof data.authenticated === "boolean" ? data.authenticated : false;
+      if (isPaired) {
+        return { success: true, isPaired: true, message: "¡Conectado y emparejado con éxito!", statusCode: res.status };
+      } else {
+        return {
+          success: true,
+          isPaired: false,
+          message: effectiveToken
+            ? "Servidor alcanzado, pero el token no coincide"
+            : "Servidor alcanzado, pero falta introducir el token",
+          statusCode: res.status,
+        };
+      }
+    } else if (res.status === 403) {
+      return { success: true, isPaired: false, message: "Acceso denegado: token no coincide con el servidor", statusCode: 403 };
+    } else {
+      return { success: false, isPaired: false, message: `El servidor respondió con error HTTP ${res.status}`, statusCode: res.status };
+    }
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      return { success: false, isPaired: false, message: "Tiempo de espera agotado (3s). Revisa la IP y la red" };
+    }
+    return { success: false, isPaired: false, message: "No se pudo conectar al servidor. Comprueba la IP y la red" };
+  }
 };
 
 const getCommonHeaders = (): Record<string, string> => {

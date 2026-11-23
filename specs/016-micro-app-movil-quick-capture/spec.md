@@ -197,6 +197,12 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Eficiencia en worker de sincronización en disco: el worker en segundo plano de FastAPI (`run_periodic_mobile_sync_checker`) comprueba la existencia física de ficheros JSON en `sync/mobile/inbox/` antes de solicitar y abrir conexiones con `SessionLocal()`.
   - Memoización de credenciales en cliente web: `api_client.py` mantiene en memoria el token de emparejamiento activo evitando peticiones HTTP redundantes a `/api/mobile/status` antes de cada llamada de catálogo.
 
+- **RF-21 (Configuración Dinámica de Servidor, Soporte APK y Detección de Red)**:
+  - Soporte APK Nativo y Origen Desacoplado: La aplicación móvil no asume de forma estricta `window.location.origin` (que en Capacitor/Android resuelve a `https://localhost`), admitiendo una URL base configurable almacenada en `localStorage` (`gestor_mobile_server_url`).
+  - Auto-captura desatendida: Si el usuario abre la app escaneando el código QR con un parámetro de servidor o desde un navegador web con IP de red, la URL se detecta y almacena automáticamente sin intervención manual.
+  - Modal táctil de configuración: Interfaz accesible desde la cabecera para cambiar la dirección del servidor (IP:puerto) y token de emparejamiento, con botón de prueba en vivo que comprueba la respuesta del endpoint `/api/mobile/status` con timeout defensivo.
+  - Paridad de Alto Rendimiento: Toda llamada de red en la PWA monolítica (`dist/index.html`) adopta la URL base configurada, preservando el ciclo adaptativo de 60s, la pausa en segundo plano y la carga diferida de datos pesados.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

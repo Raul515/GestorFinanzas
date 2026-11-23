@@ -103,7 +103,8 @@
       CATALOG: "gestor_mobile_catalog",
       PAIRING_TOKEN: "gestor_mobile_pairing_token",
       HISTORY_CACHE: "gestor_mobile_history_cache",
-      QUICK_PRESETS: "gestor_mobile_quick_presets"
+      QUICK_PRESETS: "gestor_mobile_quick_presets",
+      SERVER_URL: "gestor_mobile_server_url"
     };
 
     const DEFAULT_QUICK_PRESETS = [
@@ -137,11 +138,15 @@
       frequentConcepts: DEFAULT_CONCEPTS,
       transactions: [],
       pairingToken: "",
+      serverUrl: "",
       isOnline: false,
       isPaired: true,
       isSyncing: false,
       modalOpen: false,
       showTokenModal: false,
+      showServerModal: false,
+      testingServer: false,
+      testServerResult: null,
       isCreatingSubcat: false,
       newSubcatName: "",
       newSubcatCategory: "Deseos (30%)",
@@ -173,25 +178,143 @@
       toastUndoEventId: null
     };
 
+    function getStoredServerUrl() {
+      try {
+        const val = localStorage.getItem(STORAGE_KEYS.SERVER_URL);
+        return val ? val.trim() : "";
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function saveStoredServerUrl(rawUrl) {
+      if (!rawUrl || !rawUrl.trim()) {
+        try {
+          localStorage.removeItem(STORAGE_KEYS.SERVER_URL);
+        } catch (e) {}
+        state.serverUrl = "";
+        return "";
+      }
+      let cleaned = rawUrl.trim().replace(/\/+$/, "");
+      if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
+        cleaned = `http://${cleaned}`;
+      }
+      try {
+        localStorage.setItem(STORAGE_KEYS.SERVER_URL, cleaned);
+      } catch (e) {}
+      state.serverUrl = cleaned;
+      return cleaned;
+    }
+
+    function getBaseApiUrl() {
+      if (state.serverUrl) return state.serverUrl;
+      const stored = getStoredServerUrl();
+      if (stored) {
+        state.serverUrl = stored;
+        return stored;
+      }
+      if (typeof window !== "undefined" && window.location && window.location.origin) {
+        const origin = window.location.origin;
+        if (!origin.startsWith("http://localhost") && !origin.startsWith("http://127.0.0.1") && !origin.startsWith("https://localhost")) {
+          return origin;
+        }
+        if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+          return origin;
+        }
+      }
+      return "http://localhost:8000";
+    }
+
+    async function testServerConnection(targetUrl, token) {
+      let cleaned = (targetUrl || "").trim().replace(/\/+$/, "");
+      if (!cleaned) return { success: false, isPaired: false, message: "Introduce una URL o IP válida." };
+      if (!cleaned.startsWith("http://") && !cleaned.startsWith("https://")) {
+        cleaned = `http://${cleaned}`;
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const headers = { Accept: "application/json" };
+        if (token && token.trim()) {
+          headers["X-Mobile-Pairing-Token"] = token.trim();
+        }
+        const res = await fetch(`${cleaned}/api/mobile/status`, {
+          headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          const isPaired = typeof data.authenticated === "boolean" ? data.authenticated : true;
+          return {
+            success: true,
+            isPaired,
+            message: isPaired ? "✓ Servidor conectado y token verificado correctamente." : "✓ Servidor accesible, pero requiere emparejamiento con Token."
+          };
+        } else if (res.status === 403) {
+          return {
+            success: true,
+            isPaired: false,
+            message: "⚠️ Servidor alcanzado, pero el Token de Emparejamiento es incorrecto."
+          };
+        } else {
+          return {
+            success: false,
+            isPaired: false,
+            message: `Error HTTP ${res.status}: Servidor no respondió como Gestor Finanzas.`
+          };
+        }
+      } catch (err) {
+        return {
+          success: false,
+          isPaired: false,
+          message: "No se pudo conectar con el servidor. Revisa que el PC y el móvil estén en la misma red y que el puerto 8000 esté accesible."
+        };
+      }
+    }
+
     function triggerHaptic(ms = 15) {
       if (navigator.vibrate) navigator.vibrate(ms);
     }
 
     function loadLocalState() {
       try {
-        // Extraer token de URL si viene en la query string (?token=sec_...)
+        // Extraer token y server URL de URL si vienen en la query string (?token=sec_...&server=...)
         const params = new URLSearchParams(window.location.search);
+        let hasUrlParams = false;
+
         const urlToken = params.get("token");
         if (urlToken && urlToken.trim()) {
           state.pairingToken = urlToken.trim();
           localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
-          // Limpiar query string sin recargar
           params.delete("token");
+          hasUrlParams = true;
+        } else {
+          state.pairingToken = localStorage.getItem(STORAGE_KEYS.PAIRING_TOKEN) || "";
+        }
+
+        const urlServer = params.get("server") || params.get("api");
+        if (urlServer && urlServer.trim()) {
+          saveStoredServerUrl(urlServer.trim());
+          params.delete("server");
+          params.delete("api");
+          hasUrlParams = true;
+        } else {
+          const stored = getStoredServerUrl();
+          if (stored) {
+            state.serverUrl = stored;
+          } else if (typeof window !== "undefined" && window.location && window.location.origin) {
+            const origin = window.location.origin;
+            if (!origin.startsWith("http://localhost") && !origin.startsWith("http://127.0.0.1") && !origin.startsWith("https://localhost")) {
+              saveStoredServerUrl(origin);
+            }
+          }
+        }
+
+        if (hasUrlParams) {
           const newQuery = params.toString();
           const newUrl = window.location.pathname + (newQuery ? "?" + newQuery : "") + window.location.hash;
           window.history.replaceState({}, document.title, newUrl);
-        } else {
-          state.pairingToken = localStorage.getItem(STORAGE_KEYS.PAIRING_TOKEN) || "";
         }
 
         const rawTx = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
@@ -453,7 +576,7 @@
         return;
       }
       try {
-        const res = await fetch("/api/mobile/status", { headers: getAuthHeaders() });
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/status`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           state.isOnline = true;
@@ -489,7 +612,7 @@
 
     async function fetchCatalog() {
       try {
-        const res = await fetch("/api/mobile/catalog", { headers: getAuthHeaders() });
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/catalog`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           if (data.personal_subcategories) {
@@ -533,7 +656,7 @@
           }))
         };
 
-        const res = await fetch("/api/mobile/sync", {
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/sync`, {
           method: "POST",
           headers: {
             ...getAuthHeaders(),
@@ -553,7 +676,7 @@
           fetchHistoryCache();
         } else if (res.status === 403) {
           state.isPaired = false;
-          state.showTokenModal = true;
+          state.showServerModal = true;
         }
       } catch (err) {
         console.error("Error sincronizando:", err);
@@ -572,7 +695,7 @@
       let newSub = null;
       if (state.isOnline && state.isPaired) {
         try {
-          const res = await fetch("/api/mobile/subcategory", {
+          const res = await fetch(`${getBaseApiUrl()}/api/mobile/subcategory`, {
             method: "POST",
             headers: {
               ...getAuthHeaders(),
@@ -613,7 +736,7 @@
       state.loadingSummary = true;
       render();
       try {
-        const res = await fetch(`/api/mobile/summary?month=${state.summaryMonth}`, {
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/summary?month=${state.summaryMonth}`, {
           headers: getAuthHeaders()
         });
         if (res.ok) {
@@ -630,7 +753,7 @@
     async function updateSubcatBudget(subcatId) {
       const amount = parseFloat(state.editBudgetAmount.replace(",", ".")) || 0;
       try {
-        const res = await fetch("/api/mobile/budget", {
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/budget`, {
           method: "POST",
           headers: {
             ...getAuthHeaders(),
@@ -654,7 +777,7 @@
 
     async function checkOtaVersion() {
       try {
-        const res = await fetch("/api/mobile/version", { headers: getAuthHeaders() });
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/version`, { headers: getAuthHeaders() });
         if (res.ok) {
           const v = await res.json();
           if (v.version_code > state.currentVersionCode && v.apk_available) {
@@ -669,7 +792,7 @@
 
     async function fetchHistoryCache() {
       try {
-        const res = await fetch("/api/mobile/transactions/history-cache?months=12", { headers: getAuthHeaders() });
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/history-cache?months=12`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -685,7 +808,7 @@
       state.isSearchingServer = true;
       render();
       try {
-        const res = await fetch(`/api/mobile/transactions/search?q=${encodeURIComponent(query.trim())}&limit=50`, {
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/search?q=${encodeURIComponent(query.trim())}&limit=50`, {
           headers: getAuthHeaders()
         });
         if (res.ok) {
@@ -847,7 +970,8 @@
     function getReceiptUrl(urlOrFilename) {
       if (!urlOrFilename) return "";
       if (urlOrFilename.startsWith("data:")) return urlOrFilename;
-      let base = urlOrFilename.startsWith("/api/") ? urlOrFilename : `/api/mobile/receipts/${urlOrFilename}`;
+      let path = urlOrFilename.startsWith("/api/") ? urlOrFilename : `/api/mobile/receipts/${urlOrFilename}`;
+      let base = `${getBaseApiUrl()}${path}`;
       if (state.pairingToken) {
         base += (base.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(state.pairingToken);
       }
@@ -866,9 +990,9 @@
 
       if (tx.status === "SYNCED") {
         try {
-          const res = await fetch("/api/mobile/transactions/" + encodeURIComponent(eventId), {
+          const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/` + encodeURIComponent(eventId), {
             method: "DELETE",
-            headers: getHeaders(),
+            headers: getAuthHeaders(),
           });
           if (!res.ok) {
             console.warn("No se pudo eliminar en el servidor inmediatamente, encolado para retry");
@@ -879,11 +1003,56 @@
       }
     }
 
+    async function handleTestServerConfig() {
+      const urlInput = document.getElementById("serverUrlInput");
+      const tokenInput = document.getElementById("serverTokenInput");
+      const url = urlInput ? urlInput.value : state.serverUrl;
+      const token = tokenInput ? tokenInput.value : state.pairingToken;
+
+      state.testingServer = true;
+      state.testServerResult = null;
+      render();
+
+      const res = await testServerConnection(url, token);
+      state.testingServer = false;
+      state.testServerResult = res;
+      render();
+    }
+
+    function handleSaveServerConfig() {
+      const urlInput = document.getElementById("serverUrlInput");
+      const tokenInput = document.getElementById("serverTokenInput");
+      const url = urlInput ? urlInput.value.trim() : state.serverUrl;
+      const token = tokenInput ? tokenInput.value.trim() : state.pairingToken;
+
+      saveStoredServerUrl(url);
+      state.pairingToken = token;
+      try {
+        localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, token);
+      } catch (e) {}
+
+      state.showServerModal = false;
+      state.showTokenModal = false;
+      state.testServerResult = null;
+      render();
+      checkServer();
+    }
+
+    function handleResetServerOrigin() {
+      const urlInput = document.getElementById("serverUrlInput");
+      if (urlInput && typeof window !== "undefined" && window.location.origin) {
+        urlInput.value = window.location.origin;
+        state.testServerResult = null;
+        render();
+      }
+    }
+
     function saveTokenAndReconnect(tokenVal) {
       if (!tokenVal || !tokenVal.trim()) return;
       state.pairingToken = tokenVal.trim();
       localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, state.pairingToken);
       state.showTokenModal = false;
+      state.showServerModal = false;
       checkServer();
     }
 
@@ -933,16 +1102,11 @@
             </div>
             
             <div style="display:flex; align-items:center; gap:6px;">
-              ${!state.isPaired && state.isOnline ? `
-                <button onclick="state.showTokenModal = true; render();" class="btn-press" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); color:#fbbf24; font-size:10px; font-weight:700; padding:3px 8px; border-radius:9999px; cursor:pointer;">
-                  🔑 No Vinculado
-                </button>
-              ` : `
-                <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#94a3b8; font-weight:600;">
-                  <span style="width:7px; height:7px; border-radius:50%; background:${state.isOnline ? '#34d399' : '#64748b'};"></span>
-                  <span>${state.isOnline ? "En línea" : "Offline"}</span>
-                </div>
-              `}
+              <button onclick="state.showServerModal = true; state.testServerResult = null; render();" class="btn-press" style="display:flex; align-items:center; gap:5px; background:${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.15)' : 'rgba(15,23,42,0.6)'}; border:1px solid ${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.4)' : '#1e293b'}; color:${!state.isPaired && state.isOnline ? '#fbbf24' : state.isOnline ? '#34d399' : '#94a3b8'}; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:9999px; cursor:pointer;" title="Configurar conexión de servidor">
+                <span style="width:6px; height:6px; border-radius:50%; background:${!state.isPaired && state.isOnline ? '#fbbf24' : state.isOnline ? '#34d399' : '#64748b'};"></span>
+                <span>${!state.isPaired && state.isOnline ? "Sin enlazar" : state.isOnline ? "En línea" : "Offline"}</span>
+                <span style="font-size:11px; margin-left:1px;">⚙️</span>
+              </button>
             </div>
           </header>
 
@@ -953,7 +1117,7 @@
                 <span>🚀</span>
                 <span>Nueva versión v${escapeHtml(state.availableUpdate.version_name)}</span>
               </div>
-              <button onclick="window.open('/api/mobile/download-apk', '_blank');" class="btn-press" style="background:#10b981; color:#020617; border:none; border-radius:8px; font-weight:800; font-size:10px; padding:3px 8px; cursor:pointer;">
+              <button onclick="window.open(getBaseApiUrl() + '/api/mobile/download-apk', '_blank');" class="btn-press" style="background:#10b981; color:#020617; border:none; border-radius:8px; font-weight:800; font-size:10px; padding:3px 8px; cursor:pointer;">
                 Actualizar
               </button>
             </div>
@@ -995,7 +1159,9 @@
 
           <!-- Modales -->
           ${state.modalOpen ? renderCategoryModal() : ""}
-          ${state.showTokenModal ? renderTokenModal() : ""}
+          ${state.showServerModal || state.showTokenModal ? renderServerConfigModal() : ""}
+          ${state.viewingReceiptUrl ? renderReceiptModal() : ""}
+          ${state.managePresetsModalOpen ? renderManagePresetsModal() : ""}
           ${state.viewingReceiptUrl ? renderReceiptModal() : ""}
           ${state.managePresetsModalOpen ? renderManagePresetsModal() : ""}
         `;
@@ -1609,34 +1775,83 @@
         `;
     }
 
-    function renderTokenModal() {
+    function renderServerConfigModal() {
+      const res = state.testServerResult;
+      const currentUrl = state.serverUrl || (typeof window !== "undefined" && window.location.origin ? window.location.origin : "");
+
       return `
-          <div style="position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
-            <div style="background:#0f172a; border:1px solid #1e293b; border-radius:20px; max-width:360px; margin:0 auto; padding:18px; display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:900; font-size:14px; color:#f8fafc;">🔑 Vincular con tu PC</span>
-                <button onclick="state.showTokenModal = false; render();" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer;">✕</button>
+        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
+          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:24px; max-width:380px; margin:0 auto; width:100%; padding:20px; display:flex; flex-direction:column; gap:14px; box-shadow:0 25px 50px rgba(0,0,0,0.85);">
+            <!-- Cabecera -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:10px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:18px; padding:6px; border-radius:10px; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.25);">🖥️</span>
+                <div>
+                  <div style="font-weight:900; font-size:14px; color:#f8fafc;">Conexión con el Servidor</div>
+                  <div style="font-size:10px; color:#94a3b8;">Configura la IP del PC y tu token</div>
+                </div>
               </div>
+              <button onclick="state.showServerModal = false; state.showTokenModal = false; render();" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
+            </div>
 
-              <p style="font-size:11px; color:#94a3b8; line-height:1.4;">
-                Para proteger tu base de datos contra dispositivos ajenos conectados a tu Wi-Fi, introduce el Token de Emparejamiento generado en la app de PC (en <strong>Ajustes &gt; Companion Móvil</strong>):
-              </p>
-
-              <div>
-                <input id="tokenInput" type="text" placeholder="sec_..." value="${state.pairingToken}" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:12px; outline:none;" />
-              </div>
-
-              <div style="display:flex; gap:8px; margin-top:4px;">
-                <button onclick="state.showTokenModal = false; render();" class="btn-press" style="flex:1; padding:10px; border-radius:10px; background:#1e293b; color:#cbd5e1; border:none; font-weight:700; font-size:11px; cursor:pointer;">
-                  Cancelar
-                </button>
-                <button onclick="saveTokenAndReconnect(document.getElementById('tokenInput').value);" class="btn-press" style="flex:1; padding:10px; border-radius:10px; background:#10b981; color:#020617; border:none; font-weight:900; font-size:11px; cursor:pointer;">
-                  Guardar y Conectar
-                </button>
+            <!-- Estado actual -->
+            <div style="background:rgba(2,6,23,0.6); border:1px solid rgba(30,41,59,0.8); border-radius:12px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+              <span style="color:#94a3b8;">Estado actual:</span>
+              <div style="display:flex; align-items:center; gap:6px; font-weight:700;">
+                <span style="width:7px; height:7px; border-radius:50%; background:${state.isOnline ? (state.isPaired ? '#34d399' : '#fbbf24') : '#f43f5e'};"></span>
+                <span style="color:${state.isOnline ? (state.isPaired ? '#34d399' : '#fbbf24') : '#f43f5e'};">
+                  ${state.isOnline ? (state.isPaired ? "Conectado y Enlazado" : "Servidor Online (Sin Enlazar)") : "Desconectado (Offline)"}
+                </span>
               </div>
             </div>
+
+            <!-- Campo Dirección del Servidor -->
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="font-size:11px; font-weight:800; color:#cbd5e1;">Dirección URL / IP del PC</label>
+                <button type="button" onclick="handleResetServerOrigin();" style="background:none; border:none; color:#34d399; font-size:10px; font-weight:700; cursor:pointer; text-decoration:underline;">
+                  Usar origen actual
+                </button>
+              </div>
+              <input id="serverUrlInput" type="text" value="${escapeHtml(currentUrl)}" placeholder="http://192.168.1.45:8000" style="background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:11.5px; outline:none;" />
+              <div style="font-size:9.5px; color:#64748b;">
+                Ej: <code style="color:#94a3b8;">http://192.168.1.45:8000</code> o la IP de tu Zona Wi-Fi.
+              </div>
+            </div>
+
+            <!-- Campo Token de Emparejamiento -->
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label style="font-size:11px; font-weight:800; color:#cbd5e1;">Token de Emparejamiento</label>
+              <input id="serverTokenInput" type="text" value="${escapeHtml(state.pairingToken)}" placeholder="sec_..." style="background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:11.5px; outline:none;" />
+              <div style="font-size:9.5px; color:#64748b;">
+                Token generado en la app de PC (<strong>Ajustes &gt; Companion Móvil</strong>).
+              </div>
+            </div>
+
+            <!-- Feedback del Test -->
+            ${res ? `
+              <div style="padding:8px 10px; border-radius:10px; font-size:11px; font-weight:600; display:flex; align-items:center; gap:6px; background:${res.success ? (res.isPaired ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)') : 'rgba(244,63,94,0.15)'}; border:1px solid ${res.success ? (res.isPaired ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.4)') : 'rgba(244,63,94,0.4)'}; color:${res.success ? (res.isPaired ? '#6ee7b7' : '#fcd34d') : '#fda4af'};">
+                <span>${res.success ? (res.isPaired ? '🛡️' : '⚠️') : '✕'}</span>
+                <span>${escapeHtml(res.message)}</span>
+              </div>
+            ` : ""}
+
+            <!-- Botones -->
+            <div style="display:flex; gap:8px; margin-top:2px;">
+              <button onclick="handleTestServerConfig();" ${state.testingServer ? 'disabled' : ''} class="btn-press" style="flex:1; padding:9px; border-radius:10px; background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-weight:700; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                <span>${state.testingServer ? '⏳ Probando...' : '⚡ Probar'}</span>
+              </button>
+              <button onclick="handleSaveServerConfig();" class="btn-press" style="flex:1; padding:9px; border-radius:10px; background:#10b981; color:#020617; border:none; font-weight:900; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                <span>Guardar y Aplicar</span>
+              </button>
+            </div>
           </div>
-        `;
+        </div>
+      `;
+    }
+
+    function renderTokenModal() {
+      return renderServerConfigModal();
     }
 
     function renderQuickPresets() {

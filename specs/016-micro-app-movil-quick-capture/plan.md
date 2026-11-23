@@ -22,6 +22,7 @@ Rama de trabajo: feat/spec-016-micro-app-movil-quick-capture
 [x] Fase 14: Atajos Rápidos de Importe y Presets Frecuentes (1-Tap y Modo Híbrido)
 [x] Fase 15: Hardening de Seguridad Integral y Blindaje de Acceso (Post-Auditoría)
 [x] Fase 16: Optimización de Rendimiento, Desacoplamiento de Polling y Carga Ansiosa SQL
+[x] Fase 17: Configuración Dinámica de Servidor Backend y Soporte Nativo APK
 Fusión final: Merge en develop tras 100% de tests y validación completa
 ```
 
@@ -219,6 +220,20 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
   5. Pruebas automatizadas:
      - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
 
+### Fase 17: Configuración Dinámica de Servidor Backend y Soporte Nativo APK (Completada)
+- **Objetivo**: Dotar a la aplicación móvil (React y PWA autónoma) de persistencia y resolución dinámica de la URL del backend, permitiendo operar tanto empaquetada como APK nativa de Android (Capacitor) como en redes variables o Hotspot móvil, manteniendo el alto rendimiento de sondeo adaptativo.
+- **Entregables Implementados y Validados**:
+  1. Servicios de persistencia y red móvil (`src/mobile/src/services/`):
+     - `storage.ts`: clave `gestor_mobile_server_url`, `getStoredServerUrl()`, `saveStoredServerUrl()` con sanitización estricta y auto-captura en arranque (`extractAndSaveServerUrlFromUrl()`).
+     - `api.ts`: resolución jerárquica en `getBaseApiUrl()` (URL guardada > origin web > localhost) y utilidad ligera `testServerConnection()` para validación de conectividad a 3s con AbortController.
+  2. Componentes e Interfaz (`src/mobile/src/components/` y `App.tsx`):
+     - `ServerConfigModal.tsx`: modal táctil oscuro con inputs de Servidor Backend y Token de Emparejamiento, botón `[⚡ Probar Conexión]` con feedback visual y guardado atómico.
+     - `App.tsx`: botón de ajustes `[⚙️]` en la cabecera unificado con el indicador de estado de red y auto-detección desatendida desde la URL del QR.
+  3. Paridad total en PWA monolítica estática (`src/mobile/dist/index.html`):
+     - Replicación de la resolución dinámica de URL base en todas las llamadas fetch, modal táctil de ajustes de conexión y preservación rigurosa de las optimizaciones de rendimiento (sondeo a 60s, pausa por `visibilityState` y desacoplamiento de datos pesados).
+  4. Pruebas y verificación:
+     - 0 errores estáticos en TypeScript (`npx tsc --noEmit`) y 100% de tests pasando en pytest (39/39 tests).
+
 ---
 
 ### Fase 16: Optimización de Rendimiento, Desacoplamiento de Polling y Carga Ansiosa SQL (Completada)
@@ -236,6 +251,20 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Desacoplamiento de caché pesada: la descarga de catálogo, resumen mensual y caché histórica de 12 meses ya no se ejecuta en cada tick de 15s, sino en el arranque inicial, al navegar voluntariamente a pestañas dependientes o reactivamente tras una mutación exitosa (`POST /sync` o `DELETE`).
   5. Pruebas automatizadas:
      - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
+
+### Fase 17: Configuración Dinámica de Servidor Backend y Soporte Nativo APK (Completada)
+- **Objetivo**: Dotar a la aplicación móvil (React y PWA autónoma) de persistencia y resolución dinámica de la URL del backend, permitiendo operar tanto empaquetada como APK nativa de Android (Capacitor) como en redes variables o Hotspot móvil, manteniendo el alto rendimiento de sondeo adaptativo.
+- **Entregables Implementados y Validados**:
+  1. Servicios de persistencia y red móvil (`src/mobile/src/services/`):
+     - `storage.ts`: clave `gestor_mobile_server_url`, `getStoredServerUrl()`, `saveStoredServerUrl()` con sanitización estricta y auto-captura en arranque (`extractAndSaveServerUrlFromUrl()`).
+     - `api.ts`: resolución jerárquica en `getBaseApiUrl()` (URL guardada > origin web > localhost) y utilidad ligera `testServerConnection()` para validación de conectividad a 3s con AbortController.
+  2. Componentes e Interfaz (`src/mobile/src/components/` y `App.tsx`):
+     - `ServerConfigModal.tsx`: modal táctil oscuro con inputs de Servidor Backend y Token de Emparejamiento, botón `[⚡ Probar Conexión]` con feedback visual y guardado atómico.
+     - `App.tsx`: botón de ajustes `[⚙️]` en la cabecera unificado con el indicador de estado de red y auto-detección desatendida desde la URL del QR.
+  3. Paridad total en PWA monolítica estática (`src/mobile/dist/index.html`):
+     - Replicación de la resolución dinámica de URL base en todas las llamadas fetch, modal táctil de ajustes de conexión y preservación rigurosa de las optimizaciones de rendimiento (sondeo a 60s, pausa por `visibilityState` y desacoplamiento de datos pesados).
+  4. Pruebas y verificación:
+     - 0 errores estáticos en TypeScript (`npx tsc --noEmit`) y 100% de tests pasando en pytest (39/39 tests).
 
 ---
 
