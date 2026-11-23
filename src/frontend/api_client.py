@@ -2100,15 +2100,32 @@ def clear_all_frontend_cache() -> None:
 _cached_pairing_token: Optional[str] = None
 
 
+def get_mobile_pairing_token() -> Optional[str]:
+    """Consulta el token de emparejamiento maestro desde el endpoint local admin (SEC-01)."""
+    global _cached_pairing_token
+    url = f"{API_URL}/api/mobile/admin/pairing-token"
+    try:
+        response = _session.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            token = data.get("pairing_token")
+            if token:
+                _cached_pairing_token = token
+            return token
+        logger.warning("Fallo al consultar token de emparejamiento admin (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al consultar token de emparejamiento admin en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en get_mobile_pairing_token(): %s", e)
+    return None
+
+
 def get_cached_pairing_token(force_refresh: bool = False) -> Optional[str]:
     """Retorna el token de emparejamiento móvil en memoria para evitar peticiones HTTP redundantes."""
     global _cached_pairing_token
     if _cached_pairing_token and not force_refresh:
         return _cached_pairing_token
-    st_data = get_mobile_status()
-    if st_data and st_data.get("pairing_token"):
-        _cached_pairing_token = st_data["pairing_token"]
-    return _cached_pairing_token
+    return get_mobile_pairing_token()
 
 
 def get_mobile_status() -> Optional[Dict[str, Any]]:

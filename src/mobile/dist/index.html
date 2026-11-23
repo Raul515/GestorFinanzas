@@ -457,7 +457,9 @@
         if (res.ok) {
           const data = await res.json();
           state.isOnline = true;
-          if (data.pairing_token) {
+          if (typeof data.authenticated === "boolean") {
+            state.isPaired = data.authenticated;
+          } else if (data.pairing_token) {
             state.isPaired = (state.pairingToken === data.pairing_token);
           }
           // Descargar catálogo solo si aún no se tiene en memoria

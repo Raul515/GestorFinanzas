@@ -103,7 +103,10 @@ export const checkServerStatus = async (): Promise<{ isOnline: boolean; isPaired
     const data = await res.json();
 
     const storedToken = getStoredPairingToken();
-    const isPaired = !!(storedToken && data.pairing_token && storedToken === data.pairing_token);
+    const isPaired =
+      typeof data.authenticated === "boolean"
+        ? data.authenticated
+        : !!(storedToken && data.pairing_token && storedToken === data.pairing_token);
 
     return { isOnline: true, isPaired };
   } catch {
