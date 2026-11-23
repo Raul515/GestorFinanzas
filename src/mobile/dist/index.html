@@ -619,6 +619,48 @@
       }
 
       function renderCaptureView(canSave, dateFormatted, activeSubs) {
+        let wantsAlertHtml = "";
+        const sel = state.selectedSubcat;
+        const isWants = sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
+        const wants = state.monthlySummary && state.monthlySummary.wants;
+        if (isWants && wants && wants.budget > 0) {
+          const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
+          const projectedSpent = wants.spent + numAmount;
+          const remaining = wants.budget - projectedSpent;
+          const ratio = projectedSpent / wants.budget;
+          if (ratio >= 1.0) {
+            wantsAlertHtml = `
+              <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(225,29,72,0.15); border:1px solid rgba(244,63,94,0.5); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-size:11px; font-weight:800; color:#fb7185;">🚨 Techo de Deseos Superado</div>
+                  <div style="font-size:10px; color:#94a3b8;">Excederás en ${Math.abs(remaining).toFixed(2)} € (Gastado: ${projectedSpent.toFixed(2)} € / ${wants.budget.toFixed(2)} €)</div>
+                </div>
+                <span style="font-size:9px; background:#f43f5e; color:#fff; font-weight:800; padding:2px 6px; border-radius:9999px;">Déficit</span>
+              </div>
+            `;
+          } else if (ratio >= 0.8) {
+            wantsAlertHtml = `
+              <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(245,158,11,0.15); border:1px solid rgba(251,191,36,0.5); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-size:11px; font-weight:800; color:#fbbf24;">⚠️ Cerca del Límite de Ocio</div>
+                  <div style="font-size:10px; color:#94a3b8;">Quedarán solo ${remaining.toFixed(2)} € disponibles (${Math.round(ratio * 100)}% consumido)</div>
+                </div>
+                <span style="font-size:9px; background:#fbbf24; color:#020617; font-weight:800; padding:2px 6px; border-radius:9999px;">Alerta</span>
+              </div>
+            `;
+          } else {
+            wantsAlertHtml = `
+              <div style="margin:4px 0; padding:8px 10px; border-radius:12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                  <div style="font-size:11px; font-weight:800; color:#34d399;">🟢 Margen de Ocio Saludable</div>
+                  <div style="font-size:10px; color:#94a3b8;">Quedarán ${remaining.toFixed(2)} € disponibles (${Math.round(ratio * 100)}% consumido)</div>
+                </div>
+                <span style="font-size:9px; background:rgba(16,185,129,0.2); color:#34d399; font-weight:800; padding:2px 6px; border-radius:9999px;">Margen OK</span>
+              </div>
+            `;
+          }
+        }
+
         return `
           <div style="flex:1; display:flex; flex-direction:column; justify-content:space-between; padding:10px 14px; overflow-y:auto;" class="no-scrollbar">
             <!-- Barra de Ámbito y Fecha -->
@@ -641,6 +683,9 @@
                 <span style="font-size:44px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.amountStr}</span>
               </div>
             </div>
+
+            <!-- Semáforo de Deseos (Fase 10) -->
+            ${wantsAlertHtml}
 
             <!-- Chips de Categorías Frecuentes -->
             <div style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:4px 0;" class="no-scrollbar">

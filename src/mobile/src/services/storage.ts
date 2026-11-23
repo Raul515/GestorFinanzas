@@ -1,4 +1,4 @@
-import { CatalogData, MobileTransaction, SubcategoryItem } from "../types";
+import { CatalogData, MobileMonthlySummary, MobileTransaction, SubcategoryItem } from "../types";
 
 const STORAGE_KEYS = {
   TRANSACTIONS: "gestor_mobile_transactions",
@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   SERVER_URL: "gestor_mobile_server_url",
   PAIRING_TOKEN: "gestor_mobile_pairing_token",
   PENDING_DELETES: "gestor_mobile_pending_deletes",
+  MONTHLY_SUMMARY: "gestor_mobile_monthly_summary",
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
@@ -137,6 +138,23 @@ export const removePendingDelete = (idOrEventId: string | number): void => {
   saveStoredPendingDeletes(current.filter((id) => id !== strId));
 };
 
+export const loadStoredMonthlySummary = (): MobileMonthlySummary | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.MONTHLY_SUMMARY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+export const saveStoredMonthlySummary = (summary: MobileMonthlySummary): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.MONTHLY_SUMMARY, JSON.stringify(summary));
+  } catch (err) {
+    console.error("Error guardando resumen mensual en almacenamiento local:", err);
+  }
+};
 
 export const loadStoredCatalog = (): CatalogData => {
   try {

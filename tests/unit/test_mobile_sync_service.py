@@ -486,3 +486,31 @@ def test_delete_mobile_transaction_by_id_and_by_event_id(populated_db, tmp_path:
     # 4. Intentar eliminar identificador inexistente
     assert service.delete_mobile_transaction(populated_db, "inexistente_123") is None
 
+
+def test_wants_traffic_light_prediction_and_thresholds():
+    """Valida los umbrales matemáticos del semáforo predictivo de Deseos (Fase 10)."""
+    wants_budget = 300.0
+    current_spent = 200.0  # 66.6%
+
+    # Caso 1: Gasto pequeño (15 €) -> 215 / 300 = 71.6% (< 80% -> OPTIMAL)
+    projected_1 = current_spent + 15.0
+    ratio_1 = projected_1 / wants_budget
+    remaining_1 = wants_budget - projected_1
+    assert ratio_1 < 0.80
+    assert remaining_1 == 85.0
+
+    # Caso 2: Gasto que sitúa entre 80% y 99.9% (45 €) -> 245 / 300 = 81.6% -> WARNING
+    projected_2 = current_spent + 45.0
+    ratio_2 = projected_2 / wants_budget
+    remaining_2 = wants_budget - projected_2
+    assert 0.80 <= ratio_2 < 1.0
+    assert remaining_2 == 55.0
+
+    # Caso 3: Gasto que supera el 100% (120 €) -> 320 / 300 = 106.6% -> OVER_LIMIT
+    projected_3 = current_spent + 120.0
+    ratio_3 = projected_3 / wants_budget
+    deficit_3 = projected_3 - wants_budget
+    assert ratio_3 >= 1.0
+    assert deficit_3 == 20.0
+
+

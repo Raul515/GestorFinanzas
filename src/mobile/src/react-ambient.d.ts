@@ -85,6 +85,7 @@ declare module "lucide-react" {
   export const ShieldCheck: any;
   export const KeyRound: any;
   export const AlertTriangle: any;
+  export const Sparkles: any;
   export const Edit3: any;
   export const TrendingUp: any;
   export const PieChart: any;

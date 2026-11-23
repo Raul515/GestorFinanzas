@@ -17,6 +17,8 @@ import {
   loadStoredPendingDeletes,
   addPendingDelete,
   removePendingDelete,
+  loadStoredMonthlySummary,
+  saveStoredMonthlySummary,
 } from "./services/storage";
 import {
   fetchCatalog,
@@ -26,6 +28,7 @@ import {
   fetchLatestVersion,
   getApkDownloadUrl,
   deleteMobileTransaction,
+  fetchMonthlySummary,
 } from "./services/api";
 import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
 
@@ -35,6 +38,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("capture");
   const [catalog, setCatalog] = useState(loadStoredCatalog);
   const [transactions, setTransactions] = useState<MobileTransaction[]>(loadStoredTransactions);
+  const [monthlySummary, setMonthlySummary] = useState(loadStoredMonthlySummary);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [isPaired, setIsPaired] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -62,6 +66,15 @@ export function App() {
       if (remoteCatalog) {
         setCatalog(remoteCatalog);
         saveStoredCatalog(remoteCatalog);
+      }
+
+      // Si estamos emparejados, refrescar el resumen mensual para predicción en vivo (Fase 10)
+      if (status.isPaired) {
+        const remoteSummary = await fetchMonthlySummary();
+        if (remoteSummary) {
+          setMonthlySummary(remoteSummary);
+          saveStoredMonthlySummary(remoteSummary);
+        }
       }
 
       // Comprobar si hay una nueva versión de APK para auto-actualización OTA
@@ -150,6 +163,26 @@ export function App() {
       saveStoredTransactions(updated);
       return updated;
     });
+
+    // Actualización optimista del gasto de Deseos para que el semáforo refleje el apunte al instante
+    if (newTx.subcategory_name && monthlySummary?.wants) {
+      const isWants = catalog.personal_subcategories.some(
+        (s) => s.id === newTx.subcategory_id && (s.category_name.toLowerCase().includes("deseo") || s.category_id === 3)
+      );
+      if (isWants) {
+        const newSpent = monthlySummary.wants.spent + newTx.amount;
+        const updatedSummary = {
+          ...monthlySummary,
+          wants: {
+            ...monthlySummary.wants,
+            spent: newSpent,
+            remaining: monthlySummary.wants.budget - newSpent,
+          },
+        };
+        setMonthlySummary(updatedSummary);
+        saveStoredMonthlySummary(updatedSummary);
+      }
+    }
 
     // Intentar sincronizar inmediatamente si estamos conectados y emparejados
     if (isServerOnline && isPaired) {
@@ -284,6 +317,7 @@ export function App() {
           <QuickCaptureView
             subcategories={catalog.personal_subcategories}
             frequentConcepts={catalog.frequent_concepts}
+            monthlySummary={monthlySummary}
             onSaveExpense={handleSaveExpense}
             onCreateSubcategory={handleCreateSubcategory}
           />

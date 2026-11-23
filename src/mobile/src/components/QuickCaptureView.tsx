@@ -1,13 +1,14 @@
 import { useState, ChangeEvent } from "react";
-import { Zap, Calendar, CheckCircle2 } from "lucide-react";
+import { Zap, Calendar, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 import { NumericKeypad } from "./NumericKeypad";
 import { CategoryChips } from "./CategoryChips";
 import { ConceptSuggestions } from "./ConceptSuggestions";
-import { SubcategoryItem, MobileTransaction } from "../types";
+import { SubcategoryItem, MobileTransaction, MobileMonthlySummary } from "../types";
 
 interface QuickCaptureViewProps {
   subcategories: SubcategoryItem[];
   frequentConcepts: string[];
+  monthlySummary?: MobileMonthlySummary | null;
   onSaveExpense: (tx: MobileTransaction) => void;
   onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
 }
@@ -15,6 +16,7 @@ interface QuickCaptureViewProps {
 export const QuickCaptureView = ({
   subcategories,
   frequentConcepts,
+  monthlySummary,
   onSaveExpense,
   onCreateSubcategory,
 }: QuickCaptureViewProps) => {
@@ -32,6 +34,56 @@ export const QuickCaptureView = ({
   // Parsear importe numérico
   const numericAmount = parseFloat(amountStr.replace(",", ".")) || 0;
   const canSave = numericAmount > 0 && selectedSubcat !== null;
+
+  // Lógica predictiva del semáforo de Deseos (30%)
+  const isWants =
+    selectedSubcat !== null &&
+    (selectedSubcat.category_name.toLowerCase().includes("deseo") || selectedSubcat.category_id === 3);
+
+  const wantsBudget = monthlySummary?.wants?.budget || 0;
+  const currentWantsSpent = monthlySummary?.wants?.spent || 0;
+
+  let wantsAlert = null;
+  if (isWants && wantsBudget > 0) {
+    const projectedSpent = currentWantsSpent + numericAmount;
+    const remainingAfter = wantsBudget - projectedSpent;
+    const projectedRatio = projectedSpent / wantsBudget;
+
+    if (projectedRatio >= 1.0) {
+      wantsAlert = {
+        level: "OVER_LIMIT" as const,
+        title: "🚨 Techo de Deseos Superado",
+        desc: `Excederás tu presupuesto de ocio en ${Math.abs(remainingAfter).toFixed(2)} € (Proyectado: ${projectedSpent.toFixed(2)} € / ${wantsBudget.toFixed(2)} €)`,
+        bgColor: "bg-rose-950/40",
+        borderColor: "border-rose-500/60",
+        textColor: "text-rose-400",
+        badge: "Déficit Ocio",
+        badgeClass: "bg-rose-500 text-white",
+      };
+    } else if (projectedRatio >= 0.80) {
+      wantsAlert = {
+        level: "WARNING" as const,
+        title: "⚠️ Atención: Cerca del Límite",
+        desc: `Quedarán solo ${remainingAfter.toFixed(2)} € disponibles de ocio este mes (${Math.round(projectedRatio * 100)}% consumido)`,
+        bgColor: "bg-amber-950/40",
+        borderColor: "border-amber-500/50",
+        textColor: "text-amber-400",
+        badge: "Consumo Alto",
+        badgeClass: "bg-amber-500 text-slate-950 font-bold",
+      };
+    } else {
+      wantsAlert = {
+        level: "OPTIMAL" as const,
+        title: "🟢 Margen de Ocio Saludable",
+        desc: `Quedarán ${remainingAfter.toFixed(2)} € disponibles en Deseos (${Math.round(projectedRatio * 100)}% consumido)`,
+        bgColor: "bg-emerald-950/20",
+        borderColor: "border-emerald-500/30",
+        textColor: "text-emerald-400",
+        badge: "Margen OK",
+        badgeClass: "bg-emerald-500/20 text-emerald-400",
+      };
+    }
+  }
 
   const handleSave = () => {
     if (!canSave || !selectedSubcat) return;
@@ -103,11 +155,45 @@ export const QuickCaptureView = ({
         </div>
         <div className="flex items-baseline justify-center gap-1 text-slate-100 font-mono select-none">
           <span className="text-2xl font-light text-slate-500">€</span>
-          <span className="text-4xl sm:text-5xl font-extrabold tracking-tight text-emerald-400">
+          <span className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${
+            wantsAlert?.level === "OVER_LIMIT"
+              ? "text-rose-400"
+              : wantsAlert?.level === "WARNING"
+              ? "text-amber-400"
+              : "text-emerald-400"
+          }`}>
             {amountStr}
           </span>
         </div>
       </div>
+
+      {/* Semáforo Predictivo de Techo de Deseos (Fase 10) */}
+      {wantsAlert && (
+        <div
+          className={`mx-1 my-1 p-2.5 rounded-xl border ${wantsAlert.borderColor} ${wantsAlert.bgColor} flex items-center justify-between gap-2 shadow-sm transition-all duration-200 animate-in fade-in`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {wantsAlert.level === "OVER_LIMIT" ? (
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
+            ) : wantsAlert.level === "WARNING" ? (
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className={`text-[11px] font-bold ${wantsAlert.textColor} leading-tight truncate`}>
+                {wantsAlert.title}
+              </div>
+              <div className="text-[10px] text-slate-400 leading-tight truncate">
+                {wantsAlert.desc}
+              </div>
+            </div>
+          </div>
+          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase shrink-0 ${wantsAlert.badgeClass}`}>
+            {wantsAlert.badge}
+          </span>
+        </div>
+      )}
 
       {/* Selector de Chips de Categorías */}
       <div className="my-1">
