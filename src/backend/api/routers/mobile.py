@@ -4,6 +4,7 @@ Expone endpoints fuertemente tipados bajo /api/mobile para catálogo,
 sincronización de transacciones e informes de estado.
 """
 
+import ipaddress
 import logging
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
@@ -187,11 +188,26 @@ def get_admin_pairing_token(
     Rechaza peticiones originadas desde direcciones IP externas / no loopback (SEC-01).
     """
     client_ip = request.client.host if request.client else "unknown"
-    if client_ip not in ("127.0.0.1", "::1", "localhost", "testclient"):
-        logger.warning("Intento de acceso denegado a /api/mobile/admin/pairing-token desde IP no local: %s", client_ip)
+    is_allowed = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
+    if not is_allowed:
+        try:
+            ip_obj = ipaddress.ip_address(client_ip)
+            # Permitir loopback y subred bridge interna de Docker (172.16.0.0/12)
+            # Excluyendo explícitamente la subred universal de Hotspot de iPhone (172.20.10.0/24)
+            is_docker_internal = (
+                ip_obj in ipaddress.ip_network("172.16.0.0/12")
+                and ip_obj not in ipaddress.ip_network("172.20.10.0/24")
+            )
+            if ip_obj.is_loopback or is_docker_internal:
+                is_allowed = True
+        except ValueError:
+            pass
+
+    if not is_allowed:
+        logger.warning("Intento de acceso denegado a /api/mobile/admin/pairing-token desde IP no autorizada: %s", client_ip)
         raise HTTPException(
             status_code=403,
-            detail="Acceso denegado. Este endpoint está reservado exclusivamente al host local.",
+            detail="Acceso denegado. Este endpoint está reservado exclusivamente al host local o red interna.",
         )
     return MobileAdminPairingTokenResponse(pairing_token=service.get_or_create_pairing_token())
 

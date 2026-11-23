@@ -596,6 +596,59 @@ def test_mobile_income_sync_and_summary_api(client: TestClient, db_session: Sess
     assert s_items[0]["type"] == "INCOME"
 
 
+def test_admin_pairing_token_access_control(client: TestClient, db_session: Session):
+    """Verifica que /api/mobile/admin/pairing-token permita acceso a localhost y Docker bridge (172.16/12), y rechace IPs externas (Wi-Fi)."""
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from backend.api.routers.mobile import get_admin_pairing_token
+
+    # 1. Petición estándar local vía TestClient (loopback/testclient) -> 200 OK
+    resp = client.get("/api/mobile/admin/pairing-token")
+    assert resp.status_code == 200
+    assert "pairing_token" in resp.json()
+    assert len(resp.json()["pairing_token"]) > 10
+
+    # 2. Petición simulada desde contenedor Docker (red bridge 172.18.0.3) -> Permitida
+    service = MobileSyncService()
+    docker_request = Request({"type": "http", "client": ("172.18.0.3", 52341)})
+    docker_resp = get_admin_pairing_token(request=docker_request, service=service)
+    assert docker_resp.pairing_token == service.get_or_create_pairing_token()
+
+    # 3. Petición simulada desde dispositivo en la Wi-Fi (192.168.1.55) -> 403 Forbidden
+    wifi_request = Request({"type": "http", "client": ("192.168.1.55", 43210)})
+    with pytest.raises(HTTPException) as exc_info:
+        get_admin_pairing_token(request=wifi_request, service=service)
+    assert exc_info.value.status_code == 403
+    assert "Acceso denegado" in exc_info.value.detail
+
+    # 4. Petición simulada desde dispositivo en Hotspot de iPhone (172.20.10.1) -> 403 Forbidden
+    hotspot_request = Request({"type": "http", "client": ("172.20.10.1", 54321)})
+    with pytest.raises(HTTPException) as exc_info_hs:
+        get_admin_pairing_token(request=hotspot_request, service=service)
+    assert exc_info_hs.value.status_code == 403
+    assert "Acceso denegado" in exc_info_hs.value.detail
+
+    # 5. Petición simulada desde subred fija dedicada de Docker (172.28.199.5) -> Permitida
+    dedicated_docker_request = Request({"type": "http", "client": ("172.28.199.5", 42100)})
+    dedicated_resp = get_admin_pairing_token(request=dedicated_docker_request, service=service)
+    assert dedicated_resp.pairing_token == service.get_or_create_pairing_token()
+
+
+def test_mobile_cors_preflight_and_headers(client: TestClient):
+    """Verifica que FastAPI responda a peticiones CORS preflight para soportar APK nativa (Capacitor)."""
+    headers = {
+        "Origin": "http://localhost",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "X-Mobile-Pairing-Token",
+    }
+    resp = client.options("/api/mobile/status", headers=headers)
+    assert resp.status_code == 200
+    assert "access-control-allow-origin" in resp.headers
+    assert resp.headers["access-control-allow-origin"] in ("*", "http://localhost")
+
+
+
+
 
 
 

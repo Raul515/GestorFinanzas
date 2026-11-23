@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime
 import logging
+import os
 import socket
 from typing import Any, Dict, List, Optional
 import streamlit as st
@@ -23,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_local_ip() -> str:
-    """Detecta la IP local de la máquina en la red Wi-Fi o interfaz activa."""
+    """Detecta la IP local de la máquina en la red Wi-Fi o interfaz activa, respetando HOST_IP si existe."""
+    env_ip = os.environ.get("HOST_IP", "").strip()
+    if env_ip:
+        return env_ip
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.5)
@@ -78,15 +82,60 @@ def render_mobile_view() -> None:
     status_data = api_client.get_mobile_status()
     pairing_token = api_client.get_mobile_pairing_token()
 
-    local_ip = get_local_ip()
-    token_query = f"?token={pairing_token}" if pairing_token else ""
-    mobile_url = f"http://{local_ip}:8000/mobile/{token_query}"
-    localhost_url = f"http://localhost:8000/mobile/{token_query}"
+    detected_ip = get_local_ip()
+    custom_ip = st.session_state.get("custom_mobile_host_ip")
+    local_ip = custom_ip.strip() if custom_ip and custom_ip.strip() else detected_ip
+    is_docker_detected = local_ip.startswith("172.")
+
+    server_base_url = f"http://{local_ip}:8000"
+    url_params = []
+    if pairing_token:
+        url_params.append(f"token={pairing_token}")
+    if local_ip != "localhost":
+        url_params.append(f"server={server_base_url}")
+    token_query = f"?{'&'.join(url_params)}" if url_params else ""
+    mobile_url = f"{server_base_url}/mobile/{token_query}"
+    localhost_url = f"http://localhost:8000/mobile/?token={pairing_token}" if pairing_token else "http://localhost:8000/mobile/"
 
     # ==============================================================================
     # SECCIÓN 1: ACCESO RÁPIDO CON CÓDIGO QR Y ENLACES
     # ==============================================================================
     st.subheader("🔗 Conexión Rápida desde el Teléfono")
+
+    with st.expander("⚙️ Configuración de IP / Docker Wi-Fi", expanded=is_docker_detected):
+        if is_docker_detected and not custom_ip:
+            st.warning(
+                f"⚠️ **Entorno Docker detectado**: La IP detectada (`{detected_ip}`) pertenece a la red interna del contenedor. "
+                "Para que tu teléfono móvil pueda conectar desde la misma Wi-Fi, introduce abajo la IP de tu PC en la red local (ej. `192.168.1.35`)."
+            )
+        else:
+            st.info("Si tu teléfono y tu PC están en la misma red Wi-Fi pero la IP no se detecta automáticamente (o ejecutas en Docker), puedes ajustarla aquí.")
+
+        col_ip_in, col_ip_btn, col_ip_reset = st.columns([3, 1, 1])
+        with col_ip_in:
+            user_ip_input = st.text_input(
+                "IP de tu PC en la red Wi-Fi:",
+                value=local_ip if not (is_docker_detected and not custom_ip) else "",
+                placeholder="Ejemplo: 192.168.1.35",
+                help="IP asignada por el router a tu PC en la red Wi-Fi.",
+                key="input_custom_mobile_host_ip",
+            )
+        with col_ip_btn:
+            st.write("")
+            st.write("")
+            if st.button("Aplicar IP", use_container_width=True):
+                cleaned_ip = user_ip_input.strip()
+                if cleaned_ip:
+                    st.session_state["custom_mobile_host_ip"] = cleaned_ip
+                else:
+                    st.session_state.pop("custom_mobile_host_ip", None)
+                st.rerun()
+        with col_ip_reset:
+            st.write("")
+            st.write("")
+            if st.button("Detectar Auto", use_container_width=True, help="Restablece la detección automática de IP."):
+                st.session_state.pop("custom_mobile_host_ip", None)
+                st.rerun()
 
     col_qr, col_info = st.columns([1, 2])
 

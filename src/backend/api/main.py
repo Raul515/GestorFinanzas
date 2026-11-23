@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from backend.utils.env_setup import ensure_env_file
 from backend.utils.logging_config import setup_logging
 from backend.init_db_data import populate
@@ -113,6 +114,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Gestor Finanzas API", lifespan=lifespan)
+
+# Soporte integral de CORS para clientes móviles (Capacitor APK y clientes PWA cross-origin)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 

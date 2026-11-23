@@ -203,6 +203,22 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Modal táctil de configuración: Interfaz accesible desde la cabecera para cambiar la dirección del servidor (IP:puerto) y token de emparejamiento, con botón de prueba en vivo que comprueba la respuesta del endpoint `/api/mobile/status` con timeout defensivo.
   - Paridad de Alto Rendimiento: Toda llamada de red en la PWA monolítica (`dist/index.html`) adopta la URL base configurada, preservando el ciclo adaptativo de 60s, la pausa en segundo plano y la carga diferida de datos pesados.
 
+- **RF-22 (Resiliencia de Integración, Consistencia Temporal y Limpieza Física de Huérfanos - Fase 18)**:
+  - Imputación Horaria Local Estricta: Registro y cálculo de fechas en la micro-app móvil bajo el huso horario local real (CET/CEST de España), evitando que compras nocturnas o de madrugada (00:00 - 02:00) sufran desfases de día o mes por serialización ingenua a UTC (`toISOString`).
+  - Tipificación Coherente de Ingresos al Vuelo: Creación automática de subcategorías bajo la categoría de ingresos cuando `item.type == 'INCOME'`, garantizando que aportaciones o bizums extraordinarios nunca se clasifiquen como gastos de ocio en `Deseos (30%)`.
+  - Salvaguarda contra `QuotaExceededError` en Almacenamiento Local: Captura preventiva de la excepción de cuota de `localStorage` tanto en React como en la PWA monolítica, liberando megabytes mediante el purgado defensivo de `receipt_base64` en transacciones ya sincronizadas con el servidor (`SYNCED`).
+  - Cola Persistente de Borrados Offline (`PENDING_DELETES`): Mecanismo de persistencia local para eliminaciones solicitadas sin cobertura de red, aplicándolas atómicamente en el backend en la siguiente reconexión.
+  - Mitigación de Colas Envenenadas (*Poisoned Queue*): Marcado automático con estado `SYNC_ERROR` ante rechazos HTTP 422 en lotes de sincronización para evitar bucles infinitos de reintento que drenen la batería del teléfono.
+  - Eliminación Física de Tickets Huérfanos en Disco: Supresión inmediata y permanente del archivo físico en `sync/mobile/receipts/` al borrar una transacción vinculada (tanto desde el móvil como desde el panel de escritorio o repositorio SQLite).
+  - Cómputo Total en Resumen Mensual: Integración contable de gastos sin subcategoría (`unassigned_spent`) en el total mensual y balance presupuestario de la vista `Mi Mes`.
+
+- **RF-23 (Compatibilidad y Despliegue en Contenedores Docker - Fase 19)**:
+  - Montaje y Despliegue de la PWA Compilada: Volumen montado de `src/mobile` en `docker-compose.yml` e instrucción `COPY src/mobile` en `images/backend/Dockerfile` para servir la PWA real compilada en `/mobile` en entornos contenerizados.
+  - Soporte Universal de CORS: Configuración de `CORSMiddleware` en FastAPI (`allow_origins=["*"]`, `allow_headers=["*"]`) resolviendo de forma limpia las peticiones Preflight `OPTIONS` del APK nativo de Android (Capacitor) con cabeceras `X-Mobile-Pairing-Token`.
+  - Propagación Dinámica de Servidor y Auto-Sincronización de Origen: Inclusión de parámetro `server=http://{local_ip}:8000` en el QR y detección automática de `window.location.origin` en la PWA para evitar el bloqueo con IPs obsoletas al cambiar de red Wi-Fi o router.
+  - Aislamiento de Red Docker y Exclusión Estricta de Hotspot: Asignación de subred dedicada `172.28.199.0/24` en Docker Compose y exclusión explícita del rango Hotspot de iPhone (`172.20.10.0/24`) en el endpoint administrativo del pairing token para blindaje de seguridad (`SEC-01`).
+  - Detección Dinámica de IP del PC y Ajuste Interactivo en Streamlit: Soporte de variable `HOST_IP` y panel desplegable en la interfaz con alerta de contenedor y recálculo en tiempo real de QR y URLs.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

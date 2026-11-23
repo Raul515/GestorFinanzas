@@ -21,8 +21,9 @@ COPY requirements/backend.txt /app/requirements.txt
 RUN uv venv
 RUN uv pip install -r requirements.txt
 
-# Copy the backend needed files
+# Copy the backend and mobile PWA needed files
 COPY src/backend /app/src/backend
+COPY src/mobile /app/src/mobile
 COPY images/backend/start_services.sh /app/docker/start_services.sh
 
 # Make the wrapper script executable

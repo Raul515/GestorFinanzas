@@ -13,6 +13,7 @@ services:
     environment:
       - PYTHONPATH=/app/src:/app
       - API_URL=http://backend_gestor:8000
+      - HOST_IP=${HOST_IP:-}
     volumes:
       - ../:/app
       - /app/.venv

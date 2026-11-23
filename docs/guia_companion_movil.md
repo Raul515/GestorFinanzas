@@ -4,63 +4,82 @@ El **Companion Móvil** es una micro-aplicación ultra-ligera diseñada exclusiv
 
 ---
 
-## 🚀 Método 1: Instalación Inmediata como PWA (Recomendado - 10 Segundos)
+## 🚀 Método 1: Conexión Rápida e Instalación como PWA (Recomendado - 10 Segundos)
 
 La forma más rápida, limpia y recomendada tanto para **Android** como para **iPhone (iOS)**, sin necesidad de compilar ni descargar archivos `.apk`.
 
-### En Android (Chrome, Brave, Edge)
-1. Con tu teléfono conectado a la misma red Wi-Fi que el ordenador, abre el navegador y accede a:
-   ```text
-   http://<IP_DE_TU_PC>:8000/mobile/
-   ```
-   *(Puedes consultar tu IP o escanear el código QR directamente desde `⚙️ Ajustes y Sistema` -> `Companion Móvil` en la aplicación de Streamlit).*
-2. Pulsa el botón de menú del navegador (los **tres puntos** arriba a la derecha).
-3. Selecciona **"Añadir a la pantalla de inicio"** o **"Instalar aplicación"**.
-4. ¡Listo! Se creará un icono de app en tu móvil que se abre a pantalla completa, funciona sin barras de navegador y almacena gastos sin conexión.
+### Emparejamiento Seguro con Código QR
+1. En tu ordenador, abre el Gestor de Finanzas en Streamlit y navega a `⚙️ Ajustes y Sistema` -> `📱 Companion Móvil Quick-Capture`.
+2. Verás un **código QR único** que incorpora automáticamente tu **Token Secreto de Emparejamiento** y la **Dirección del Servidor**.
+3. **Si utilizas Docker en tu PC**:
+   - Streamlit detectará automáticamente la subred del contenedor (`172.x`) y abrirá el panel `⚙️ Configuración de IP / Docker Wi-Fi`.
+   - Introduce la IP local de tu PC en la Wi-Fi (ej. `192.168.1.35`) y pulsa `[Aplicar IP]`. El código QR y los enlaces se recalcularán al instante.
+
+### En Android (Google Chrome / Brave / Edge)
+1. Conecta tu teléfono a la **misma red Wi-Fi** que el ordenador.
+2. Escanea el código QR con la cámara de tu móvil o abre el enlace mostrado en **Google Chrome**.
+3. La aplicación guardará tu token y servidor automáticamente.
+4. Pulsa los **tres puntos verticales (`⋮`)** arriba a la derecha y selecciona **"Añadir a la pantalla principal"** o **"Instalar aplicación"**.
+5. ¡Listo! Tendrás el icono en tu pantalla de inicio, se abrirá a pantalla completa y funcionará sin cobertura.
 
 ### En iPhone / iOS (Safari)
-1. Abre **Safari** y navega a `http://<IP_DE_TU_PC>:8000/mobile/`.
-2. Pulsa el botón **Compartir** (el icono de un cuadrado con una flecha hacia arriba en la barra inferior).
-3. Desplázate hacia abajo y selecciona **"Añadir a pantalla de inicio"**.
-4. Pulsa **Añadir**. La aplicación se comportará como una app nativa con icono propio y almacenamiento offline.
+1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
+2. Escanea el código QR con la cámara del iPhone o abre el enlace en **Safari**.
+3. Pulsa el botón **Compartir** (icono de un cuadrado con flecha hacia arriba en la barra inferior).
+4. Desplázate hacia abajo y selecciona **"Añadir a pantalla de inicio"** (`➕`).
+5. Pulsa **Añadir**. Se creará el acceso directo con icono propio y almacenamiento offline.
 
 ---
 
-## 📦 Método 2: Descarga e Instalación del APK de Android (GitHub Actions)
+## 📦 Método 2: App Nativa APK de Android (OTA y Capacitor)
 
-Si prefieres tener un archivo `.apk` binario tradicional instalado en tu teléfono Android:
+Si prefieres tener una app Android nativa empaquetada:
 
-1. **Compilación Automática en la Nube**:
-   - Accede a tu repositorio en GitHub y ve a la pestaña **Actions**.
-   - En el menú lateral izquierdo, selecciona el flujo de trabajo **"Build Mobile Android APK"**.
-   - Haz clic en **"Run workflow"** y pulsa el botón verde.
-   - En unos 2 minutos, la máquina virtual de GitHub compilará el APK con el SDK de Android y Gradle.
-2. **Descarga del APK**:
-   - Entra en la ejecución completada y, en la sección **Artifacts**, descarga el archivo `gestor-finanzas-debug-apk.zip`.
-   - Descomprímelo en tu teléfono para obtener `app-debug.apk`.
-3. **Instalación (Sideloading)**:
-   - Abre el archivo `.apk` en tu móvil Android.
-   - Si Android te avisa de que proviene de una fuente desconocida, pulsa **Ajustes** y activa **"Permitir desde esta fuente"**.
-   - Pulsa **Instalar**.
+1. **Descarga e Instalación Inicial**:
+   - En Streamlit (`📱 Companion Móvil` -> sección `📦 Distribución y Actualizaciones`), descarga el binario `app-debug.apk` o compílalo mediante el workflow `.github/workflows/build-mobile-apk.yml`.
+   - Instálalo en tu Android activando "Permitir desde esta fuente".
+2. **Emparejamiento en el Primer Arranque**:
+   - Al abrir la app por primera vez, pulsa el botón de ajustes `[⚙️]` arriba a la derecha.
+   - Introduce la URL de tu servidor (ej. `http://192.168.1.35:8000`) y tu Token de Emparejamiento, o escanea el código QR desde la cámara. Pulsa `[⚡ Probar Conexión]` y guarda.
+3. **Actualizaciones Automáticas In-App (OTA)**:
+   - Cuando publiques una nueva versión del APK desde el panel de Streamlit en tu PC, la app móvil detectará automáticamente la actualización al abrirse y te ofrecerá instalarla en 1 tap sin cables ni pasos manuales.
+
+---
+
+## ✨ Funcionalidades Clave del Companion Móvil
+
+- **⚡ Captura en Menos de 5 Segundos**: Display táctil con teclado numérico, fila de importes rápidos (`+1€`, `+2€`, `+5€`, `+10€`, `+20€`) y carrusel de subcategorías frecuentes.
+- **☕ Atajos Frecuentes 1-Tap con Modo Híbrido**:
+  - **Tap corto**: Rellena el formulario para que puedas añadir notas o adjuntar ticket antes de guardar.
+  - **Pulsación larga (long-press >= 500 ms)**: Guardado directo e instantáneo con vibración háptica y aviso emergente con botón `[Deshacer]`.
+  - **Salvaguarda de Deseos (30%)**: Si un atajo de ocio supera el límite mensual de Deseos, bloquea el guardado directo y pide confirmación para proteger tu salud financiera.
+- **📷 Foto del Ticket de Compra**: Pulsa `[📷 Foto Ticket]` para fotografiar recibos físicos. Se comprimen en el móvil (< 200 KB) y se envían de forma segura al PC.
+- **🔄 Conmutador Gasto / Ingreso**: Registra cobros de Bizum o devoluciones al vuelo seleccionando `[🟢 Ingreso]`.
+- **📊 Vista "Mi Mes"**: Consulta en tiempo real la ejecución del presupuesto 50/30/20 y edita asignaciones sobre la marcha.
+- **🔍 Buscador Instantáneo "¿Cuánto me costó...?"**: Busca cualquier compra pasada en 0 ms sobre el histórico local de 12 meses.
+- **🗑️ Historial con Borrado Seguro**: Borra transacciones erróneas; si estás sin conexión, se encolan y se eliminan físicamente en el servidor al llegar a casa.
+
+---
+
+## 🌐 Cambio de Wi-Fi o Reinicio del Router
+
+Si cambias de red Wi-Fi o el router asigna una nueva IP a tu PC (ej. pasa de `192.168.1.35` a `192.168.1.42`):
+- Abre Streamlit en tu PC y escanea el nuevo código QR.
+- La micro-app capturará automáticamente la nueva dirección del servidor (`?server=...`) y actualizará su memoria local al instante, volviendo a conectar de inmediato sin necesidad de reconfigurar nada a mano.
 
 ---
 
 ## 🔄 ¿Cómo Funciona la Sincronización?
 
 ### 1. En la Calle (100% Offline)
-- Abres la micro-app en tu teléfono.
-- Tecleas el importe (ej. `2.50`), tocas el chip de la categoría (ej. `☕ Café`) y pulsas `[⚡ Guardar Gasto]`.
-- El gasto se guarda instantáneamente en la cola interna de tu teléfono (`status: PENDING_SYNC`) con un identificador único UUIDv4 que impide duplicados.
-- El formulario se resetea en menos de 50 ms para el siguiente apunte.
+- Abres la micro-app en tu teléfono sin importar si tienes cobertura o datos móviles.
+- Registras el gasto: se almacena en la memoria interna (`status: PENDING_SYNC`) con un identificador único UUIDv4 que impide duplicados.
 
-### 2. Al Llegar a Casa (Wi-Fi Doméstica)
-- Tu teléfono se conecta a la red Wi-Fi de tu casa.
-- La micro-app detecta automáticamente que el ordenador está en línea (`🟢 En línea`).
-- Vuelca todos los gastos acumulados contra la API del backend (`POST /api/mobile/sync`).
-- Las transacciones se insertan directamente en tu base de datos SQLite (`Transaction`) sin que tengas que encender la pantalla del ordenador ni abrir Streamlit.
+### 2. Al Llegar a Casa (Wi-Fi Doméstica o Docker)
+- Al conectarte a la misma Wi-Fi que el PC (o tener el servidor Docker encendido), la app detecta automáticamente el ordenador (`🟢 En línea`).
+- Sube todas las transacciones acumuladas en un único lote atómico (`POST /api/mobile/sync`).
+- Quedan registradas de inmediato en tu base de datos SQLite y reflejadas en tus gráficos de Streamlit.
 
-### 3. Opción Alternativa con Syncthing (Por Carpetas)
-Si eres usuario habitual de Syncthing y prefieres transferir mediante archivos físicos:
-- En la pestaña `📋 Historial` de la app móvil, pulsa el botón **"📥 Descargar JSON"**.
-- Guarda el archivo `evt_mob_*.json` en la carpeta compartida de Syncthing de tu teléfono.
-- Syncthing lo trasladará a la carpeta `sync/mobile/inbox/` de tu ordenador, donde el backend lo ingestará y archivará automáticamente.
+### 3. Sincronización Manual por Archivos (Syncthing Opcional)
+- En la app móvil puedes pulsar **"Exportar Lote JSON"** para descargar los apuntes en un fichero `.json`.
+- Si utilizas Syncthing, deposítalo en la carpeta compartida `sync/mobile/inbox/`: el backend de tu PC lo procesará automáticamente al arrancar.

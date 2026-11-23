@@ -96,11 +96,13 @@ export const extractAndSaveServerUrlFromUrl = (): string | null => {
       return saved;
     }
 
-    // Si aún no hay URL configurada y estamos en un navegador con IP de red (no localhost)
-    if (!getStoredServerUrl() && window.location.origin) {
+    // Si estamos en un navegador cargando la app desde una IP de red real (no localhost ni app empaquetada),
+    // sincronizar automáticamente con el origen activo desde el que se está sirviendo
+    if (window.location.origin) {
       const orig = window.location.origin;
       if (
         !orig.includes("localhost") &&
+        !orig.includes("127.0.0.1") &&
         !orig.startsWith("capacitor://") &&
         !orig.startsWith("ionic://") &&
         !orig.startsWith("file://")

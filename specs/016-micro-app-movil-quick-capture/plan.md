@@ -277,6 +277,26 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Resolución canónica de imágenes de comprobantes con token de emparejamiento (`getReceiptImageUrl()`) en `HistoryView.tsx` y `SearchView.tsx` para compatibilidad nativa en Android APK (Capacitor) y redes externas.
      - Preservación del tipo `type: "INCOME"` y comprobantes en el buscador táctil sobre transacciones locales recientes tanto en React (`SearchView.tsx`) como en la PWA estática (`src/mobile/dist/index.html`).
 
+### Fase 19: Compatibilidad Completa y Despliegue en Contenedores Docker (Completada)
+- **Objetivo**: Garantizar el correcto funcionamiento, emparejamiento y sincronización del Companion Móvil cuando el sistema se ejecuta en contenedores Docker locales (`docker-compose up`), blindando CORS, propagación de URL de servidor y aislamiento de subredes.
+- **Entregables Implementados y Validados**:
+  1. Montaje y Despliegue de la PWA en Contenedores:
+     - Configuración de volumen `- ../src/mobile:/app/src/mobile` en `docker_local/docker-compose.yml` e instrucción `COPY src/mobile /app/src/mobile` en `images/backend/Dockerfile` para que FastAPI sirva la PWA real compilada en `/mobile` en lugar del placeholder dummy.
+  2. Soporte Integral de CORS para APK Nativa de Android y Clientes Móviles:
+     - En `src/backend/api/main.py`, incorporación de `CORSMiddleware` con `allow_origins=["*"]` y `allow_headers=["*"]`, resolviendo peticiones OPTIONS preflight para Capacitor (`capacitor://localhost` / `http://localhost`) con cabeceras `X-Mobile-Pairing-Token`.
+  3. Propagación de Servidor en QR y Auto-Sincronización de Origen en PWA:
+     - En `src/frontend/views/mobile_view.py`, inclusión del parámetro `server=http://{local_ip}:8000` en la URL del código QR y enlaces para sobreescribir URLs obsoletas en `localStorage` al cambiar de Wi-Fi.
+     - En `src/mobile/dist/index.html` y `src/mobile/src/services/storage.ts`, sincronización automática del servidor activo con `window.location.origin` cuando la PWA se carga desde una IP de red real.
+  4. Aislamiento de Subred Docker y Exclusión Estricta de Hotspot Móvil:
+     - Configuración de subred fija dedicada `172.28.199.0/24` para `app-network` en `docker_local/docker-compose.yml` y paridad de variable `HOST_IP` en `docker_local/docker-compose.extend.yml`.
+     - En `src/backend/api/routers/mobile.py` (`get_admin_pairing_token`), autorización de red interna Docker excluyendo explícitamente el rango Hotspot / Punto de Acceso de iPhone (`172.20.10.0/24`) para evitar falsos positivos de seguridad (`SEC-01`).
+  5. Detección Dinámica de IP del Host y Ajuste Interactivo en Streamlit:
+     - En `src/frontend/views/mobile_view.py`, integración de variable de entorno `HOST_IP` en `get_local_ip()`.
+     - Panel expandible en la vista Streamlit (`⚙️ Configuración de IP / Docker Wi-Fi`) con alerta automática si se detecta una IP interna de contenedor (`172.x`) y campo interactivo para ingresar la IP local del PC en la Wi-Fi (`st.session_state["custom_mobile_host_ip"]`), actualizando al instante el código QR y los enlaces móviles.
+  6. Batería de Pruebas Automatizadas:
+     - Pruebas de integración `test_admin_pairing_token_access_control` (con validación de rechazo a Hotspot y aceptación de subred Docker) y `test_mobile_cors_preflight_and_headers` en `tests/integration/test_mobile_api.py`.
+     - 46/46 pruebas pasando al 100% en la suite acotada de la Spec 016 (`test_mobile_sync_service.py`, `test_mobile_quick_presets.py`, `test_mobile_api.py`).
+
 ---
 
 ## 3. Mejoras Archivadas para Futuras Especificaciones (Post-Spec 016)
