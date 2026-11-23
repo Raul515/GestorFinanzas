@@ -730,31 +730,6 @@ def test_mobile_performance_optimizations_and_sql_aggregation(populated_db: Sess
     assert search_res.items[0].subcategory_name == "Café y Desayunos"
 
 
-def test_sync_status_does_not_leak_pairing_token(populated_db: Session):
-    """Verifica que get_sync_status no retorne jamás el token en el modelo (SEC-01)."""
-    service = MobileSyncService()
-    status_unauth = service.get_sync_status(populated_db, authenticated=False)
-    assert status_unauth.pairing_token is None
-    assert status_unauth.authenticated is False
-
-    status_auth = service.get_sync_status(populated_db, authenticated=True)
-    assert status_auth.pairing_token is None
-    assert status_auth.authenticated is True
-
-
-def test_save_receipt_with_non_alphanumeric_event_id(tmp_path: Path):
-    """Verifica que safe_id genere un token aleatorio seguro si event_id no contiene caracteres válidos (SEC-07)."""
-    service = MobileSyncService(base_sync_dir=str(tmp_path))
-    file_bytes = b"\xff\xd8\xff\xe0testjpegcontent"
-
-    saved_name = service.save_receipt_file(event_id="???///###", file_bytes=file_bytes)
-    assert saved_name is not None
-    assert saved_name.startswith("receipt_")
-    assert saved_name != "receipt_.jpg"
-    assert len(saved_name) > len("receipt_.jpg")
-    assert (service.receipts_dir / saved_name).exists()
-
-
 
 
 

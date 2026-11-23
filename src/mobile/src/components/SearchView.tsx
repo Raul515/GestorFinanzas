@@ -1,4 +1,4 @@
-import { useState, useMemo, ChangeEvent } from "react";
+import { useState, useMemo, ChangeEvent, KeyboardEvent } from "react";
 import { Search, X, Tag, Calendar } from "lucide-react";
 import { HistoricalTransactionItem, MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
@@ -94,7 +94,7 @@ export const SearchView = ({
             setQuery(e.target.value);
             if (serverResults !== null) setServerResults(null);
           }}
-          onKeyDown={(e) => {
+          onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
             if (e.key === "Enter") handleSearchOnline();
           }}
           placeholder="¿Cuánto me costó... (ej. itv, zara, taller)?"

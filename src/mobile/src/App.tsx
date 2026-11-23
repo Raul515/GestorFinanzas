@@ -207,7 +207,7 @@ export function App() {
   // Refrescar datos pesados al cambiar de pestaña si están obsoletos
   useEffect(() => {
     if (
-      (activeTab === "month" || activeTab === "history" || activeTab === "search") &&
+      (activeTab === "summary" || activeTab === "history" || activeTab === "search") &&
       isServerOnline &&
       isPaired
     ) {
@@ -327,7 +327,8 @@ export function App() {
       saveStoredPairingToken(inputToken.trim());
       setShowPairingModal(false);
       setInputToken("");
-      refreshConnectivityAndCatalog();
+      checkConnectivity();
+      refreshHeavyData(true);
     }
   };
 

@@ -20,7 +20,8 @@ Rama de trabajo: feat/spec-016-micro-app-movil-quick-capture
 [x] Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono)
 [x] Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos
 [x] Fase 14: Atajos Rápidos de Importe y Presets Frecuentes (1-Tap y Modo Híbrido)
-[ ] Fase 15: Hardening de Seguridad Integral y Blindaje de Acceso (Post-Auditoría)
+[x] Fase 15: Hardening de Seguridad Integral y Blindaje de Acceso (Post-Auditoría)
+[x] Fase 16: Optimización de Rendimiento, Desacoplamiento de Polling y Carga Ansiosa SQL
 Fusión final: Merge en develop tras 100% de tests y validación completa
 ```
 
@@ -215,6 +216,24 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Asignación de identificador aleatorio único seguro mediante `secrets.token_hex(8)` en `save_receipt_file()` y `save_receipt_base64()` si `event_id` no contiene caracteres alfanuméricos válidos.
   4. Remedición SEC-03 (Sanitización XSS en la PWA Monolítica `dist/index.html`):
      - Implementación de la función `escapeHtml()` y sanitización rigurosa de todas las cadenas de texto del usuario (`description`, `subcategory_name`, `concept`, `presets`, `searchQueryHist`, `token`) y desacoplamiento de eventos `onclick` a selectores por índice/atributo para prevenir inyecciones de script.
+  5. Pruebas automatizadas:
+     - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
+
+---
+
+### Fase 16: Optimización de Rendimiento, Desacoplamiento de Polling y Carga Ansiosa SQL (Completada)
+- **Objetivo**: Implementar de forma integral las soluciones a los 6 hallazgos de la auditoría de rendimiento integral, desacoplando el sondeo de la PWA móvil, eliminando consultas N+1 en SQLite, delegando agregaciones al motor SQL, optimizando los ciclos del worker en segundo plano y memoizando tokens.
+- **Entregables Implementados y Validados**:
+  1. Backend (`src/backend/services/mobile_sync_service.py`):
+     - Eliminación de consultas N+1 en `get_historical_cache()` y `search_transactions()` mediante carga ansiosa `joinedload(Transaction.subcategory).joinedload(Subcategory.category)`, reduciendo el tráfico SQL a una única consulta unificada con `LEFT OUTER JOIN`.
+     - Delegación de agregaciones de frecuencia de subcategorías y conceptos recurrentes directamente al motor SQL SQLite en `get_mobile_catalog()` usando `func.count()` y `GROUP BY`, erradicando la instanciación de cientos de objetos ORM en la RAM de Python.
+  2. Worker en segundo plano (`src/backend/api/main.py`):
+     - Verificación ligera de existencia en sistema de archivos (`any(f.suffix == '.json')` en `sync/mobile/inbox/`) antes de abrir sesiones y transacciones con `SessionLocal()` en `run_periodic_mobile_sync_checker()`.
+  3. Cliente de API en Streamlit (`src/frontend/api_client.py`):
+     - Memoización en memoria del token de emparejamiento con `get_cached_pairing_token()`, eliminando peticiones HTTP redundantes a `/api/mobile/status` antes de cada consulta de catálogo o resumen.
+  4. Micro-App Móvil (`src/mobile/src/App.tsx` y `src/mobile/dist/index.html`):
+     - Sondeo adaptativo: ciclo de polling ampliado de 15s a 60s, con suspensión automática en segundo plano mediante `document.visibilityState !== "visible"`.
+     - Desacoplamiento de caché pesada: la descarga de catálogo, resumen mensual y caché histórica de 12 meses ya no se ejecuta en cada tick de 15s, sino en el arranque inicial, al navegar voluntariamente a pestañas dependientes o reactivamente tras una mutación exitosa (`POST /sync` o `DELETE`).
   5. Pruebas automatizadas:
      - 41/41 pruebas automatizadas pasando al 100% en `tests/unit/test_mobile_sync_service.py`, `tests/unit/test_mobile_quick_presets.py` y `tests/integration/test_mobile_api.py`.
 

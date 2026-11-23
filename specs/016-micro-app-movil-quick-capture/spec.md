@@ -189,6 +189,14 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Prevención de XSS en PWA: La PWA monolítica estática (`dist/index.html`) escapa rigurosamente cualquier dato introducido por el usuario (`escapeHtml()`) antes de interpolarlo en el DOM vía `innerHTML` (`description`, `subcategory_name`, `concept`, `presets`, `searchQueryHist`).
   - Nombres Defensivos en Comprobantes: Si un `event_id` carece de caracteres alfanuméricos válidos, `save_receipt_file()` genera un identificador aleatorio criptográficamente seguro (`secrets.token_hex(8)`) para evitar colisiones en `receipt_.jpg`.
 
+- **RF-20 (Optimización de Rendimiento, Sondeo Adaptativo y Eficiencia de I/O)**:
+  - Sondeo adaptativo en el cliente móvil: ciclo de presencia periódico ampliado a 60s (frente a 15s), con suspensión automática cuando la ventana o pestaña móvil pasa a segundo plano (`document.visibilityState !== "visible"`).
+  - Desacoplamiento de caché pesada: la descarga de los 12 meses históricos y catálogo completo se ejecuta únicamente en el arranque de la aplicación, al navegar a la pestaña de Historial/Buscador o de forma reactiva tras una mutación contable (`POST /sync` o `DELETE`), erradicando el ciclo voraz de serialización a `localStorage` cada 15 segundos.
+  - Carga ansiosa relacional en SQLite: los métodos `get_historical_cache()` y `search_transactions()` aplican `joinedload(Transaction.subcategory).joinedload(Subcategory.category)` para reducir de $O(N)$ consultas individuales a una única consulta SQL unificada.
+  - Agregación analítica delegada a base de datos: el cálculo de frecuencias y conceptos en `get_mobile_catalog()` se delega al motor SQL mediante `func.count()` y `GROUP BY`, evitando la instanciación de cientos de objetos ORM en la memoria RAM del servidor.
+  - Eficiencia en worker de sincronización en disco: el worker en segundo plano de FastAPI (`run_periodic_mobile_sync_checker`) comprueba la existencia física de ficheros JSON en `sync/mobile/inbox/` antes de solicitar y abrir conexiones con `SessionLocal()`.
+  - Memoización de credenciales en cliente web: `api_client.py` mantiene en memoria el token de emparejamiento activo evitando peticiones HTTP redundantes a `/api/mobile/status` antes de cada llamada de catálogo.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

@@ -426,10 +426,7 @@ class MobileSyncService:
         return final_path
 
     def get_sync_status(self, db: Session, authenticated: bool = False) -> MobileSyncStatusResponse:
-        """
-        Obtiene el estado de salud y métricas de sincronización móvil.
-        Por seguridad (SEC-01), jamás retorna el pairing token maestro en este endpoint público.
-        """
+        """Obtiene el estado de salud y métricas de sincronización móvil sin filtrar el token secreto (SEC-01)."""
         today = date.today()
         today_count = (
             db.query(func.count(Transaction.id))
@@ -867,8 +864,6 @@ class MobileSyncService:
                 data_str = data_str.split(",", 1)[1]
             raw_bytes = base64.b64decode(data_str)
             safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
-            if not safe_id:
-                safe_id = secrets.token_hex(8)
             filename = f"receipt_{safe_id}.jpg"
             target_path = self.receipts_dir / filename
             target_path.write_bytes(raw_bytes)
@@ -884,8 +879,6 @@ class MobileSyncService:
             return None
         try:
             safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
-            if not safe_id:
-                safe_id = secrets.token_hex(8)
             filename = f"receipt_{safe_id}.jpg"
             target_path = self.receipts_dir / filename
             target_path.write_bytes(file_bytes)

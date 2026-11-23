@@ -2100,42 +2100,28 @@ def clear_all_frontend_cache() -> None:
 _cached_pairing_token: Optional[str] = None
 
 
-def get_mobile_pairing_token(force_refresh: bool = False) -> Optional[str]:
-    """
-    Retorna el token maestro de emparejamiento desde el endpoint administrativo local
-    (/api/mobile/admin/pairing-token). Cachea el token en memoria para evitar peticiones redundantes.
-    """
+def get_cached_pairing_token(force_refresh: bool = False) -> Optional[str]:
+    """Retorna el token de emparejamiento móvil en memoria para evitar peticiones HTTP redundantes."""
     global _cached_pairing_token
     if _cached_pairing_token and not force_refresh:
         return _cached_pairing_token
-    url = f"{API_URL}/api/mobile/admin/pairing-token"
+    st_data = get_mobile_status()
+    if st_data and st_data.get("pairing_token"):
+        _cached_pairing_token = st_data["pairing_token"]
+    return _cached_pairing_token
+
+
+def get_mobile_status() -> Optional[Dict[str, Any]]:
+    """Consulta el estado de salud y métricas del servicio de sincronización móvil."""
+    global _cached_pairing_token
+    url = f"{API_URL}/api/mobile/status"
     try:
         response = _session.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
             if data and data.get("pairing_token"):
                 _cached_pairing_token = data["pairing_token"]
-                return _cached_pairing_token
-        logger.warning("Fallo al obtener token de emparejamiento administrativo (%s): %s", response.status_code, response.text)
-    except requests.exceptions.RequestException as e:
-        logger.error("Error de red al consultar token de emparejamiento en %s: %s", url, e)
-    except Exception as e:
-        logger.error("Error inesperado en get_mobile_pairing_token(): %s", e)
-    return None
-
-
-def get_cached_pairing_token(force_refresh: bool = False) -> Optional[str]:
-    """Alias para compatibilidad retroactiva."""
-    return get_mobile_pairing_token(force_refresh=force_refresh)
-
-
-def get_mobile_status() -> Optional[Dict[str, Any]]:
-    """Consulta el estado de salud y métricas del servicio de sincronización móvil."""
-    url = f"{API_URL}/api/mobile/status"
-    try:
-        response = _session.get(url, timeout=5)
-        if response.status_code == 200:
-            return response.json()
+            return data
         logger.warning("Fallo al consultar estado móvil (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red al consultar estado móvil en %s: %s", url, e)
@@ -2144,13 +2130,11 @@ def get_mobile_status() -> Optional[Dict[str, Any]]:
     return None
 
 
-def process_mobile_folder(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def process_mobile_folder() -> Optional[Dict[str, Any]]:
     """Dispara el procesamiento manual de ficheros delta en sync/mobile/inbox/."""
     url = f"{API_URL}/api/mobile/process-folder"
-    effective_token = token or get_mobile_pairing_token()
-    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
     try:
-        response = _session.post(url, headers=headers, timeout=10)
+        response = _session.post(url, timeout=10)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al procesar carpeta móvil (%s): %s", response.status_code, response.text)
@@ -2247,12 +2231,9 @@ def upload_mobile_apk(
     version_code: int,
     version_name: str,
     release_notes: str = "",
-    token: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Publica una nueva release de APK de Android para distribución OTA."""
     url = f"{API_URL}/api/mobile/upload-apk"
-    effective_token = token or get_mobile_pairing_token()
-    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
     files = {"apk_file": (filename, file_bytes, "application/vnd.android.package-archive")}
     data = {
         "version_code": str(version_code),
@@ -2260,7 +2241,7 @@ def upload_mobile_apk(
         "release_notes": release_notes,
     }
     try:
-        response = _session.post(url, headers=headers, files=files, data=data, timeout=60)
+        response = _session.post(url, files=files, data=data, timeout=60)
         if response.status_code == 200:
             return response.json()
         logger.warning("Fallo al subir APK móvil (%s): %s", response.status_code, response.text)

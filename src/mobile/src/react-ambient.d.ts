@@ -150,3 +150,8 @@ declare module "@capacitor/cli" {
     [key: string]: any;
   }
 }
+
+declare module "*.css" {
+  const content: any;
+  export default content;
+}
