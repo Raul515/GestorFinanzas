@@ -11,6 +11,11 @@ interface CategoryChipsProps {
 
 export const getSubcategoryEmoji = (name: string): string => {
   const lower = name.toLowerCase();
+  if (lower.includes("nómina") || lower.includes("nomina") || lower.includes("salario") || lower.includes("sueldo")) return "💰";
+  if (lower.includes("bizum")) return "📲";
+  if (lower.includes("devoluc") || lower.includes("reembols")) return "🔄";
+  if (lower.includes("venta") || lower.includes("vinted") || lower.includes("wallapop")) return "🏷️";
+  if (lower.includes("ingreso") || lower.includes("interes") || lower.includes("dividend")) return "💵";
   if (lower.includes("café") || lower.includes("cafe") || lower.includes("desayun")) return "☕";
   if (lower.includes("super") || lower.includes("compra") || lower.includes("mercadona") || lower.includes("aliment")) return "🛒";
   if (lower.includes("restauran") || lower.includes("cen") || lower.includes("comid") || lower.includes("bar")) return "🍽️";
@@ -157,29 +162,40 @@ export const CategoryChips = ({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-400">Tipo de gasto (Regla 50/30/20)</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs font-medium text-slate-400">Tipo (Regla 50/30/20 o Ingreso)</label>
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setNewCategoryName("Necesidades Básicas (50%)")}
-                      className={`p-2.5 rounded-xl text-xs font-medium border text-center transition-all ${
+                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
                         newCategoryName.includes("50%")
                           ? "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold"
                           : "bg-slate-950 border-slate-800 text-slate-400"
                       }`}
                     >
-                      🛒 Necesidad (50%)
+                      🛒 Necesidad
                     </button>
                     <button
                       type="button"
                       onClick={() => setNewCategoryName("Deseos (30%)")}
-                      className={`p-2.5 rounded-xl text-xs font-medium border text-center transition-all ${
+                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
                         newCategoryName.includes("30%")
                           ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
                           : "bg-slate-950 border-slate-800 text-slate-400"
                       }`}
                     >
-                      ☕ Deseo (30%)
+                      ☕ Deseo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCategoryName("Ingresos Netos")}
+                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                        newCategoryName.includes("Ingreso")
+                          ? "bg-sky-500/20 border-sky-500 text-sky-300 font-bold"
+                          : "bg-slate-950 border-slate-800 text-slate-400"
+                      }`}
+                    >
+                      💰 Ingreso
                     </button>
                   </div>
                 </div>

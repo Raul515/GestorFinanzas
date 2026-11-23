@@ -495,4 +495,69 @@ def test_mobile_receipts_api_flow(client: TestClient, db_session: Session, auth_
     assert len(resp_synced_receipt.content) > 0
 
 
+def test_mobile_income_sync_and_summary_api(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica el flujo completo de captura y consulta de ingresos vía API (Fase 13)."""
+    cat_ing = Category(name="Ingresos Netos", type="income")
+    cat_gas = Category(name="Necesidades Básicas (50%)", type="expense")
+    db_session.add_all([cat_ing, cat_gas])
+    db_session.commit()
+
+    sub_bizum = Subcategory(name="Bizum Recibido", category_id=cat_ing.id)
+    sub_comida = Subcategory(name="Supermercado", category_id=cat_gas.id)
+    db_session.add_all([sub_bizum, sub_comida])
+    db_session.commit()
+
+    # 1. Catálogo expone category_type
+    cat_resp = client.get("/api/mobile/catalog", headers=auth_headers)
+    assert cat_resp.status_code == 200
+    subs = cat_resp.json()["personal_subcategories"]
+    bizum_sub = next(s for s in subs if s["name"] == "Bizum Recibido")
+    assert bizum_sub["category_type"] == "income"
+
+    # 2. Sincronizar un ingreso y un gasto simultáneamente
+    sync_payload = {
+        "device_id": "test-phone-income",
+        "transactions": [
+            {
+                "event_id": "evt_api_income_001",
+                "type": "INCOME",
+                "amount": 100.0,
+                "description": "Devolución IRPF / Bizum",
+                "date": str(date.today()),
+                "subcategory_id": sub_bizum.id,
+            },
+            {
+                "event_id": "evt_api_expense_001",
+                "type": "EXPENSE",
+                "amount": 25.0,
+                "description": "Compra súper",
+                "date": str(date.today()),
+                "subcategory_id": sub_comida.id,
+            },
+        ],
+    }
+    sync_resp = client.post("/api/mobile/sync", headers=auth_headers, json=sync_payload)
+    assert sync_resp.status_code == 200
+    assert sync_resp.json()["processed_count"] == 2
+
+    # 3. Consultar /summary y validar balance
+    today_month = date.today().strftime("%Y-%m")
+    sum_resp = client.get(f"/api/mobile/summary?month={today_month}", headers=auth_headers)
+    assert sum_resp.status_code == 200
+    sum_data = sum_resp.json()
+    assert sum_data["total_income"] == 100.0
+    assert sum_data["total_spent"] == 25.0
+    assert sum_data["remaining_budget"] == 75.0
+
+    # 4. Búsqueda devuelve type='INCOME' para el ingreso
+    search_resp = client.get("/api/mobile/transactions/search?q=Devoluci%C3%B3n", headers=auth_headers)
+    assert search_resp.status_code == 200
+    s_items = search_resp.json()["items"]
+    assert len(s_items) >= 1
+    assert s_items[0]["type"] == "INCOME"
+
+
+
+
+
 

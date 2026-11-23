@@ -95,6 +95,15 @@ class MobileSyncService:
         master_token = self.get_or_create_pairing_token()
         return hmac.compare_digest(token.strip(), master_token)
 
+    @staticmethod
+    def is_income_category(cat: Optional[Category]) -> bool:
+        """Determina de forma uniforme si una categoría representa ingresos."""
+        if not cat:
+            return False
+        cat_type = getattr(cat, "type", "") or ""
+        cat_name = getattr(cat, "name", "") or ""
+        return cat_type.lower() in ("income", "ingreso") or "ingreso" in cat_name.lower()
+
     def create_or_get_subcategory(
         self,
         db: Session,
@@ -121,11 +130,14 @@ class MobileSyncService:
 
         if not target_cat and category_name:
             c_name_lower = category_name.strip().lower()
-            target_cat = (
-                db.query(Category)
-                .filter(func.lower(Category.name).like(f"%{c_name_lower}%"))
-                .first()
-            )
+            if "ingreso" in c_name_lower or "income" in c_name_lower:
+                target_cat = next((c for c in db.query(Category).all() if self.is_income_category(c)), None)
+            if not target_cat:
+                target_cat = (
+                    db.query(Category)
+                    .filter(func.lower(Category.name).like(f"%{c_name_lower}%"))
+                    .first()
+                )
 
         if not target_cat:
             target_cat = (
@@ -193,7 +205,7 @@ class MobileSyncService:
 
         # Fallback si no hay transacciones recientes: marcar subcategorías clave cotidianas
         if not top_subcat_ids:
-            common_keywords = {"café", "cafe", "supermercado", "comida", "restaurante", "gasolina", "farmacia", "ocio"}
+            common_keywords = {"café", "cafe", "supermercado", "comida", "restaurante", "gasolina", "farmacia", "ocio", "bizum", "nómina", "nomina"}
             for s in subcats:
                 if any(kw in s.name.lower() for kw in common_keywords) and len(top_subcat_ids) < 6:
                     top_subcat_ids.add(s.id)
@@ -202,12 +214,14 @@ class MobileSyncService:
         personal_subcategories: List[MobileCatalogSubcategory] = []
         for s in subcats:
             cat_name = s.category.name if s.category else "General"
+            cat_type = "income" if self.is_income_category(s.category) else "expense"
             personal_subcategories.append(
                 MobileCatalogSubcategory(
                     id=s.id,
                     name=s.name,
                     category_id=s.category_id,
                     category_name=cat_name,
+                    category_type=cat_type,
                     is_frequent=(s.id in top_subcat_ids),
                 )
             )
@@ -473,7 +487,7 @@ class MobileSyncService:
                 continue
             amt = float(t.amount)
             cat = subcat_to_cat.get(t.subcategory_id)
-            if cat and getattr(cat, "type", "").lower() == "income":
+            if self.is_income_category(cat):
                 income_total += amt
             elif t.subcategory_id:
                 spent_by_subcat[t.subcategory_id] += amt
@@ -485,7 +499,7 @@ class MobileSyncService:
 
         for s in subcats:
             cat = subcat_to_cat.get(s.id)
-            if cat and getattr(cat, "type", "").lower() == "income":
+            if self.is_income_category(cat):
                 continue
             cat_id = s.category_id
             amt_budgeted = float(month_map.get(s.id, base_map.get(s.id, 0.0)))
@@ -509,7 +523,7 @@ class MobileSyncService:
         savings_summary = None
 
         for cat in categories:
-            if getattr(cat, "type", "").lower() == "income":
+            if self.is_income_category(cat):
                 continue
             b_amt = round(float(cat_budgeted[cat.id]), 2)
             s_amt = round(float(cat_spent[cat.id]), 2)
@@ -768,12 +782,14 @@ class MobileSyncService:
             sub = tx.subcategory
             cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
             r_fn = getattr(tx, "receipt_filename", None)
+            tx_type = "INCOME" if self.is_income_category(sub.category if sub else None) else "EXPENSE"
             items.append(
                 MobileHistoricalTransactionItem(
                     id=tx.id,
                     date=str(tx.date),
                     amount=float(tx.amount),
                     description=tx.description or "",
+                    type=tx_type,
                     subcategory_id=tx.subcategory_id,
                     subcategory_name=sub.name if sub else "",
                     category_name=cat_name,
@@ -810,12 +826,14 @@ class MobileSyncService:
             sub = tx.subcategory
             cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
             r_fn = getattr(tx, "receipt_filename", None)
+            tx_type = "INCOME" if self.is_income_category(sub.category if sub else None) else "EXPENSE"
             items.append(
                 MobileHistoricalTransactionItem(
                     id=tx.id,
                     date=str(tx.date),
                     amount=float(tx.amount),
                     description=tx.description or "",
+                    type=tx_type,
                     subcategory_id=tx.subcategory_id,
                     subcategory_name=sub.name if sub else "",
                     category_name=cat_name,

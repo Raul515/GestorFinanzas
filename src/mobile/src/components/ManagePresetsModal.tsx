@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, ChangeEvent, KeyboardEvent } from "react";
 import { X, Plus, Trash2, RotateCcw, Check, Sparkles } from "lucide-react";
 import { QuickPresetItem, SubcategoryItem } from "../types";
 import { resetStoredQuickPresets } from "../services/storage";
@@ -124,11 +124,20 @@ export const ManagePresetsModal = ({
                       <input
                         type="text"
                         value={preset.name}
-                        onChange={(e) => handleUpdateName(preset.id, e.target.value)}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => handleUpdateName(preset.id, e.target.value)}
+                        onBlur={() => setEditingId(null)}
+                        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                          if (e.key === "Enter") setEditingId(null);
+                        }}
+                        autoFocus
                         className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs text-white font-bold w-24"
                       />
                     ) : (
-                      <div className="font-bold text-xs text-slate-200 truncate">
+                      <div
+                        onClick={() => setEditingId(preset.id)}
+                        className="font-bold text-xs text-slate-200 truncate cursor-pointer hover:text-emerald-400"
+                        title="Toca para editar el nombre"
+                      >
                         {preset.name}
                       </div>
                     )}
@@ -141,7 +150,7 @@ export const ManagePresetsModal = ({
                       step="0.01"
                       min="0.01"
                       value={preset.amount}
-                      onChange={(e) => handleUpdateAmount(preset.id, e.target.value)}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => handleUpdateAmount(preset.id, e.target.value)}
                       className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-emerald-400 font-mono font-bold text-right w-20"
                     />
                     <span className="text-xs text-slate-500 font-bold">€</span>
@@ -165,7 +174,7 @@ export const ManagePresetsModal = ({
                   </span>
                   <select
                     value={preset.subcategory_name}
-                    onChange={(e) => handleUpdateSubcategory(preset.id, e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLSelectElement>) => handleUpdateSubcategory(preset.id, e.target.value)}
                     className="bg-slate-900 text-[10px] text-slate-300 border border-slate-800 rounded px-1.5 py-0.5"
                   >
                     {subcategories.map((s) => (
@@ -191,7 +200,7 @@ export const ManagePresetsModal = ({
                   type="text"
                   placeholder="Emoji"
                   value={newEmoji}
-                  onChange={(e) => setNewEmoji(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setNewEmoji(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-center text-sm"
                   maxLength={2}
                 />
@@ -199,7 +208,7 @@ export const ManagePresetsModal = ({
                   type="text"
                   placeholder="Nombre (ej. Pan)"
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)}
                   className="col-span-3 bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-white"
                 />
               </div>
@@ -211,14 +220,14 @@ export const ManagePresetsModal = ({
                     min="0.01"
                     placeholder="Importe €"
                     value={newAmount}
-                    onChange={(e) => setNewAmount(e.target.value)}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setNewAmount(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-emerald-400 font-mono font-bold"
                   />
                   <span className="absolute right-2 top-1.5 text-xs text-slate-500">€</span>
                 </div>
                 <select
                   value={newSubcatName}
-                  onChange={(e) => setNewSubcatName(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setNewSubcatName(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300 truncate"
                 >
                   {subcategories.map((s) => (

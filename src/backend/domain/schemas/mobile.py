@@ -16,6 +16,7 @@ class MobileCatalogSubcategory(BaseModel):
     name: str
     category_id: int
     category_name: str
+    category_type: str = "expense"
     is_frequent: bool = False
 
 
@@ -31,9 +32,10 @@ class MobileTransactionPayload(BaseModel):
     """Individual transaction captured on mobile."""
     event_id: str = Field(..., description="Unique client-generated event UUID")
     scope: str = Field("PERSONAL", description="Scope: currently only PERSONAL")
-    amount: float = Field(..., gt=0, description="Expense amount in EUR, must be > 0")
+    type: Optional[str] = Field("EXPENSE", description="Transaction type: EXPENSE or INCOME")
+    amount: float = Field(..., gt=0, description="Transaction amount in EUR, must be > 0")
     description: str = Field(..., min_length=1, description="Concept or merchant name")
-    date: datetime.date = Field(..., description="Expense date YYYY-MM-DD")
+    date: datetime.date = Field(..., description="Transaction date YYYY-MM-DD")
     subcategory_id: Optional[int] = Field(None, description="Subcategory ID or <= 0 for on-the-fly")
     subcategory_name: Optional[str] = Field(None, description="Subcategory name for fallback or on-the-fly")
     created_at_utc: Optional[str] = None
@@ -166,6 +168,7 @@ class MobileHistoricalTransactionItem(BaseModel):
     date: str
     amount: float
     description: str
+    type: Optional[str] = "EXPENSE"
     subcategory_id: int
     subcategory_name: str
     category_name: str

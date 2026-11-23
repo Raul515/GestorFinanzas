@@ -130,8 +130,8 @@ export const HistoryView = ({
                         <Camera className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <span className="font-mono font-bold text-sm text-amber-300">
-                      -{tx.amount.toFixed(2)} €
+                    <span className={`font-mono font-bold text-sm ${tx.type === "INCOME" ? "text-emerald-400" : "text-amber-300"}`}>
+                      {tx.type === "INCOME" ? "+" : "-"}{tx.amount.toFixed(2)} €
                     </span>
                     <button
                       type="button"
@@ -197,9 +197,11 @@ export const HistoryView = ({
                         <Camera className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <div className="flex items-center gap-1 font-mono font-semibold text-slate-300">
-                      <span>-{tx.amount.toFixed(2)} €</span>
-                      <ArrowUpRight className="w-3 h-3 text-emerald-500" />
+                    <div className="flex items-center gap-1 font-mono font-semibold">
+                      <span className={tx.type === "INCOME" ? "text-emerald-400 font-bold" : "text-slate-300"}>
+                        {tx.type === "INCOME" ? "+" : "-"}{tx.amount.toFixed(2)} €
+                      </span>
+                      <ArrowUpRight className={`w-3 h-3 ${tx.type === "INCOME" ? "text-emerald-400" : "text-emerald-500"}`} />
                     </div>
                     <button
                       type="button"

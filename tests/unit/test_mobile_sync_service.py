@@ -636,5 +636,62 @@ def test_mobile_receipt_saving_and_sync(populated_db: Session, tmp_path: Path):
     assert found_item.receipt_url == "/api/mobile/receipts/receipt_evt_sync_with_receipt.jpg"
 
 
+def test_mobile_income_transaction_capture_and_summary(populated_db: Session):
+    """Verifica la captura de ingresos extraordinarios / bizums y su impacto en el resumen mensual (Fase 13)."""
+    service = MobileSyncService()
+
+    # 1. Comprobar que el catálogo clasifica las subcategorías por category_type ('income' vs 'expense')
+    catalog = service.get_mobile_catalog(populated_db)
+    sub_income = next(s for s in catalog.personal_subcategories if s.name == "Nómina")
+    assert sub_income.category_type == "income"
+    sub_cafe = next(s for s in catalog.personal_subcategories if s.name == "Café y Desayunos")
+    assert sub_cafe.category_type == "expense"
+
+    # 2. Sincronizar un ingreso (ej. Bizum recibido de 45.00 €)
+    req = MobileSyncRequest(
+        device_id="pixel-phone",
+        transactions=[
+            MobileTransactionPayload(
+                event_id="evt_bizum_recibido_01",
+                type="INCOME",
+                amount=45.0,
+                description="Bizum cena compartida",
+                date=date(2026, 11, 22),
+                subcategory_id=sub_income.id,
+            )
+        ],
+    )
+    res = service.process_mobile_sync(populated_db, req)
+    assert res.processed_count == 1
+
+    # 3. Consultar resumen mensual y verificar que el ingreso suma al total_income y recalcula remaining_budget
+    summary = service.get_mobile_monthly_summary(populated_db, month_key="2026-11")
+    assert summary.total_income == 45.0
+    assert summary.total_spent == 0.0
+    assert summary.remaining_budget == 45.0
+
+    # 4. Comprobar que en la búsqueda y caché histórica el tipo queda marcado como INCOME
+    search_res = service.search_transactions(populated_db, query_text="Bizum cena")
+    assert search_res.total_found == 1
+    assert search_res.items[0].type == "INCOME"
+    assert search_res.items[0].amount == 45.0
+
+    cache = service.get_historical_cache(populated_db, months=12)
+    cached_bizum = next(c for c in cache if c.description == "Bizum cena compartida")
+    assert cached_bizum.type == "INCOME"
+
+    # 5. Creación al vuelo de una subcategoría de ingresos
+    sub_extra, is_new = service.create_or_get_subcategory(
+        populated_db,
+        name="Ventas Wallapop",
+        category_name="Ingresos Netos",
+    )
+    assert is_new is True
+    assert service.is_income_category(sub_extra.category) is True
+
+
+
+
+
 
 

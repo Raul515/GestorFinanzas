@@ -12,15 +12,37 @@ declare module "react" {
     target: { value: string } & T;
   }
   export interface MouseEvent<T = any> {
+    clientX: number;
+    clientY: number;
     preventDefault(): void;
     stopPropagation(): void;
+    [key: string]: any;
+  }
+  export interface KeyboardEvent<T = any> {
+    key: string;
+    preventDefault(): void;
+    stopPropagation(): void;
+  }
+  export interface Touch {
+    clientX: number;
+    clientY: number;
+    [key: string]: any;
+  }
+  export interface TouchEvent<T = any> {
+    touches: Touch[];
+    targetTouches: Touch[];
+    changedTouches: Touch[];
+    preventDefault(): void;
+    stopPropagation(): void;
+    [key: string]: any;
   }
   export function useState<T>(initialState: T | (() => T)): [T, (newState: T | ((prev: T) => T)) => void];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useCallback<T extends (...args: any[]) => any>(callback: T, deps: any[]): T;
   export function useMemo<T>(factory: () => T, deps: any[]): T;
+  export function useRef<T>(initialValue: T): { current: T };
   export function useRef<T>(initialValue: T | null): { current: T | null };
-  export function useRef<T>(initialValue?: T): { current: T };
+  export function useRef<T>(initialValue?: T): { current: T | undefined };
   export const StrictMode: FC<{ children?: any }>;
   const React: any;
   export default React;
@@ -58,6 +80,13 @@ declare module "react/jsx-dev-runtime" {
 }
 
 declare global {
+  namespace React {
+    type TouchEvent = any;
+    type MouseEvent = any;
+    type ChangeEvent = any;
+    type KeyboardEvent = any;
+    type ReactNode = any;
+  }
   namespace JSX {
     interface IntrinsicElements {
       [elemName: string]: any;
@@ -94,6 +123,21 @@ declare module "lucide-react" {
   export const Camera: any;
   export const Image: any;
   export const FileText: any;
+  export const RotateCcw: any;
+  export const Settings2: any;
+}
+
+declare namespace NodeJS {
+  type Timeout = any;
+}
+
+declare module "vite" {
+  export function defineConfig(config: any): any;
+}
+
+declare module "@vitejs/plugin-react" {
+  const plugin: any;
+  export default plugin;
 }
 
 declare module "@capacitor/cli" {

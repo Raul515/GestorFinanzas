@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, TouchEvent, MouseEvent } from "react";
 import { Settings2, Sparkles } from "lucide-react";
 import { QuickPresetItem } from "../types";
 
@@ -18,7 +18,7 @@ export const QuickPresetChips = ({
   const [activeLongPressId, setActiveLongPressId] = useState<string | null>(null);
   const [pressProgress, setPressProgress] = useState(0);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const didTriggerLongPressRef = useRef<boolean>(false);
@@ -40,7 +40,7 @@ export const QuickPresetChips = ({
     setPressProgress(0);
 
     const updateProgress = () => {
-      const elapsed = Date.now() - startTimeRef.current;
+      const elapsed = Date.now() - (startTimeRef.current ?? 0);
       const progress = Math.min(100, Math.round((elapsed / LONG_PRESS_DURATION_MS) * 100));
       setPressProgress(progress);
 
@@ -80,9 +80,10 @@ export const QuickPresetChips = ({
     touchStartPosRef.current = null;
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: TouchEvent) => {
     if (!touchStartPosRef.current) return;
     const touch = e.touches[0];
+    if (!touch) return;
     const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
     const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
     // Si el usuario se desplaza más de 10px, asume scroll horizontal y cancela
@@ -102,14 +103,14 @@ export const QuickPresetChips = ({
               <button
                 key={p.id}
                 type="button"
-                onTouchStart={(e) => {
+                onTouchStart={(e: TouchEvent) => {
                   const t = e.touches[0];
-                  startPress(p, t.clientX, t.clientY);
+                  if (t) startPress(p, t.clientX, t.clientY);
                 }}
                 onTouchEnd={() => cancelPress(true, p)}
                 onTouchMove={handleTouchMove}
                 onTouchCancel={() => cancelPress(false)}
-                onMouseDown={(e) => startPress(p, e.clientX, e.clientY)}
+                onMouseDown={(e: MouseEvent) => startPress(p, e.clientX, e.clientY)}
                 onMouseUp={() => cancelPress(true, p)}
                 onMouseLeave={() => cancelPress(false)}
                 className={`relative overflow-hidden px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-sm shrink-0 active:scale-95 ${
