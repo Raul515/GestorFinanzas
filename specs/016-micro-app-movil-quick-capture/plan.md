@@ -2,17 +2,24 @@
 
 ## 1. Arquitectura y Estrategia de Ejecución
 
-Siguiendo las directrices de `docs/constitution.md` y `AGENTS.md`, la especificación se desarrollará de forma estrictamente secuencial en **6 fases**. Cada fase se verificará con pruebas automatizadas completas antes de solicitar confirmación al usuario para avanzar a la siguiente.
+Siguiendo las directrices de `docs/constitution.md` y `AGENTS.md`, la especificación se desarrolla de forma estrictamente secuencial en **13 fases** (MVP inicial en Fases 1 a 6 + Mejoras de Productividad y Ergonomía Móvil en Fases 7 a 13). Cada fase se verifica con pruebas automatizadas completas antes de solicitar confirmación al usuario para avanzar a la siguiente.
 
 ```
 Rama de trabajo: feat/spec-016-micro-app-movil-quick-capture
-Fase 1: Backend — Esquemas de Datos y Servicio de Sincronización Móvil (MobileSyncService)
-Fase 2: Backend — Router REST, Endpoints Móviles y Servidor PWA Estático
-Fase 3: Frontend Móvil — Micro-App Quick-Capture (UX en 5 Segundos con Vite + React + Tailwind)
-Fase 4: Persistencia Offline Móvil y Motor de Sincronización Wi-Fi (IndexedDB y Auto-Flush)
-Fase 5: Empaquetado Android APK con Capacitor y Automatización CI/CD en GitHub Actions
-Fase 6: Integración en Streamlit (Código QR, Monitor de Sincronización) y Verificación E2E
-Fusión final: Merge en develop tras 100% de tests
+[x] Fase 1: Backend — Esquemas de Datos y Servicio de Sincronización Móvil (MobileSyncService)
+[x] Fase 2: Backend — Router REST, Endpoints Móviles y Servidor PWA Estático
+[x] Fase 3: Frontend Móvil — Micro-App Quick-Capture (UX en 5 Segundos con Vite + React + Tailwind)
+[x] Fase 4: Persistencia Offline Móvil y Motor de Sincronización Wi-Fi (IndexedDB y Auto-Flush)
+[x] Fase 5: Empaquetado Android APK con Capacitor y Automatización CI/CD en GitHub Actions
+[x] Fase 6: Integración en Streamlit (Código QR, Monitor de Sincronización) y Verificación E2E
+[x] Fase 7: Pestaña "Mi Mes" con Ejecución Presupuestaria 50/30/20, Fondo de Emergencia y Ajuste Rápido
+[x] Fase 8: Auto-Actualizador In-App OTA para APK y Panel de Distribución
+[x] Fase 9: Historial del Mes con Borrado Seguro Offline/Online y Endpoints de Eliminación
+[x] Fase 10: Semáforo y Alerta Preventiva en Vivo para Techo de Presupuesto de Deseos (30%)
+[x] Fase 11: Buscador Instantáneo de Gastos Históricos ("¿Cuánto me costó...?") y Caché Offline
+[ ] Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono)
+[ ] Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos
+Fusión final: Merge en develop tras 100% de tests y validación completa
 ```
 
 ---
@@ -94,3 +101,72 @@ Fusión final: Merge en develop tras 100% de tests
      - Monitor con las últimas transacciones recibidas desde el móvil.
   2. Batería de pruebas E2E automatizada en `tests/integration/test_mobile_e2e_flow.py`:
      - Simulación de creación de gastos móviles offline -> envío de lote HTTP -> inserción en SQLite -> verificación contable.
+
+---
+
+### Fase 7: Pestaña "Mi Mes" con Ejecución Presupuestaria 50/30/20, Fondo de Emergencia y Ajuste Rápido (Completada)
+- **Objetivo**: Dar visibilidad presupuestaria instantánea al usuario directamente en el móvil para que sepa cuánto puede gastar antes de tomar decisiones.
+- **Entregables**:
+  1. `src/backend/domain/schemas/mobile.py`: Esquemas `MobileMonthlySummaryResponse`, `MobileCategorySummary`, `MobileEmergencyFundSummary`, `MobileBudgetUpdate`.
+  2. `src/backend/services/mobile_sync_service.py`: Cálculo de ejecución 50/30/20, fondo de emergencia en meses y actualización de partidas en `MonthlyBudget`.
+  3. `src/backend/api/routers/mobile.py`: Endpoints `GET /api/mobile/summary` y `POST /api/mobile/budget`.
+  4. `src/mobile/`: Nueva pestaña táctil `[📊 Mi Mes]` en navegación, con barras de progreso, tarjeta de Fondo de Seguridad y edición in-situ de límites presupuestarios.
+  5. Pruebas: Batería de pruebas en `tests/unit/test_mobile_sync_service.py` y `tests/integration/test_mobile_api.py`.
+
+### Fase 8: Auto-Actualizador In-App OTA para APK y Panel de Distribución (Completada)
+- **Objetivo**: Permitir que los dispositivos Android actualicen la app con 1 tap al publicar nuevas versiones sin reinstalar manualmente.
+- **Entregables**:
+  1. `src/backend/domain/schemas/mobile.py`: Esquema `MobileVersionResponse` (`version_code`, `version_name`, `apk_available`, etc.).
+  2. `src/backend/services/mobile_sync_service.py`: Gestión de metadatos de versión y repositorio de APKs en `sync/mobile/releases/`.
+  3. `src/backend/api/routers/mobile.py`: Endpoints `GET /api/mobile/version`, `GET /api/mobile/download-apk` y `POST /api/mobile/upload-apk`.
+  4. `src/mobile/`: Banner táctil superior `[🚀 Nueva versión vX.Y.Z -> Actualizar]` que descarga e instala el APK.
+  5. `src/frontend/`: Panel de gestión y publicación de APK en Streamlit (`⚙️ Ajustes > Companion Móvil`).
+  6. Pruebas: Verificación de descarga y versionado OTA en `test_mobile_ota_version_and_download_flow`.
+
+### Fase 9: Historial del Mes con Borrado Seguro Offline/Online y Endpoints de Eliminación (Completada)
+- **Objetivo**: Permitir corregir errores de captura eliminando transacciones locales y remotas de forma segura.
+- **Entregables**:
+  1. `src/backend/services/mobile_sync_service.py`: Método `delete_mobile_transaction(identifier)` resolviendo por `mobile_event_id` o ID de transacción.
+  2. `src/backend/api/routers/mobile.py`: Endpoint `DELETE /api/mobile/transactions/{identifier}` protegido con token.
+  3. `src/mobile/src/services/storage.ts` y `HistoryView.tsx`: Soporte para borrado inmediato de cola local y encolado de borrados remotos si está offline (`gestor_mobile_pending_deletes`).
+  4. Pruebas: `test_delete_mobile_transaction_by_id_and_by_event_id` y `test_delete_mobile_transaction_api_flow`.
+
+### Fase 10: Semáforo y Alerta Preventiva en Vivo para Techo de Presupuesto de Deseos (Completada)
+- **Objetivo**: Avisar proactivamente antes de pagar si un gasto de ocio/deseo va a superar el límite constitucional del 30%.
+- **Entregables**:
+  1. `src/mobile/src/components/QuickCaptureView.tsx`: Cálculo predictivo en tiempo real `projectedSpent = wants.spent + inputAmount`.
+  2. Semáforo dinámico en 3 estados:
+     - 🟢 *Óptimo* (< 80% del presupuesto).
+     - 🟡 *Advertencia* (80% - 99.9%): Aviso preventivo en amarillo.
+     - 🔴 *Límite Superado* (>= 100%): Banner rojo con alerta de sobrecoste exacto en euros.
+  3. Pruebas: `test_wants_traffic_light_prediction_and_thresholds`.
+
+### Fase 11: Buscador Instantáneo de Gastos Históricos ("¿Cuánto me costó...?") y Caché Offline (Completada)
+- **Objetivo**: Responder en 0 ms en la calle a preguntas como "¿cuánto pagué la última vez por este servicio/producto?".
+- **Entregables**:
+  1. `src/backend/domain/schemas/mobile.py`: Esquemas `MobileHistoricalTransactionItem` y `MobileSearchResponse`.
+  2. `src/backend/services/mobile_sync_service.py`: `search_transactions(query)` y `get_historical_cache(months=12)`.
+  3. `src/backend/api/routers/mobile.py`: `GET /api/mobile/transactions/search` y `GET /api/mobile/transactions/history-cache`.
+  4. `src/mobile/src/components/SearchView.tsx`: Filtrado en memoria instantáneo sobre cola local + caché de 12 meses, sugerencias de tags y búsqueda profunda en servidor.
+  5. `src/mobile/src/components/NavigationBar.tsx`: Pestaña dedicada `[🔍 Buscar]`.
+  6. Pruebas: `test_search_historical_transactions_and_cache` y `test_search_mobile_transactions_and_cache_api`.
+
+### Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono) (Pendiente)
+- **Objetivo**: Adjuntar fotos de recibos o tickets de compra desde la cámara nativa del móvil con compresión en cliente para no saturar almacenamiento.
+- **Entregables**:
+  1. Backend: Endpoints de subida y almacenamiento de comprobantes en `sync/mobile/receipts/`.
+  2. Frontend: Botón `[📷 Foto Ticket]` junto al importe, compresión en canvas HTML5 (< 250 KB) y vinculación con el `event_id`.
+  3. Pruebas: Batería de tests de subida y persistencia de comprobantes.
+
+### Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos (Pendiente)
+- **Objetivo**: Registrar entradas puntuales de dinero desde el móvil (bizums de amigos, ventas de segunda mano, etc.) con asignación directa al mes contable.
+- **Entregables**:
+  1. Frontend: Conmutador táctil `[🔴 Gasto | 🟢 Ingreso]` en la cabecera de captura rápida.
+  2. Backend: Soporte de transacciones de tipo ingreso en `MobileSyncService`.
+  3. Pruebas: Verificación contable de imputación de ingresos en el presupuesto mensual.
+
+---
+
+## 3. Mejoras Archivadas para Futuras Especificaciones (Post-Spec 016)
+- **Atajos Rápidos de Importe y Presets Frecuentes (1-Tap)**: Botones directos con combinaciones predefinidas (ej. "Café 1,50 €", "Menú 12,00 €").
+- **Aportaciones Móviles a Huchas Conjuntas y Metas del Hogar (Spec 010)**: Conexión con fondos de amortización compartidos.

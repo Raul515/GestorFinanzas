@@ -34,6 +34,8 @@ from backend.domain.schemas.mobile import (
     MobileSyncResponse,
     MobileSyncStatusResponse,
     MobileTransactionPayload,
+    MobileHistoricalTransactionItem,
+    MobileSearchResponse,
 )
 from backend.services.joint_sync_service import get_or_create_device_id
 
@@ -726,33 +728,85 @@ class MobileSyncService:
             return tx_id
         return None
 
-
-    def delete_mobile_transaction(self, db: Session, identifier: str) -> Optional[int]:
+    def search_transactions(
+        self, db: Session, query_text: str, limit: int = 50
+    ) -> MobileSearchResponse:
         """
-        Elimina de forma segura y atómica una transacción identificada por su ID numérico
-        o por su mobile_event_id UUID.
-        Reutiliza SQLiteRepository.delete_transaction para garantizar la reversión del Fondo
-        de Emergencia y la integridad referencial.
-        Retorna el ID de la transacción eliminada, o None si no fue encontrada.
+        Buscador instantáneo de transacciones históricas en SQLite.
+        Filtra por coincidencia case-insensitive en descripción o nombre de subcategoría.
         """
-        clean_id = identifier.strip()
-        tx = None
-        if clean_id.isdigit():
-            tx = db.query(Transaction).filter(Transaction.id == int(clean_id)).first()
+        clean_q = (query_text or "").strip()
+        if not clean_q:
+            return MobileSearchResponse(query="", total_found=0, items=[])
 
-        if not tx:
-            tx = db.query(Transaction).filter(Transaction.mobile_event_id == clean_id).first()
+        search_filter = f"%{clean_q}%"
+        query = (
+            db.query(Transaction)
+            .join(Subcategory, Transaction.subcategory_id == Subcategory.id)
+            .join(Category, Subcategory.category_id == Category.id)
+            .filter(
+                (Transaction.description.ilike(search_filter))
+                | (Subcategory.name.ilike(search_filter))
+            )
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .limit(max(1, min(limit, 200)))
+        )
 
-        if not tx:
-            logger.warning("No se encontró transacción para eliminar con identificador: %s", clean_id)
-            return None
+        results = query.all()
+        items = []
+        for tx in results:
+            sub = tx.subcategory
+            cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
+            items.append(
+                MobileHistoricalTransactionItem(
+                    id=tx.id,
+                    date=str(tx.date),
+                    amount=float(tx.amount),
+                    description=tx.description or "",
+                    subcategory_id=tx.subcategory_id,
+                    subcategory_name=sub.name if sub else "",
+                    category_name=cat_name,
+                )
+            )
 
-        tx_id = tx.id
-        from backend.database.componentes.sqlite_crud import SQLiteRepository
-        repo = SQLiteRepository(db)
-        success = repo.delete_transaction(tx_id)
-        if success:
-            logger.info("Transacción móvil eliminada con éxito (ID: %s, event_id: %s)", tx_id, tx.mobile_event_id)
-            return tx_id
-        return None
+        return MobileSearchResponse(
+            query=clean_q,
+            total_found=len(items),
+            items=items,
+        )
+
+    def get_historical_cache(
+        self, db: Session, months: int = 12
+    ) -> List[MobileHistoricalTransactionItem]:
+        """
+        Exporta las transacciones de los últimos N meses para almacenamiento en caché local del teléfono.
+        """
+        cutoff_date = date.today() - timedelta(days=months * 31)
+        query = (
+            db.query(Transaction)
+            .join(Subcategory, Transaction.subcategory_id == Subcategory.id)
+            .join(Category, Subcategory.category_id == Category.id)
+            .filter(Transaction.date >= cutoff_date)
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .limit(1000)
+        )
+
+        results = query.all()
+        items = []
+        for tx in results:
+            sub = tx.subcategory
+            cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
+            items.append(
+                MobileHistoricalTransactionItem(
+                    id=tx.id,
+                    date=str(tx.date),
+                    amount=float(tx.amount),
+                    description=tx.description or "",
+                    subcategory_id=tx.subcategory_id,
+                    subcategory_name=sub.name if sub else "",
+                    category_name=cat_name,
+                )
+            )
+        return items
+
 

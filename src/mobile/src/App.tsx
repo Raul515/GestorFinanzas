@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { QuickCaptureView } from "./components/QuickCaptureView";
+import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
 import { MonthlySummaryView } from "./components/MonthlySummaryView";
 import { NavigationBar } from "./components/NavigationBar";
-import { ActiveTab, MobileTransaction, MobileVersionInfo, SubcategoryItem } from "./types";
+import {
+  ActiveTab,
+  HistoricalTransactionItem,
+  MobileTransaction,
+  MobileVersionInfo,
+  SubcategoryItem,
+} from "./types";
 import {
   loadStoredTransactions,
   saveStoredTransactions,
@@ -19,6 +26,8 @@ import {
   removePendingDelete,
   loadStoredMonthlySummary,
   saveStoredMonthlySummary,
+  loadStoredHistoryCache,
+  saveStoredHistoryCache,
 } from "./services/storage";
 import {
   fetchCatalog,
@@ -29,6 +38,8 @@ import {
   getApkDownloadUrl,
   deleteMobileTransaction,
   fetchMonthlySummary,
+  searchMobileTransactions,
+  fetchHistoryCache,
 } from "./services/api";
 import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
 
@@ -39,6 +50,7 @@ export function App() {
   const [catalog, setCatalog] = useState(loadStoredCatalog);
   const [transactions, setTransactions] = useState<MobileTransaction[]>(loadStoredTransactions);
   const [monthlySummary, setMonthlySummary] = useState(loadStoredMonthlySummary);
+  const [historyCache, setHistoryCache] = useState<HistoricalTransactionItem[]>(loadStoredHistoryCache);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [isPaired, setIsPaired] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -74,6 +86,13 @@ export function App() {
         if (remoteSummary) {
           setMonthlySummary(remoteSummary);
           saveStoredMonthlySummary(remoteSummary);
+        }
+
+        // Cargar/actualizar caché histórica de 12 meses para el buscador instantáneo offline (Fase 11)
+        const remoteHistory = await fetchHistoryCache(12);
+        if (remoteHistory && remoteHistory.length > 0) {
+          setHistoryCache(remoteHistory);
+          saveStoredHistoryCache(remoteHistory);
         }
       }
 
@@ -221,6 +240,15 @@ export function App() {
     exportTransactionsToJsonFile(transactions);
   };
 
+  const handleSearchServer = useCallback(
+    async (query: string): Promise<HistoricalTransactionItem[]> => {
+      if (!isServerOnline || !isPaired) return [];
+      const res = await searchMobileTransactions(query, 50);
+      return res?.items || [];
+    },
+    [isServerOnline, isPaired]
+  );
+
   const handleCreateSubcategory = async (
     name: string,
     categoryName: string
@@ -284,9 +312,8 @@ export function App() {
           ) : (
             <div className="flex items-center gap-1.5 text-slate-400">
               <span
-                className={`w-2 h-2 rounded-full ${
-                  isServerOnline ? "bg-emerald-400" : "bg-slate-600"
-                }`}
+                className={`w-2 h-2 rounded-full ${isServerOnline ? "bg-emerald-400" : "bg-slate-600"
+                  }`}
               ></span>
               <span>{isServerOnline ? "En línea" : "Offline"}</span>
             </div>
@@ -320,6 +347,14 @@ export function App() {
             monthlySummary={monthlySummary}
             onSaveExpense={handleSaveExpense}
             onCreateSubcategory={handleCreateSubcategory}
+          />
+        ) : activeTab === "search" ? (
+          <SearchView
+            isServerOnline={isServerOnline}
+            frequentConcepts={catalog.frequent_concepts}
+            localTransactions={transactions}
+            historyCache={historyCache}
+            onSearchServer={handleSearchServer}
           />
         ) : activeTab === "history" ? (
           <HistoryView

@@ -360,3 +360,53 @@ def test_delete_mobile_transaction_api_flow(client: TestClient, db_session: Sess
     )
     assert resp_del_404.status_code == 404
 
+
+def test_search_mobile_transactions_and_cache_api(
+    client: TestClient, db_session: Session, auth_headers: dict
+):
+    """Verifica los endpoints de búsqueda profunda y descarga de caché histórica (Fase 11)."""
+    cat = Category(name="Necesidades Básicas (50%)", type="expense")
+    db_session.add(cat)
+    db_session.commit()
+    assert cat.id is not None
+
+    sub = Subcategory(name="Taller Mecánico", category_id=cat.id)
+    db_session.add(sub)
+    db_session.commit()
+    assert sub.id is not None
+
+    tx = Transaction(
+        date=date(2026, 11, 20),
+        subcategory_id=sub.id,
+        amount=145.0,
+        description="Cambio de aceite y filtros",
+        mobile_event_id="evt_srch_api_001",
+    )
+    db_session.add(tx)
+    db_session.commit()
+
+    # 1. Búsqueda sin autenticación -> 403 Forbidden
+    resp_unauth = client.get("/api/mobile/transactions/search?q=aceite")
+    assert resp_unauth.status_code == 403
+
+    # 2. Búsqueda con token válido -> 200 OK con resultados
+    resp_search = client.get("/api/mobile/transactions/search?q=aceite", headers=auth_headers)
+    assert resp_search.status_code == 200
+    s_data = resp_search.json()
+    assert s_data["query"] == "aceite"
+    assert s_data["total_found"] >= 1
+    assert any("Cambio de aceite" in r["description"] for r in s_data["items"])
+
+    # 3. Caché histórica sin autenticación -> 403 Forbidden
+    resp_cache_unauth = client.get("/api/mobile/transactions/history-cache?months=12")
+    assert resp_cache_unauth.status_code == 403
+
+    # 4. Caché histórica con token válido -> 200 OK con lista de transacciones
+    resp_cache = client.get("/api/mobile/transactions/history-cache?months=12", headers=auth_headers)
+    assert resp_cache.status_code == 200
+    cache_data = resp_cache.json()
+    assert isinstance(cache_data, list)
+    assert len(cache_data) >= 1
+    assert any(r["description"] == "Cambio de aceite y filtros" for r in cache_data)
+
+

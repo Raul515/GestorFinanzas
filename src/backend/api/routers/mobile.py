@@ -5,7 +5,7 @@ sincronización de transacciones e informes de estado.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -21,6 +21,8 @@ from backend.domain.schemas.mobile import (
     MobileSyncResponse,
     MobileSyncStatusResponse,
     MobileVersionResponse,
+    MobileHistoricalTransactionItem,
+    MobileSearchResponse,
 )
 from backend.services.mobile_sync_service import MobileSyncService
 
@@ -86,6 +88,30 @@ def delete_transaction(
             detail=f"No se encontró la transacción con identificador '{identifier}' para eliminar.",
         )
     return {"success": True, "deleted_id": deleted_id, "identifier": identifier}
+
+
+@router.get("/transactions/search", response_model=MobileSearchResponse)
+def search_transactions(
+    q: str = Query(..., min_length=1, description="Texto a buscar en conceptos o subcategorías"),
+    limit: int = Query(50, ge=1, le=200, description="Máximo número de resultados"),
+    db: Session = Depends(get_db),
+    service: MobileSyncService = Depends(get_sync_service),
+    _auth: str = Depends(verify_mobile_token),
+) -> MobileSearchResponse:
+    """Buscador instantáneo de transacciones históricas en SQLite para el teléfono."""
+    return service.search_transactions(db, query_text=q, limit=limit)
+
+
+@router.get("/transactions/history-cache", response_model=List[MobileHistoricalTransactionItem])
+def get_history_cache(
+    months: int = Query(12, ge=1, le=60, description="Meses hacia atrás a sincronizar"),
+    db: Session = Depends(get_db),
+    service: MobileSyncService = Depends(get_sync_service),
+    _auth: str = Depends(verify_mobile_token),
+) -> List[MobileHistoricalTransactionItem]:
+    """Retorna un paquete compacto de transacciones de los últimos N meses para la caché offline del móvil."""
+    return service.get_historical_cache(db, months=months)
+
 
 
 

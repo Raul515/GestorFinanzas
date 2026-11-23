@@ -157,3 +157,22 @@ class MobileVersionResponse(BaseModel):
     release_notes: Optional[str] = Field(None, description="Release changelog notes")
     released_at_utc: Optional[str] = None
 
+
+class MobileHistoricalTransactionItem(BaseModel):
+    """Historical transaction record for fast mobile search."""
+    id: int
+    date: str
+    amount: float
+    description: str
+    subcategory_id: int
+    subcategory_name: str
+    category_name: str
+
+
+class MobileSearchResponse(BaseModel):
+    """Response containing matched transactions for mobile search."""
+    query: str
+    total_found: int
+    items: List[MobileHistoricalTransactionItem] = Field(default_factory=list)
+
+

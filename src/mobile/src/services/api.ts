@@ -1,4 +1,12 @@
-import { CatalogData, MobileMonthlySummary, MobileTransaction, MobileVersionInfo, SubcategoryItem } from "../types";
+import {
+  CatalogData,
+  HistoricalTransactionItem,
+  MobileMonthlySummary,
+  MobileTransaction,
+  MobileVersionInfo,
+  SearchResponse,
+  SubcategoryItem,
+} from "../types";
 import { getStoredPairingToken } from "./storage";
 
 const getBaseApiUrl = (): string => {
@@ -195,4 +203,36 @@ export const deleteMobileTransaction = async (
     return false;
   }
 };
+
+export const searchMobileTransactions = async (
+  query: string,
+  limit = 50
+): Promise<SearchResponse | null> => {
+  try {
+    const res = await fetch(
+      `${getBaseApiUrl()}/api/mobile/transactions/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      { headers: getCommonHeaders() }
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+export const fetchHistoryCache = async (
+  months = 12
+): Promise<HistoricalTransactionItem[] | null> => {
+  try {
+    const res = await fetch(
+      `${getBaseApiUrl()}/api/mobile/transactions/history-cache?months=${months}`,
+      { headers: getCommonHeaders() }
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
 

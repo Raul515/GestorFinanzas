@@ -25,7 +25,7 @@ export interface MobileTransaction {
   status: "PENDING_SYNC" | "SYNCED";
 }
 
-export type ActiveTab = "capture" | "history" | "summary";
+export type ActiveTab = "capture" | "search" | "history" | "summary";
 
 export interface MobileCategorySummary {
   category_name: string;
@@ -73,3 +73,20 @@ export interface MobileVersionInfo {
   release_notes?: string;
   released_at_utc?: string;
 }
+
+export interface HistoricalTransactionItem {
+  id: number;
+  date: string;
+  amount: number;
+  description: string;
+  subcategory_id: number;
+  subcategory_name: string;
+  category_name: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  total_found: number;
+  items: HistoricalTransactionItem[];
+}
+

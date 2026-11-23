@@ -514,3 +514,69 @@ def test_wants_traffic_light_prediction_and_thresholds():
     assert deficit_3 == 20.0
 
 
+def test_search_historical_transactions_and_cache(populated_db: Session):
+    """Verifica la búsqueda por texto y la generación de caché histórica de 12 meses (Fase 11)."""
+    service = MobileSyncService()
+
+    sub_gas = populated_db.query(Subcategory).filter(Subcategory.name == "Gasolina").first()
+    sub_cafe = populated_db.query(Subcategory).filter(Subcategory.name == "Café y Desayunos").first()
+    assert sub_gas is not None
+    assert sub_cafe is not None
+
+    tx1 = Transaction(
+        date=date(2026, 11, 10),
+        subcategory_id=sub_gas.id,
+        amount=55.40,
+        description="Repsol Gasolina 95",
+        mobile_event_id="evt_srch_001",
+    )
+    tx2 = Transaction(
+        date=date(2026, 11, 15),
+        subcategory_id=sub_gas.id,
+        amount=48.20,
+        description="ITV Pasada Furgoneta",
+        mobile_event_id="evt_srch_002",
+    )
+    tx3 = Transaction(
+        date=date(2026, 10, 5),
+        subcategory_id=sub_cafe.id,
+        amount=3.20,
+        description="Café con tostada",
+        mobile_event_id="evt_srch_003",
+    )
+    populated_db.add_all([tx1, tx2, tx3])
+    populated_db.commit()
+
+    # 1. Búsqueda exacta e insensible a mayúsculas por concepto
+    results_itv = service.search_transactions(populated_db, query_text="itv")
+    assert results_itv.total_found == 1
+    assert results_itv.items[0].description == "ITV Pasada Furgoneta"
+    assert results_itv.items[0].amount == 48.20
+    assert results_itv.items[0].subcategory_name == "Gasolina"
+
+    # 2. Búsqueda por nombre de subcategoría
+    results_gas = service.search_transactions(populated_db, query_text="gasolina")
+    assert results_gas.total_found == 2
+    descriptions = [r.description for r in results_gas.items]
+    assert "Repsol Gasolina 95" in descriptions
+    assert "ITV Pasada Furgoneta" in descriptions
+
+    # 3. Búsqueda vacía devuelve lista vacía
+    empty_res = service.search_transactions(populated_db, query_text="")
+    assert empty_res.total_found == 0
+    assert empty_res.items == []
+
+    # 4. Obtención de caché histórica de 12 meses
+    cache = service.get_historical_cache(populated_db, months=12)
+    assert len(cache) >= 3
+    # Comprobar que está ordenado descendente por fecha
+    assert cache[0].date >= cache[1].date
+    first = cache[0]
+    assert hasattr(first, "id")
+    assert hasattr(first, "date")
+    assert hasattr(first, "amount")
+    assert hasattr(first, "description")
+    assert hasattr(first, "subcategory_name")
+
+
+

@@ -1,4 +1,10 @@
-import { CatalogData, MobileMonthlySummary, MobileTransaction, SubcategoryItem } from "../types";
+import {
+  CatalogData,
+  HistoricalTransactionItem,
+  MobileMonthlySummary,
+  MobileTransaction,
+  SubcategoryItem,
+} from "../types";
 
 const STORAGE_KEYS = {
   TRANSACTIONS: "gestor_mobile_transactions",
@@ -7,6 +13,7 @@ const STORAGE_KEYS = {
   PAIRING_TOKEN: "gestor_mobile_pairing_token",
   PENDING_DELETES: "gestor_mobile_pending_deletes",
   MONTHLY_SUMMARY: "gestor_mobile_monthly_summary",
+  HISTORY_CACHE: "gestor_mobile_history_cache",
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
@@ -153,6 +160,24 @@ export const saveStoredMonthlySummary = (summary: MobileMonthlySummary): void =>
     localStorage.setItem(STORAGE_KEYS.MONTHLY_SUMMARY, JSON.stringify(summary));
   } catch (err) {
     console.error("Error guardando resumen mensual en almacenamiento local:", err);
+  }
+};
+
+export const loadStoredHistoryCache = (): HistoricalTransactionItem[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.HISTORY_CACHE);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+};
+
+export const saveStoredHistoryCache = (items: HistoricalTransactionItem[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.HISTORY_CACHE, JSON.stringify(items));
+  } catch (err) {
+    console.error("Error guardando histórico en caché local:", err);
   }
 };
 

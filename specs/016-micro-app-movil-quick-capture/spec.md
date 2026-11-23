@@ -128,6 +128,43 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
     - Enlace a la guía de instalación y enlace de descarga del APK compilado.
     - Visor con las últimas transacciones recibidas desde el móvil.
 
+### 3.6 Mejoras de Productividad y Ergonomía Móvil (Fases 7 a 13)
+
+- **RF-11 (Vista "Mi Mes" y Ejecución Presupuestaria 50/30/20)**:
+  - Endpoint `GET /api/mobile/summary` que calcula en tiempo real el presupuesto del mes seleccionado, el gasto total, disponible y progreso en Necesidades (50%), Deseos (30%) y Ahorro (20%), junto con el estado del Fondo de Emergencia en meses cubiertos.
+  - Endpoint `POST /api/mobile/budget` que permite reasignar importes presupuestarios por subcategoría desde el teléfono.
+  - Pestaña `[📊 Mi Mes]` con interfaz interactiva y edición in-situ.
+
+- **RF-12 (Auto-Actualizador In-App OTA para APK Android)**:
+  - Endpoints `GET /api/mobile/version`, `GET /api/mobile/download-apk` y `POST /api/mobile/upload-apk`.
+  - Detección automática al abrir la micro-app de nuevas versiones mediante comparación de `version_code`.
+  - Banner táctil superior que permite actualizar el APK con 1 tap sin necesidad de reinstalar manualmente.
+  - Panel de distribución en Streamlit para publicar nuevos APKs compilados.
+
+- **RF-13 (Historial del Mes con Borrado Seguro Offline/Online)**:
+  - Endpoint `DELETE /api/mobile/transactions/{identifier}` que resuelve tanto por `mobile_event_id` como por ID numérico de transacción.
+  - Interfaz en `HistoryView` con botón `[🗑️]` y confirmación antes de eliminar.
+  - Soporte offline: si no hay conexión con el servidor, el apunte se elimina inmediatamente de la pantalla y el borrado remoto se encola en `gestor_mobile_pending_deletes` para ejecutarse en el siguiente reintento.
+
+- **RF-14 (Semáforo y Alerta Preventiva en Vivo para Techo de Presupuesto de Deseos)**:
+  - Cálculo instantáneo en `QuickCaptureView` mientras el usuario teclea el importe: `projectedSpent = wants.spent + inputAmount`.
+  - Semáforo reactivo: Verde (< 80%), Amarillo de advertencia (80% - 99.9%) y Rojo de límite superado (>= 100%) con cálculo del sobrecoste en euros antes de guardar.
+
+- **RF-15 (Buscador Instantáneo de Gastos Históricos y Caché Offline)**:
+  - Endpoints `GET /api/mobile/transactions/search` y `GET /api/mobile/transactions/history-cache`.
+  - Búsqueda táctil a 0 ms sobre las transacciones locales y una caché histórica de 12 meses guardada en el dispositivo.
+  - Posibilidad de extender la búsqueda a todo el histórico en el servidor con 1 tap si se está conectado.
+  - Píldora `[ÚLTIMO]` para el pago más reciente y formato de fechas estrictamente en `DD/MM/AAAA`.
+
+- **RF-16 (Captura con Foto del Ticket de Compra)**:
+  - Botón `[📷 Foto Ticket]` en el formulario de captura.
+  - Captura desde la cámara nativa del teléfono con compresión client-side en canvas (< 250 KB en formato JPEG/WebP).
+  - Almacenamiento seguro en el servidor bajo `sync/mobile/receipts/` vinculado al `event_id`.
+
+- **RF-17 (Captura de Ingresos Extraordinarios y Bizums)**:
+  - Conmutador táctil `[🔴 Gasto | 🟢 Ingreso]` en el formulario de captura rápida.
+  - Asignación directa como ingreso contable en el mes activo para registrar bizums recibidos o reembolsos en segundos.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

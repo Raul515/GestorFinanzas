@@ -1,4 +1,4 @@
-import { Zap, ListOrdered, PieChart } from "lucide-react";
+import { Zap, ListOrdered, PieChart, Search } from "lucide-react";
 import { ActiveTab } from "../types";
 
 interface NavigationBarProps {
@@ -13,26 +13,40 @@ export const NavigationBar = ({
   pendingCount,
 }: NavigationBarProps) => {
   return (
-    <nav className="w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 py-1.5 px-6 flex items-center justify-around shrink-0 max-w-sm mx-auto select-none">
+    <nav className="w-full bg-slate-900/90 backdrop-blur-md border-t border-slate-800 py-1.5 px-3 flex items-center justify-around shrink-0 max-w-sm mx-auto select-none">
       {/* Pestaña 1: Captura Rápida */}
       <button
         type="button"
         onClick={() => onChangeTab("capture")}
-        className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+        className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
           activeTab === "capture"
             ? "text-emerald-400 font-bold scale-105"
             : "text-slate-400 hover:text-slate-200"
         }`}
       >
         <Zap className="w-5 h-5 fill-current" />
-        <span className="text-[11px]">Captura</span>
+        <span className="text-[10px]">Captura</span>
       </button>
 
-      {/* Pestaña 2: Historial y Cola */}
+      {/* Pestaña 2: Buscador Instantáneo (Fase 11) */}
+      <button
+        type="button"
+        onClick={() => onChangeTab("search")}
+        className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
+          activeTab === "search"
+            ? "text-emerald-400 font-bold scale-105"
+            : "text-slate-400 hover:text-slate-200"
+        }`}
+      >
+        <Search className="w-5 h-5" />
+        <span className="text-[10px]">Buscar</span>
+      </button>
+
+      {/* Pestaña 3: Historial y Cola */}
       <button
         type="button"
         onClick={() => onChangeTab("history")}
-        className={`relative flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+        className={`relative flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
           activeTab === "history"
             ? "text-emerald-400 font-bold scale-105"
             : "text-slate-400 hover:text-slate-200"
@@ -46,22 +60,23 @@ export const NavigationBar = ({
             </span>
           )}
         </div>
-        <span className="text-[11px]">Historial</span>
+        <span className="text-[10px]">Historial</span>
       </button>
 
-      {/* Pestaña 3: Mi Mes */}
+      {/* Pestaña 4: Mi Mes */}
       <button
         type="button"
         onClick={() => onChangeTab("summary")}
-        className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+        className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl transition-all ${
           activeTab === "summary"
             ? "text-emerald-400 font-bold scale-105"
             : "text-slate-400 hover:text-slate-200"
         }`}
       >
         <PieChart className="w-5 h-5" />
-        <span className="text-[11px]">Mi Mes</span>
+        <span className="text-[10px]">Mi Mes</span>
       </button>
     </nav>
   );
 };
+
