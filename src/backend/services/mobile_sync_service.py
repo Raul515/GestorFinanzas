@@ -696,3 +696,63 @@ class MobileSyncService:
 
         logger.info("Nueva versión de APK móvil publicada: %s (v%s, código %d)", safe_filename, version_name, version_code)
         return self.get_mobile_version_info()
+
+    def delete_mobile_transaction(self, db: Session, identifier: str) -> Optional[int]:
+        """
+        Elimina de forma segura y atómica una transacción identificada por su ID numérico
+        o por su mobile_event_id UUID.
+        Reutiliza SQLiteRepository.delete_transaction para garantizar la reversión del Fondo
+        de Emergencia y la integridad referencial.
+        Retorna el ID de la transacción eliminada, o None si no fue encontrada.
+        """
+        clean_id = identifier.strip()
+        tx = None
+        if clean_id.isdigit():
+            tx = db.query(Transaction).filter(Transaction.id == int(clean_id)).first()
+
+        if not tx:
+            tx = db.query(Transaction).filter(Transaction.mobile_event_id == clean_id).first()
+
+        if not tx:
+            logger.warning("No se encontró transacción para eliminar con identificador: %s", clean_id)
+            return None
+
+        tx_id = tx.id
+        from backend.database.componentes.sqlite_crud import SQLiteRepository
+        repo = SQLiteRepository(db)
+        success = repo.delete_transaction(tx_id)
+        if success:
+            logger.info("Transacción móvil eliminada con éxito (ID: %s, event_id: %s)", tx_id, tx.mobile_event_id)
+            return tx_id
+        return None
+
+
+    def delete_mobile_transaction(self, db: Session, identifier: str) -> Optional[int]:
+        """
+        Elimina de forma segura y atómica una transacción identificada por su ID numérico
+        o por su mobile_event_id UUID.
+        Reutiliza SQLiteRepository.delete_transaction para garantizar la reversión del Fondo
+        de Emergencia y la integridad referencial.
+        Retorna el ID de la transacción eliminada, o None si no fue encontrada.
+        """
+        clean_id = identifier.strip()
+        tx = None
+        if clean_id.isdigit():
+            tx = db.query(Transaction).filter(Transaction.id == int(clean_id)).first()
+
+        if not tx:
+            tx = db.query(Transaction).filter(Transaction.mobile_event_id == clean_id).first()
+
+        if not tx:
+            logger.warning("No se encontró transacción para eliminar con identificador: %s", clean_id)
+            return None
+
+        tx_id = tx.id
+        from backend.database.componentes.sqlite_crud import SQLiteRepository
+        repo = SQLiteRepository(db)
+        success = repo.delete_transaction(tx_id)
+        if success:
+            logger.info("Transacción móvil eliminada con éxito (ID: %s, event_id: %s)", tx_id, tx.mobile_event_id)
+            return tx_id
+        return None
+

@@ -14,6 +14,9 @@ import {
   extractAndSavePairingTokenFromUrl,
   getStoredPairingToken,
   saveStoredPairingToken,
+  loadStoredPendingDeletes,
+  addPendingDelete,
+  removePendingDelete,
 } from "./services/storage";
 import {
   fetchCatalog,
@@ -22,6 +25,7 @@ import {
   createSubcategoryOnTheFly,
   fetchLatestVersion,
   getApkDownloadUrl,
+  deleteMobileTransaction,
 } from "./services/api";
 import { ShieldAlert, KeyRound, Check, X } from "lucide-react";
 
@@ -81,6 +85,22 @@ export function App() {
 
     setIsSyncing(true);
     try {
+      // 1. Procesar borrados pendientes de sincronizar
+      const pendingDeletes = loadStoredPendingDeletes();
+      if (pendingDeletes.length > 0) {
+        for (const delId of pendingDeletes) {
+          try {
+            const ok = await deleteMobileTransaction(delId);
+            if (ok) {
+              removePendingDelete(delId);
+            }
+          } catch {
+            // Reintento en el siguiente ciclo
+          }
+        }
+      }
+
+      // 2. Ingestar transacciones nuevas en cola
       const result = await syncTransactionsWithBackend(pending);
       if (result && result.success) {
         // Marcar todas las pendientes como sincronizadas
@@ -139,12 +159,29 @@ export function App() {
     }
   };
 
-  const handleDeletePending = (eventId: string) => {
+  const handleDeleteTransaction = async (tx: MobileTransaction) => {
+    // 1. Eliminar inmediatamente del estado y almacenamiento local
     setTransactions((prev) => {
-      const updated = prev.filter((t) => t.event_id !== eventId);
+      const updated = prev.filter((t) => t.event_id !== tx.event_id);
       saveStoredTransactions(updated);
       return updated;
     });
+
+    // 2. Si la transacción ya estaba subida al servidor, solicitar borrado remoto o encolarlo
+    if (tx.status === "SYNCED") {
+      if (isServerOnline && isPaired) {
+        try {
+          const ok = await deleteMobileTransaction(tx.event_id);
+          if (!ok) {
+            addPendingDelete(tx.event_id);
+          }
+        } catch {
+          addPendingDelete(tx.event_id);
+        }
+      } else {
+        addPendingDelete(tx.event_id);
+      }
+    }
   };
 
   const handleExportJson = () => {
@@ -255,7 +292,7 @@ export function App() {
             transactions={transactions}
             isSyncing={isSyncing}
             onTriggerSync={handleTriggerSync}
-            onDeletePending={handleDeletePending}
+            onDeleteTransaction={handleDeleteTransaction}
             onExportJson={handleExportJson}
           />
         ) : (

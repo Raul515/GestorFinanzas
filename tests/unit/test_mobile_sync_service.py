@@ -437,3 +437,52 @@ def test_mobile_apk_ota_version_and_publish(tmp_path: Path):
     assert apk_file is not None
     assert apk_file.name == "gestor-finanzas-v1.1.apk"
     assert apk_file.read_bytes() == dummy_apk
+
+
+def test_delete_mobile_transaction_by_id_and_by_event_id(populated_db, tmp_path: Path):
+    """Verifica la eliminación segura de transacciones por id numérico o por mobile_event_id (Fase 9)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    # Obtener una subcategoría de prueba
+    subcat = populated_db.query(Subcategory).first()
+    assert subcat is not None
+
+    # 1. Crear transacción con mobile_event_id
+    tx1 = Transaction(
+        date=date(2026, 11, 23),
+        subcategory_id=subcat.id,
+        amount=25.50,
+        description="Cena con amigos",
+        mobile_event_id="evt_del_test_001",
+    )
+    populated_db.add(tx1)
+    populated_db.commit()
+    populated_db.refresh(tx1)
+
+    tx1_id = tx1.id
+    assert tx1_id is not None
+
+    # 2. Eliminar usando mobile_event_id
+    deleted_id = service.delete_mobile_transaction(populated_db, "evt_del_test_001")
+    assert deleted_id == tx1_id
+    assert populated_db.query(Transaction).filter(Transaction.id == tx1_id).first() is None
+
+    # 3. Crear otra transacción y eliminar usando ID numérico
+    tx2 = Transaction(
+        date=date(2026, 11, 23),
+        subcategory_id=subcat.id,
+        amount=12.00,
+        description="Café y tostada",
+        mobile_event_id="evt_del_test_002",
+    )
+    populated_db.add(tx2)
+    populated_db.commit()
+    populated_db.refresh(tx2)
+
+    deleted_by_num = service.delete_mobile_transaction(populated_db, str(tx2.id))
+    assert deleted_by_num == tx2.id
+    assert populated_db.query(Transaction).filter(Transaction.id == tx2.id).first() is None
+
+    # 4. Intentar eliminar identificador inexistente
+    assert service.delete_mobile_transaction(populated_db, "inexistente_123") is None
+

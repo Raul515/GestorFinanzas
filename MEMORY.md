@@ -233,7 +233,8 @@
        4. **Captura Rápida de Ingresos Extraordinarios y Transferencias**: Habilitar en el teclado selector para registrar nóminas, bizums recibidos, pagas extra o transferencias entre cuentas.
        5. **Atajos Rápidos de Importe / Presets de Gastos Habituales**: Botones de 1 tap para gastos fijos repetitivos (ej. 1,50 € café, 2,50 € desayuno, 12,00 € menú diario) para reducir el tiempo de captura a menos de 2 segundos.
        6. **Captura con Foto del Ticket de Compra (Cámara del Teléfono)**: Botón `[📷 Foto Ticket]` junto al importe para almacenar el comprobante digital o extraer importe/fecha con OCR.
-       7. **Selector de Ámbito `👥 Hogar / Cuenta Conjunta` con Elección de Pagador**: Switch táctil `[👤 Personal | 👥 Hogar]`. Si se marca Hogar, selector rápido `[Pagué Yo]` o `[Pagó Mi Pareja]`, con imputación a `joint_transactions` y cálculo automático de compensaciones (Spec 010).
+       7. **Buscador Instantáneo de Gastos Históricos ("¿Cuánto me costó...?")**: Barra de búsqueda offline en IndexedDB para filtrar en milisegundos compras anteriores por concepto o subcategoría.
+       8. **Selector de Ámbito `👥 Hogar / Cuenta Conjunta` con Elección de Pagador**: Switch táctil `[👤 Personal | 👥 Hogar]`. Si se marca Hogar, selector rápido `[Pagué Yo]` o `[Pagó Mi Pareja]`, con imputación a `joint_transactions` y cálculo automático de compensaciones (Spec 010).
      - *Diferenciación Técnica por Plataforma*:
        - **Android (APK Directa / Sideloading - Máxima Viabilidad)**:
          - Desarrollo en framework ligero multiplataforma (ej. Flutter, React Native/Expo o Flet/Capacitor).

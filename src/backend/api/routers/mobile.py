@@ -70,6 +70,25 @@ def sync_transactions(
     return service.process_mobile_sync(db, request)
 
 
+@router.delete("/transactions/{identifier}", response_model=Dict[str, Any])
+@router.delete("/transaction/{identifier}", response_model=Dict[str, Any])
+def delete_transaction(
+    identifier: str,
+    db: Session = Depends(get_db),
+    service: MobileSyncService = Depends(get_sync_service),
+    _auth: str = Depends(verify_mobile_token),
+) -> Dict[str, Any]:
+    """Elimina de forma segura una transacción móvil identificada por ID numérico o mobile_event_id."""
+    deleted_id = service.delete_mobile_transaction(db, identifier)
+    if not deleted_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se encontró la transacción con identificador '{identifier}' para eliminar.",
+        )
+    return {"success": True, "deleted_id": deleted_id, "identifier": identifier}
+
+
+
 @router.post("/subcategory", response_model=MobileSubcategoryResponse)
 def create_subcategory(
     payload: MobileSubcategoryCreate,

@@ -1,4 +1,5 @@
-import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight, AlertTriangle } from "lucide-react";
 import { MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
 
@@ -6,7 +7,7 @@ interface HistoryViewProps {
   transactions: MobileTransaction[];
   isSyncing: boolean;
   onTriggerSync: () => void;
-  onDeletePending: (eventId: string) => void;
+  onDeleteTransaction: (tx: MobileTransaction) => void;
   onExportJson: () => void;
 }
 
@@ -14,36 +15,36 @@ export const HistoryView = ({
   transactions,
   isSyncing,
   onTriggerSync,
-  onDeletePending,
+  onDeleteTransaction,
   onExportJson,
 }: HistoryViewProps) => {
+  const [txToDelete, setTxToDelete] = useState<MobileTransaction | null>(null);
+
   const pendingTx = transactions.filter((t) => t.status === "PENDING_SYNC");
   const syncedTx = transactions.filter((t) => t.status === "SYNCED");
+  const totalMonthSpent = transactions.reduce((sum, t) => sum + t.amount, 0);
 
   const formatDateDisplay = (isoDate: string) => {
     const [y, m, d] = isoDate.split("-");
     return `${d}/${m}/${y}`;
   };
 
+  const handleConfirmDelete = () => {
+    if (txToDelete) {
+      onDeleteTransaction(txToDelete);
+      setTxToDelete(null);
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-3 overflow-y-auto no-scrollbar gap-4">
-      {/* Tarjeta de Estado de Sincronización */}
+    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-3 overflow-y-auto no-scrollbar gap-4 relative">
+      {/* Tarjeta de Resumen y Estado de Sincronización */}
       <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col gap-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-400 font-medium">Estado de la Cola</div>
-            <div className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              {pendingTx.length > 0 ? (
-                <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
-                  <span>{pendingTx.length} pendientes</span>
-                </>
-              ) : (
-                <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                  <span className="text-emerald-400">Al día (0 pendientes)</span>
-                </>
-              )}
+            <div className="text-xs text-slate-400 font-medium">Total Registrado en Móvil</div>
+            <div className="text-xl font-black text-slate-100 font-mono">
+              -{totalMonthSpent.toFixed(2)} €
             </div>
           </div>
 
@@ -58,20 +59,25 @@ export const HistoryView = ({
             }`}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
-            <span>{isSyncing ? "Enviando..." : "Sincronizar"}</span>
+            <span>{isSyncing ? "Enviando..." : pendingTx.length > 0 ? `Subir (${pendingTx.length})` : "Al día"}</span>
           </button>
         </div>
 
         {/* Botón de exportación JSON opcional */}
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <span>Copia de seguridad en disco</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${pendingTx.length > 0 ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`}
+            />
+            <span>{pendingTx.length > 0 ? `${pendingTx.length} pendientes` : "Todo sincronizado"}</span>
+          </span>
           <button
             type="button"
             onClick={onExportJson}
             className="flex items-center gap-1 text-slate-300 hover:text-emerald-400 active:underline py-1"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Descargar JSON</span>
+            <span>Exportar JSON</span>
           </button>
         </div>
       </div>
@@ -81,13 +87,13 @@ export const HistoryView = ({
         <div className="flex items-center justify-between px-1 mb-2">
           <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            <span>Pendientes de Enviar ({pendingTx.length})</span>
+            <span>Pendientes de Subir ({pendingTx.length})</span>
           </h4>
         </div>
 
         {pendingTx.length === 0 ? (
-          <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/60 text-center text-xs text-slate-500">
-            No hay gastos pendientes en la cola local.
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/60 text-center text-xs text-slate-500">
+            No hay gastos pendientes en la memoria local.
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -118,8 +124,8 @@ export const HistoryView = ({
                     </span>
                     <button
                       type="button"
-                      title="Eliminar gasto pendiente"
-                      onClick={() => onDeletePending(tx.event_id)}
+                      title="Eliminar gasto"
+                      onClick={() => setTxToDelete(tx)}
                       className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 active:bg-slate-800 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -132,22 +138,22 @@ export const HistoryView = ({
         )}
       </div>
 
-      {/* Sección 2: Gastos Recientes Confirmados */}
+      {/* Sección 2: Gastos Sincronizados y Confirmados */}
       <div>
         <div className="flex items-center justify-between px-1 mb-2">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Confirmados en el Ordenador ({syncedTx.length})</span>
+            <span>Confirmados en Base de Datos ({syncedTx.length})</span>
           </h4>
         </div>
 
         {syncedTx.length === 0 ? (
-          <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/60 text-center text-xs text-slate-500">
-            Los gastos sincronizados aparecerán aquí.
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/60 text-center text-xs text-slate-500">
+            Los gastos ya subidos al PC aparecerán aquí.
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {syncedTx.slice(0, 10).map((tx) => {
+            {syncedTx.map((tx) => {
               const emoji = getSubcategoryEmoji(tx.subcategory_name);
               return (
                 <div
@@ -164,9 +170,19 @@ export const HistoryView = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 font-mono font-semibold text-slate-300 shrink-0">
-                    <span>-{tx.amount.toFixed(2)} €</span>
-                    <ArrowUpRight className="w-3 h-3 text-emerald-500" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 font-mono font-semibold text-slate-300">
+                      <span>-{tx.amount.toFixed(2)} €</span>
+                      <ArrowUpRight className="w-3 h-3 text-emerald-500" />
+                    </div>
+                    <button
+                      type="button"
+                      title="Eliminar gasto sincronizado"
+                      onClick={() => setTxToDelete(tx)}
+                      className="p-1 rounded text-slate-600 hover:text-rose-400 active:bg-slate-800 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );
@@ -174,6 +190,56 @@ export const HistoryView = ({
           </div>
         )}
       </div>
+
+      {/* Modal Táctil de Confirmación de Borrado */}
+      {txToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-xs rounded-2xl bg-slate-900 border border-rose-500/40 p-5 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">¿Eliminar gasto?</h3>
+                <p className="text-[11px] text-slate-400">
+                  {txToDelete.status === "PENDING_SYNC"
+                    ? "Se borrará de la memoria local del teléfono."
+                    : "Se revertirá en la base de datos del ordenador."}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-slate-200 truncate">{txToDelete.description}</div>
+                <div className="text-[10px] text-slate-400">{txToDelete.subcategory_name} • {formatDateDisplay(txToDelete.date)}</div>
+              </div>
+              <div className="text-sm font-black font-mono text-rose-400 shrink-0">
+                -{txToDelete.amount.toFixed(2)} €
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setTxToDelete(null)}
+                className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-md shadow-rose-900/40 active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Eliminar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

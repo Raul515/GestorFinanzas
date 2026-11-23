@@ -297,3 +297,66 @@ def test_mobile_ota_version_and_download_flow(client: TestClient):
     assert resp_down.status_code == 200
     assert resp_down.headers.get("content-type") == "application/vnd.android.package-archive"
     assert resp_down.content == apk_content
+
+
+def test_delete_mobile_transaction_api_flow(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica el endpoint DELETE /api/mobile/transactions/{id} con seguridad de token (Fase 9)."""
+    cat = Category(name="Deseos (30%)", type="expense")
+    db_session.add(cat)
+    db_session.commit()
+    assert cat.id is not None
+
+    sub = Subcategory(name="Cena para Borrar", category_id=cat.id)
+    db_session.add(sub)
+    db_session.commit()
+    assert sub.id is not None
+
+    # 1. Crear una transacción mediante sync
+    evt_id = "evt_api_del_test_999"
+    payload = {
+        "device_id": "test-device",
+        "transactions": [
+            {
+                "event_id": evt_id,
+                "scope": "PERSONAL",
+                "amount": 18.50,
+                "description": "Cena para borrar",
+                "date": str(date.today()),
+                "subcategory_id": sub.id,
+            }
+        ],
+    }
+    sync_resp = client.post(
+        "/api/mobile/sync",
+        json=payload,
+        headers=auth_headers,
+    )
+    assert sync_resp.status_code == 200
+    assert sync_resp.json()["processed_count"] == 1
+
+    # 2. Intentar eliminar sin token -> 403 Forbidden
+    resp_no_token = client.delete(f"/api/mobile/transactions/{evt_id}")
+    assert resp_no_token.status_code == 403
+
+    # 3. Eliminar con token válido -> 200 OK
+    resp_del = client.delete(
+        f"/api/mobile/transactions/{evt_id}",
+        headers=auth_headers,
+    )
+    assert resp_del.status_code == 200
+    del_data = resp_del.json()
+    assert del_data["success"] is True
+    assert del_data["identifier"] == evt_id
+    assert del_data["deleted_id"] is not None
+
+    # 4. Verificar que ya no existe en la BD
+    tx_check = db_session.query(Transaction).filter(Transaction.mobile_event_id == evt_id).first()
+    assert tx_check is None
+
+    # 5. Intentar eliminarlo de nuevo -> 404 Not Found
+    resp_del_404 = client.delete(
+        f"/api/mobile/transactions/{evt_id}",
+        headers=auth_headers,
+    )
+    assert resp_del_404.status_code == 404
+

@@ -178,3 +178,21 @@ export const fetchLatestVersion = async (): Promise<MobileVersionInfo | null> =>
 export const getApkDownloadUrl = (): string => {
   return `${getBaseApiUrl()}/api/mobile/download-apk`;
 };
+
+export const deleteMobileTransaction = async (
+  idOrEventId: string | number
+): Promise<boolean> => {
+  try {
+    const res = await fetch(
+      `${getBaseApiUrl()}/api/mobile/transactions/${encodeURIComponent(String(idOrEventId))}`,
+      {
+        method: "DELETE",
+        headers: getCommonHeaders(),
+      }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+

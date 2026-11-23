@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   CATALOG: "gestor_mobile_catalog",
   SERVER_URL: "gestor_mobile_server_url",
   PAIRING_TOKEN: "gestor_mobile_pairing_token",
+  PENDING_DELETES: "gestor_mobile_pending_deletes",
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
@@ -96,6 +97,46 @@ export const saveStoredTransactions = (txs: MobileTransaction[]): void => {
     console.error("Error guardando transacciones en almacenamiento local:", err);
   }
 };
+
+export const deleteStoredTransaction = (eventId: string): MobileTransaction[] => {
+  const current = loadStoredTransactions();
+  const updated = current.filter((t) => t.event_id !== eventId);
+  saveStoredTransactions(updated);
+  return updated;
+};
+
+export const loadStoredPendingDeletes = (): string[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.PENDING_DELETES);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+};
+
+export const saveStoredPendingDeletes = (ids: string[]): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.PENDING_DELETES, JSON.stringify(ids));
+  } catch (err) {
+    console.error("Error guardando borrados pendientes:", err);
+  }
+};
+
+export const addPendingDelete = (idOrEventId: string | number): void => {
+  const strId = String(idOrEventId).trim();
+  const current = loadStoredPendingDeletes();
+  if (!current.includes(strId)) {
+    saveStoredPendingDeletes([...current, strId]);
+  }
+};
+
+export const removePendingDelete = (idOrEventId: string | number): void => {
+  const strId = String(idOrEventId).trim();
+  const current = loadStoredPendingDeletes();
+  saveStoredPendingDeletes(current.filter((id) => id !== strId));
+};
+
 
 export const loadStoredCatalog = (): CatalogData => {
   try {
