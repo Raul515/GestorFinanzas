@@ -19,6 +19,7 @@ declare module "react" {
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
   export function useCallback<T extends (...args: any[]) => any>(callback: T, deps: any[]): T;
   export function useMemo<T>(factory: () => T, deps: any[]): T;
+  export function useRef<T>(initialValue: T | null): { current: T | null };
   export function useRef<T>(initialValue?: T): { current: T };
   export const StrictMode: FC<{ children?: any }>;
   const React: any;
@@ -90,6 +91,9 @@ declare module "lucide-react" {
   export const TrendingUp: any;
   export const PieChart: any;
   export const BarChart3: any;
+  export const Camera: any;
+  export const Image: any;
+  export const FileText: any;
 }
 
 declare module "@capacitor/cli" {

@@ -23,6 +23,8 @@ export interface MobileTransaction {
   subcategory_name: string;
   created_at_utc: string;
   status: "PENDING_SYNC" | "SYNCED";
+  receipt_base64?: string;
+  receipt_filename?: string;
 }
 
 export type ActiveTab = "capture" | "search" | "history" | "summary";
@@ -82,6 +84,8 @@ export interface HistoricalTransactionItem {
   subcategory_id: number;
   subcategory_name: string;
   category_name: string;
+  receipt_filename?: string;
+  receipt_url?: string;
 }
 
 export interface SearchResponse {

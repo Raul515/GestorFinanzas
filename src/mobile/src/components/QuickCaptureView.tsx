@@ -1,5 +1,5 @@
-import { useState, ChangeEvent } from "react";
-import { Zap, Calendar, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
+import { useState, useRef, ChangeEvent } from "react";
+import { Zap, Calendar, CheckCircle2, AlertTriangle, Sparkles, Camera, X } from "lucide-react";
 import { NumericKeypad } from "./NumericKeypad";
 import { CategoryChips } from "./CategoryChips";
 import { ConceptSuggestions } from "./ConceptSuggestions";
@@ -29,7 +29,47 @@ export const QuickCaptureView = ({
     const today = new Date();
     return today.toISOString().split("T")[0];
   });
+  const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Captura y compresión client-side en Canvas HTML5 (< 200 KB)
+  const handlePhotoCapture = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1280;
+        let width = img.width;
+        let height = img.height;
+        if (width > height && width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.7);
+          setReceiptBase64(compressed);
+        }
+      };
+      if (typeof event.target?.result === "string") {
+        img.src = event.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   // Parsear importe numérico
   const numericAmount = parseFloat(amountStr.replace(",", ".")) || 0;
@@ -102,6 +142,7 @@ export const QuickCaptureView = ({
       subcategory_name: selectedSubcat.name,
       created_at_utc: new Date().toISOString(),
       status: "PENDING_SYNC",
+      receipt_base64: receiptBase64 || undefined,
     };
 
     onSaveExpense(newTx);
@@ -109,6 +150,7 @@ export const QuickCaptureView = ({
     // Resetear formulario inmediatamente (< 100 ms)
     setAmountStr("0");
     setConcept("");
+    setReceiptBase64(null);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
   };
@@ -212,6 +254,47 @@ export const QuickCaptureView = ({
           onChangeConcept={(val) => setConcept(val)}
           frequentConcepts={frequentConcepts}
         />
+      </div>
+
+      {/* Botón / Adjunto de Foto del Ticket (Fase 12) */}
+      <div className="my-1 flex items-center justify-between">
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          ref={fileInputRef}
+          onChange={handlePhotoCapture}
+          className="hidden"
+        />
+        {!receiptBase64 ? (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-emerald-400 active:scale-95 transition-all shadow-sm"
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Foto Ticket</span>
+          </button>
+        ) : (
+          <div className="flex-1 flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 animate-in fade-in">
+            <div className="flex items-center gap-2 min-w-0">
+              <img
+                src={receiptBase64}
+                alt="Ticket adjunto"
+                className="w-6 h-6 object-cover rounded-md border border-emerald-500/40 shrink-0"
+              />
+              <span className="font-bold text-[11px] truncate">Ticket adjunto (&lt;200 KB)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReceiptBase64(null)}
+              className="p-1 rounded-full text-slate-400 hover:text-rose-400 active:bg-slate-800"
+              title="Quitar foto"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Teclado Numérico */}

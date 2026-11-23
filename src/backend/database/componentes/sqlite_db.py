@@ -49,6 +49,9 @@ def init_db():
             if cols and "mobile_event_id" not in cols:
                 conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN mobile_event_id TEXT")
                 conn.commit()
+            if cols and "receipt_filename" not in cols:
+                conn.exec_driver_sql("ALTER TABLE transactions ADD COLUMN receipt_filename TEXT")
+                conn.commit()
             conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS idx_transactions_mobile_event_id ON transactions (mobile_event_id)")
 
             cursor_acc = conn.exec_driver_sql("PRAGMA table_info(joint_accounts)")

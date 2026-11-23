@@ -442,6 +442,14 @@ sync/processed/*
 !sync/error/
 sync/error/*
 !sync/error/.gitkeep
+!sync/mobile/
+!sync/mobile/.gitkeep
+!sync/mobile/catalog/
+sync/mobile/catalog/*
+!sync/mobile/catalog/.gitkeep
+!sync/mobile/receipts/
+sync/mobile/receipts/*
+!sync/mobile/receipts/.gitkeep
 .stfolder
 .stversions
 *.json.tmp

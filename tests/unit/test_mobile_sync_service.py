@@ -579,4 +579,62 @@ def test_search_historical_transactions_and_cache(populated_db: Session):
     assert hasattr(first, "subcategory_name")
 
 
+def test_mobile_receipt_saving_and_sync(populated_db: Session, tmp_path: Path):
+    """Verifica el guardado en disco de comprobantes (base64 y binario) y su vinculación con transacciones (Fase 12)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    sub_cafe = populated_db.query(Subcategory).filter(Subcategory.name == "Café y Desayunos").first()
+    assert sub_cafe is not None
+
+    # 1. Guardado de receipt via base64
+    fake_base64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
+    filename_b64 = service.save_receipt_base64("evt_rec_001", fake_base64)
+    assert filename_b64 == "receipt_evt_rec_001.jpg"
+    rec_path = service.get_receipt_path(filename_b64)
+    assert rec_path is not None
+    assert rec_path.exists()
+    assert rec_path.is_file()
+
+    # 2. Guardado de receipt via binario directo
+    bin_bytes = b"\xff\xd8\xff\xe0\x00\x10JFIFfakejpgdata"
+    filename_bin = service.save_receipt_file("evt_rec_002", bin_bytes)
+    assert filename_bin == "receipt_evt_rec_002.jpg"
+    rec_path_bin = service.get_receipt_path(filename_bin)
+    assert rec_path_bin is not None
+    assert rec_path_bin.exists()
+    assert rec_path_bin.read_bytes() == bin_bytes
+
+    # 3. Protección contra path traversal
+    assert service.get_receipt_path("../../../etc/passwd") is None
+    assert service.get_receipt_path("sub/folder/file.jpg") is None
+
+    # 4. Sincronización con payload conteniendo base64
+    req = MobileSyncRequest(
+        device_id="pixel-phone",
+        transactions=[
+            MobileTransactionPayload(
+                event_id="evt_sync_with_receipt",
+                amount=12.50,
+                description="Almuerzo de trabajo con ticket",
+                date=date(2026, 11, 21),
+                subcategory_id=sub_cafe.id,
+                receipt_base64=fake_base64,
+            )
+        ],
+    )
+    res = service.process_mobile_sync(populated_db, req)
+    assert res.processed_count == 1
+
+    tx = populated_db.query(Transaction).filter(Transaction.mobile_event_id == "evt_sync_with_receipt").first()
+    assert tx is not None
+    assert tx.receipt_filename == "receipt_evt_sync_with_receipt.jpg"
+
+    # 5. Búsqueda histórica incluye los campos receipt_filename y receipt_url
+    search_res = service.search_transactions(populated_db, query_text="Almuerzo de trabajo")
+    assert search_res.total_found >= 1
+    found_item = search_res.items[0]
+    assert found_item.receipt_filename == "receipt_evt_sync_with_receipt.jpg"
+    assert found_item.receipt_url == "/api/mobile/receipts/receipt_evt_sync_with_receipt.jpg"
+
+
+
 

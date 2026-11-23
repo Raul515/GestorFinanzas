@@ -6,6 +6,7 @@ Valida seguridad por Pairing Token, /api/mobile/catalog, /api/mobile/sync,
 """
 
 from datetime import date
+import io
 import json
 import pytest
 from fastapi.testclient import TestClient
@@ -408,5 +409,90 @@ def test_search_mobile_transactions_and_cache_api(
     assert isinstance(cache_data, list)
     assert len(cache_data) >= 1
     assert any(r["description"] == "Cambio de aceite y filtros" for r in cache_data)
+
+
+def test_mobile_receipts_api_flow(client: TestClient, db_session: Session, auth_headers: dict):
+    """Verifica la subida multipart, descarga y vinculación de tickets vía REST (Fase 12)."""
+    cat = Category(name="Necesidades Básicas (50%)", type="expense")
+    db_session.add(cat)
+    db_session.commit()
+    sub = Subcategory(name="Farmacia", category_id=cat.id)
+    db_session.add(sub)
+    db_session.commit()
+
+    # 1. Subida multipart sin token -> 403 Forbidden
+    fake_img = b"\xff\xd8\xff\xe0\x00\x10JFIFfakejpgbytes"
+    files = {"receipt_file": ("receipt.jpg", io.BytesIO(fake_img), "image/jpeg")}
+    data_unauth = {"event_id": "evt_api_receipt_unauth"}
+    resp_unauth = client.post("/api/mobile/receipts", data=data_unauth, files=files)
+    assert resp_unauth.status_code == 403
+
+    # 2. Subida con tipo de contenido no permitido (ej. text/plain) -> 400 Bad Request
+    bad_files = {"receipt_file": ("doc.txt", io.BytesIO(b"not an image"), "text/plain")}
+    data_bad = {"event_id": "evt_api_receipt_bad"}
+    resp_bad = client.post("/api/mobile/receipts", headers=auth_headers, data=data_bad, files=bad_files)
+    assert resp_bad.status_code == 400
+    assert "Tipo de archivo no permitido" in resp_bad.json()["detail"]
+
+    # 3. Subida válida con token
+    valid_files = {"receipt_file": ("receipt.jpg", io.BytesIO(fake_img), "image/jpeg")}
+    data_payload = {"event_id": "evt_api_receipt_999"}
+    resp_upload = client.post("/api/mobile/receipts", headers=auth_headers, data=data_payload, files=valid_files)
+    assert resp_upload.status_code == 200
+    up_data = resp_upload.json()
+    assert up_data["success"] is True
+    assert up_data["event_id"] == "evt_api_receipt_999"
+    filename = up_data["receipt_filename"]
+    assert filename == "receipt_evt_api_receipt_999.jpg"
+    assert up_data["receipt_url"] == f"/api/mobile/receipts/{filename}"
+
+    # 4. Descarga del ticket sin token -> 403 Forbidden
+    resp_get_unauth = client.get(f"/api/mobile/receipts/{filename}")
+    assert resp_get_unauth.status_code == 403
+
+    # 5. Descarga del ticket con token (vía header y vía query param ?token=...) -> 200 OK
+    resp_get = client.get(f"/api/mobile/receipts/{filename}", headers=auth_headers)
+    assert resp_get.status_code == 200
+    assert resp_get.content == fake_img
+    assert "image/jpeg" in resp_get.headers.get("content-type", "")
+
+    token_val = auth_headers["X-Mobile-Pairing-Token"]
+    resp_get_query = client.get(f"/api/mobile/receipts/{filename}?token={token_val}")
+    assert resp_get_query.status_code == 200
+    assert resp_get_query.content == fake_img
+
+    # 6. Descarga con path traversal o archivo inexistente -> 404 Not Found o 400
+    resp_not_found = client.get("/api/mobile/receipts/non_existent_file.jpg", headers=auth_headers)
+    assert resp_not_found.status_code == 404
+
+    resp_traversal = client.get("/api/mobile/receipts/..%2F..%2Fsecret.txt", headers=auth_headers)
+    assert resp_traversal.status_code in [400, 404]
+
+    # 7. Sincronización normal pasando base64
+    fake_b64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA="
+    sync_payload = {
+        "device_id": "phone-integration-test",
+        "transactions": [
+            {
+                "event_id": "evt_int_rec_001",
+                "scope": "PERSONAL",
+                "amount": 8.75,
+                "description": "Medicamentos con receta",
+                "date": "2026-11-22",
+                "subcategory_id": sub.id,
+                "receipt_base64": fake_b64,
+            }
+        ]
+    }
+    resp_sync = client.post("/api/mobile/sync", headers=auth_headers, json=sync_payload)
+    assert resp_sync.status_code == 200
+    sync_res = resp_sync.json()
+    assert sync_res["processed_count"] == 1
+
+    # Verificar que el ticket generado por sync se puede descargar vía API
+    resp_synced_receipt = client.get("/api/mobile/receipts/receipt_evt_int_rec_001.jpg", headers=auth_headers)
+    assert resp_synced_receipt.status_code == 200
+    assert len(resp_synced_receipt.content) > 0
+
 
 

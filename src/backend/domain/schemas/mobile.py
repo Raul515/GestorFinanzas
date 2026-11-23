@@ -37,6 +37,8 @@ class MobileTransactionPayload(BaseModel):
     subcategory_id: Optional[int] = Field(None, description="Subcategory ID or <= 0 for on-the-fly")
     subcategory_name: Optional[str] = Field(None, description="Subcategory name for fallback or on-the-fly")
     created_at_utc: Optional[str] = None
+    receipt_base64: Optional[str] = Field(None, description="Optional client-compressed JPEG base64 receipt image")
+    receipt_filename: Optional[str] = Field(None, description="Stored receipt filename if already uploaded")
 
     @field_validator("description")
     @classmethod
@@ -167,6 +169,8 @@ class MobileHistoricalTransactionItem(BaseModel):
     subcategory_id: int
     subcategory_name: str
     category_name: str
+    receipt_filename: Optional[str] = None
+    receipt_url: Optional[str] = None
 
 
 class MobileSearchResponse(BaseModel):
@@ -174,5 +178,13 @@ class MobileSearchResponse(BaseModel):
     query: str
     total_found: int
     items: List[MobileHistoricalTransactionItem] = Field(default_factory=list)
+
+
+class MobileReceiptUploadResponse(BaseModel):
+    """Response returned upon uploading a receipt image."""
+    success: bool
+    event_id: str
+    receipt_filename: str
+    receipt_url: str
 
 

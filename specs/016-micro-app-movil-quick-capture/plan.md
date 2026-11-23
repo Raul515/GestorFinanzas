@@ -151,12 +151,18 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
   5. `src/mobile/src/components/NavigationBar.tsx`: Pestaña dedicada `[🔍 Buscar]`.
   6. Pruebas: `test_search_historical_transactions_and_cache` y `test_search_mobile_transactions_and_cache_api`.
 
-### Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono) (Pendiente)
+### Fase 12: Captura Rápida con Foto del Ticket de Compra (Cámara del Teléfono) (Completada)
 - **Objetivo**: Adjuntar fotos de recibos o tickets de compra desde la cámara nativa del móvil con compresión en cliente para no saturar almacenamiento.
 - **Entregables**:
-  1. Backend: Endpoints de subida y almacenamiento de comprobantes en `sync/mobile/receipts/`.
-  2. Frontend: Botón `[📷 Foto Ticket]` junto al importe, compresión en canvas HTML5 (< 250 KB) y vinculación con el `event_id`.
-  3. Pruebas: Batería de tests de subida y persistencia de comprobantes.
+  1. Base de datos y migración: Columna `receipt_filename` en tabla `transactions` y modelo SQLAlchemy.
+  2. Backend:
+     - Endpoints protegidos `POST /api/mobile/receipts` y `GET /api/mobile/receipts/{filename}` en `src/backend/api/routers/mobile.py`.
+     - Guardado seguro en disco en `sync/mobile/receipts/receipt_{event_id}.jpg` con prevención de path traversal y decodificación base64 en `MobileSyncService`.
+  3. Frontend:
+     - Botón táctil `[📷 Foto Ticket]` en `QuickCaptureView` y `dist/index.html`.
+     - Compresión en HTML5 Canvas client-side (máx. 1280px, JPEG 0.70, < 200 KB) garantizando transferencias rápidas y legibilidad.
+     - Visor modal de comprobantes táctil en la vista de Historial y en el Buscador.
+  4. Pruebas: `test_mobile_receipt_saving_and_sync` y `test_mobile_receipts_api_flow` pasando al 100%.
 
 ### Fase 13: Captura Rápida de Ingresos Extraordinarios y Bizums Recibidos (Pendiente)
 - **Objetivo**: Registrar entradas puntuales de dinero desde el móvil (bizums de amigos, ventas de segunda mano, etc.) con asignación directa al mes contable.

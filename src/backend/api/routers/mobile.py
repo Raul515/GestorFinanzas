@@ -23,6 +23,7 @@ from backend.domain.schemas.mobile import (
     MobileVersionResponse,
     MobileHistoricalTransactionItem,
     MobileSearchResponse,
+    MobileReceiptUploadResponse,
 )
 from backend.services.mobile_sync_service import MobileSyncService
 
@@ -224,3 +225,58 @@ async def upload_apk(
         version_name=version_name,
         release_notes=release_notes,
     )
+
+
+@router.post("/receipts", response_model=MobileReceiptUploadResponse)
+async def upload_mobile_receipt(
+    event_id: str = Form(...),
+    receipt_file: UploadFile = File(...),
+    token: str = Depends(verify_mobile_token),
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobileReceiptUploadResponse:
+    """Permite subir una imagen de comprobante o ticket vinculada a un gasto móvil."""
+    if not receipt_file.content_type or not receipt_file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Tipo de archivo no permitido. Solo se aceptan imágenes (JPEG, PNG, WebP).",
+        )
+
+    content = await receipt_file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo de imagen está vacío.")
+
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="La imagen no puede exceder los 5 MB de tamaño.")
+
+    saved_fn = service.save_receipt_file(event_id=event_id, file_bytes=content)
+    if not saved_fn:
+        raise HTTPException(status_code=500, detail="Error al guardar la imagen en disco.")
+
+    return MobileReceiptUploadResponse(
+        success=True,
+        event_id=event_id,
+        receipt_filename=saved_fn,
+        receipt_url=f"/api/mobile/receipts/{saved_fn}",
+    )
+
+
+@router.get("/receipts/{filename}")
+def get_mobile_receipt(
+    filename: str,
+    token: str = Depends(verify_mobile_token),
+    service: MobileSyncService = Depends(get_sync_service),
+):
+    """Sirve una imagen de comprobante de ticket almacenada en disco."""
+    receipt_path = service.get_receipt_path(filename)
+    if not receipt_path:
+        raise HTTPException(status_code=404, detail="Comprobante no encontrado.")
+
+    # Deducir media type
+    suffix = receipt_path.suffix.lower()
+    media_type = "image/jpeg"
+    if suffix == ".png":
+        media_type = "image/png"
+    elif suffix == ".webp":
+        media_type = "image/webp"
+
+    return FileResponse(path=str(receipt_path), media_type=media_type)

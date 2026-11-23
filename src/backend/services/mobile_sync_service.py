@@ -7,6 +7,7 @@ de buzones de sincronización física en disco.
 
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+import base64
 import hmac
 import json
 import logging
@@ -62,6 +63,7 @@ class MobileSyncService:
         self.error_dir = self.mobile_dir / "error"
         self.catalog_dir = self.mobile_dir / "catalog"
         self.apk_dir = self.mobile_dir / "apk"
+        self.receipts_dir = self.mobile_dir / "receipts"
         self.pairing_file = self.mobile_dir / "pairing_secret.txt"
 
         self._ensure_directories()
@@ -152,7 +154,7 @@ class MobileSyncService:
 
     def _ensure_directories(self) -> None:
         """Asegura la existencia de la jerarquía de carpetas de sincronización móvil."""
-        for d in [self.inbox_dir, self.outbox_dir, self.processed_dir, self.error_dir, self.catalog_dir, self.apk_dir]:
+        for d in [self.inbox_dir, self.outbox_dir, self.processed_dir, self.error_dir, self.catalog_dir, self.apk_dir, self.receipts_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
     def get_mobile_catalog(self, db: Session, local_device_id: Optional[str] = None) -> MobileCatalogResponse:
@@ -299,13 +301,21 @@ class MobileSyncService:
                         logger.error("No existen subcategorías en la base de datos para asignar el gasto móvil")
                         continue
 
-                # 4. Inserción de la transacción
+                # 4. Procesamiento de comprobante de ticket si existe (Base64 o nombre previo)
+                saved_receipt_filename = None
+                if getattr(item, "receipt_base64", None):
+                    saved_receipt_filename = self.save_receipt_base64(item.event_id, item.receipt_base64)
+                elif getattr(item, "receipt_filename", None):
+                    saved_receipt_filename = item.receipt_filename
+
+                # 5. Inserción de la transacción
                 new_tx = Transaction(
                     date=item.date,
                     subcategory_id=eff_subcat.id,
                     amount=round(float(item.amount), 2),
                     description=clean_desc,
                     mobile_event_id=item.event_id,
+                    receipt_filename=saved_receipt_filename,
                 )
                 db.add(new_tx)
                 processed_count += 1
@@ -757,6 +767,7 @@ class MobileSyncService:
         for tx in results:
             sub = tx.subcategory
             cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
+            r_fn = getattr(tx, "receipt_filename", None)
             items.append(
                 MobileHistoricalTransactionItem(
                     id=tx.id,
@@ -766,6 +777,8 @@ class MobileSyncService:
                     subcategory_id=tx.subcategory_id,
                     subcategory_name=sub.name if sub else "",
                     category_name=cat_name,
+                    receipt_filename=r_fn,
+                    receipt_url=f"/api/mobile/receipts/{r_fn}" if r_fn else None,
                 )
             )
 
@@ -796,6 +809,7 @@ class MobileSyncService:
         for tx in results:
             sub = tx.subcategory
             cat_name = sub.category.name if sub and sub.category else "Sin Categoría"
+            r_fn = getattr(tx, "receipt_filename", None)
             items.append(
                 MobileHistoricalTransactionItem(
                     id=tx.id,
@@ -805,8 +819,56 @@ class MobileSyncService:
                     subcategory_id=tx.subcategory_id,
                     subcategory_name=sub.name if sub else "",
                     category_name=cat_name,
+                    receipt_filename=r_fn,
+                    receipt_url=f"/api/mobile/receipts/{r_fn}" if r_fn else None,
                 )
             )
         return items
+
+    def save_receipt_base64(self, event_id: str, base64_str: str) -> Optional[str]:
+        """
+        Decodifica y guarda de forma segura una imagen de ticket en sync/mobile/receipts/.
+        Devuelve el nombre del archivo guardado o None si ocurre un error.
+        """
+        if not base64_str or not event_id:
+            return None
+        try:
+            data_str = base64_str
+            if "," in data_str:
+                data_str = data_str.split(",", 1)[1]
+            raw_bytes = base64.b64decode(data_str)
+            safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
+            filename = f"receipt_{safe_id}.jpg"
+            target_path = self.receipts_dir / filename
+            target_path.write_bytes(raw_bytes)
+            logger.info("Comprobante de ticket guardado en disco: %s (%d bytes)", filename, len(raw_bytes))
+            return filename
+        except Exception as exc:
+            logger.error("Error guardando comprobante base64 para %s: %s", event_id, exc)
+            return None
+
+    def save_receipt_file(self, event_id: str, file_bytes: bytes) -> Optional[str]:
+        """Guarda un archivo de imagen recibido vía multipart en sync/mobile/receipts/."""
+        if not file_bytes or not event_id:
+            return None
+        try:
+            safe_id = "".join(c for c in event_id if c.isalnum() or c in ("-", "_"))
+            filename = f"receipt_{safe_id}.jpg"
+            target_path = self.receipts_dir / filename
+            target_path.write_bytes(file_bytes)
+            logger.info("Comprobante de ticket subido guardado en disco: %s (%d bytes)", filename, len(file_bytes))
+            return filename
+        except Exception as exc:
+            logger.error("Error guardando archivo de ticket para %s: %s", event_id, exc)
+            return None
+
+    def get_receipt_path(self, filename: str) -> Optional[Path]:
+        """Retorna la ruta física del comprobante si existe y está dentro de receipts_dir."""
+        if not filename or ".." in filename or "/" in filename or "\\" in filename:
+            return None
+        target = self.receipts_dir / filename
+        if target.exists() and target.is_file():
+            return target
+        return None
 
 

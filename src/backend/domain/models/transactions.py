@@ -37,6 +37,11 @@ class Transaction(Base):
         default=None,
         index=True,
     )
+    receipt_filename: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+    )
 
     subcategory: Mapped["Subcategory"] = relationship("Subcategory", back_populates="transactions")
     applied_strategy: Mapped[Optional["AppliedGuidelineStrategy"]] = relationship(

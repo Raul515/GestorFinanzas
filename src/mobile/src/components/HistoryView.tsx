@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight, AlertTriangle } from "lucide-react";
+import { RefreshCw, Trash2, CheckCircle2, Clock, Download, ArrowUpRight, AlertTriangle, Camera, X } from "lucide-react";
 import { MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
 
@@ -19,6 +19,7 @@ export const HistoryView = ({
   onExportJson,
 }: HistoryViewProps) => {
   const [txToDelete, setTxToDelete] = useState<MobileTransaction | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
   const pendingTx = transactions.filter((t) => t.status === "PENDING_SYNC");
   const syncedTx = transactions.filter((t) => t.status === "SYNCED");
@@ -119,6 +120,16 @@ export const HistoryView = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {tx.receipt_base64 && (
+                      <button
+                        type="button"
+                        onClick={() => setViewingReceipt(tx.receipt_base64 || null)}
+                        className="p-1.5 rounded-lg text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 transition-all"
+                        title="Ver foto del ticket"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <span className="font-mono font-bold text-sm text-amber-300">
                       -{tx.amount.toFixed(2)} €
                     </span>
@@ -171,6 +182,21 @@ export const HistoryView = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {(tx.receipt_base64 || tx.receipt_filename) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setViewingReceipt(
+                            tx.receipt_base64 ||
+                              (tx.receipt_filename ? `/api/mobile/receipts/${tx.receipt_filename}` : null)
+                          )
+                        }
+                        className="p-1 rounded-lg text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 transition-all"
+                        title="Ver foto del ticket"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <div className="flex items-center gap-1 font-mono font-semibold text-slate-300">
                       <span>-{tx.amount.toFixed(2)} €</span>
                       <ArrowUpRight className="w-3 h-3 text-emerald-500" />
@@ -236,6 +262,41 @@ export const HistoryView = ({
                 <span>Eliminar</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Visor de Comprobante / Ticket (Fase 12) */}
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-800 p-3 shadow-2xl flex flex-col gap-3 max-h-[90vh]">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>Comprobante de Ticket</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setViewingReceipt(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-100 active:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto rounded-xl bg-slate-950 flex items-center justify-center p-1 border border-slate-800">
+              <img
+                src={viewingReceipt}
+                alt="Ticket completo"
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewingReceipt(null)}
+              className="w-full py-2 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold active:scale-95"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
