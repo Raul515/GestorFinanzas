@@ -647,6 +647,62 @@ def test_mobile_cors_preflight_and_headers(client: TestClient):
     assert resp.headers["access-control-allow-origin"] in ("*", "http://localhost")
 
 
+def test_admin_generate_pin_and_pair_device_flow(client: TestClient, db_session):
+    """Verifica el flujo completo de generación de PIN administrativo y vinculación móvil (Sin Cámara)."""
+    # 1. Generar PIN como administrador local
+    resp_pin = client.post("/api/mobile/admin/generate-pin?ttl_seconds=300")
+    assert resp_pin.status_code == 200
+    pin_data = resp_pin.json()
+    assert "pin" in pin_data
+    pin = pin_data["pin"]
+    assert len(pin) == 6
+    assert pin.isdigit()
+
+    # 2. Formato inválido (< 6 dígitos) -> 422
+    resp_inv = client.post("/api/mobile/pair-pin", json={"pin": "123"})
+    assert resp_inv.status_code == 422
+
+    # 3. PIN incorrecto -> 400
+    wrong_pin = "000000" if pin != "000000" else "999999"
+    resp_wrong = client.post("/api/mobile/pair-pin", json={"pin": wrong_pin})
+    assert resp_wrong.status_code == 400
+    assert "PIN incorrecto" in resp_wrong.json()["detail"]
+
+    # 4. PIN correcto -> 200 OK con token maestro
+    resp_pair = client.post("/api/mobile/pair-pin", json={"pin": pin})
+    assert resp_pair.status_code == 200
+    pair_res = resp_pair.json()
+    assert pair_res["success"] is True
+    assert "pairing_token" in pair_res
+    received_token = pair_res["pairing_token"]
+    assert received_token.startswith("sec_")
+
+    # 5. Usar el token recibido para autenticar una petición a /api/mobile/catalog -> 200 OK
+    cat_resp = client.get("/api/mobile/catalog", headers={"X-Mobile-Pairing-Token": received_token})
+    assert cat_resp.status_code == 200
+
+    # 6. Intentar canjear el mismo PIN de nuevo -> 400 (ya consumido)
+    resp_reuse = client.post("/api/mobile/pair-pin", json={"pin": pin})
+    assert resp_reuse.status_code == 400
+
+
+def test_admin_generate_pin_access_control(client: TestClient):
+    """Verifica que /api/mobile/admin/generate-pin rechace IPs externas a la administración."""
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from backend.api.routers.mobile import generate_admin_pairing_pin
+
+    service = MobileSyncService()
+
+    # IP de la Wi-Fi pública (192.168.1.55) -> 403 Forbidden
+    wifi_request = Request({"type": "http", "client": ("192.168.1.55", 43210)})
+    with pytest.raises(HTTPException) as exc_info:
+        generate_admin_pairing_pin(request=wifi_request, service=service)
+    assert exc_info.value.status_code == 403
+    assert "Acceso denegado" in exc_info.value.detail
+
+
+
 
 
 

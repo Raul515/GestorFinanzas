@@ -839,6 +839,79 @@ def test_get_mobile_monthly_summary_with_null_subcategory(populated_db, tmp_path
     assert orphan_item["subcategory_name"] == "Sin Subcategoría"
 
 
+def test_pairing_pin_generation_and_ttl_expiration(tmp_path: Path):
+    """Verifica la generación de PIN de 6 dígitos y su expiración por tiempo."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    # 1. Generar PIN con 2 segundos de TTL
+    pin_data = service.generate_pairing_pin(ttl_seconds=2)
+    assert len(pin_data["pin"]) == 6
+    assert pin_data["pin"].isdigit()
+    assert pin_data["expires_in_seconds"] == 2
+    assert service.pin_file.exists()
+
+    # 2. Simular expiración manipulando el timestamp
+    import time
+    with open(service.pin_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data["expires_at_timestamp"] = time.time() - 10
+    with open(service.pin_file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    # 3. Intentar emparejar con PIN caducado
+    success, token, msg = service.pair_with_pin(pin_data["pin"])
+    assert success is False
+    assert token is None
+    assert "caducado" in msg.lower()
+    assert service.pin_file.exists() is False
+
+
+def test_pairing_pin_successful_pairing_and_single_use(tmp_path: Path):
+    """Verifica que el emparejamiento con PIN entregue el token y consuma el PIN (un solo uso)."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    pin_data = service.generate_pairing_pin(ttl_seconds=600)
+    pin = pin_data["pin"]
+
+    # 1. Canjear PIN exitosamente
+    success, token, msg = service.pair_with_pin(pin)
+    assert success is True
+    assert token is not None
+    assert service.validate_pairing_token(token) is True
+    assert "éxito" in msg.lower()
+
+    # 2. El PIN ya no existe (consumido)
+    assert service.pin_file.exists() is False
+    success_retry, token_retry, msg_retry = service.pair_with_pin(pin)
+    assert success_retry is False
+    assert token_retry is None
+    assert "no hay ningún pin" in msg_retry.lower()
+
+
+def test_pairing_pin_brute_force_rate_limiting(tmp_path: Path):
+    """Verifica que tras 5 intentos fallidos el PIN se invalide permanentemente."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+
+    pin_data = service.generate_pairing_pin(ttl_seconds=600)
+    real_pin = pin_data["pin"]
+    wrong_pin = "000000" if real_pin != "000000" else "111111"
+
+    # Intentos 1 a 4 fallidos con conteo regresivo
+    for attempt in range(1, 5):
+        success, token, msg = service.pair_with_pin(wrong_pin)
+        assert success is False
+        assert token is None
+        assert f"quedan {5 - attempt} intentos" in msg
+
+    # Intento 5: se bloquea e invalida
+    success_final, token_final, msg_final = service.pair_with_pin(wrong_pin)
+    assert success_final is False
+    assert token_final is None
+    assert "superado el límite" in msg_final.lower()
+    assert service.pin_file.exists() is False
+
+
+
 
 
 

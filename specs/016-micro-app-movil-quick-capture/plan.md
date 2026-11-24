@@ -297,6 +297,22 @@ Fusión final: Merge en develop tras 100% de tests y validación completa
      - Pruebas de integración `test_admin_pairing_token_access_control` (con validación de rechazo a Hotspot y aceptación de subred Docker) y `test_mobile_cors_preflight_and_headers` en `tests/integration/test_mobile_api.py`.
      - 46/46 pruebas pasando al 100% en la suite acotada de la Spec 016 (`test_mobile_sync_service.py`, `test_mobile_quick_presets.py`, `test_mobile_api.py`).
 
+### Incidencias Detectadas en Pruebas Reales con Xiaomi / Android (HyperOS/MIUI) — Plan para Próxima Sesión
+- **Fecha**: 2026-11-23.
+- **Contexto**: Pruebas de campo con usuario en dispositivo Xiaomi real (Android con HyperOS/MIUI) conectado vía red local Wi-Fi al servidor FastAPI.
+- **Incidencia 1: PWA instalada se abre con barra de navegación de Chrome**:
+  - *Síntoma*: Tras activar el flag `#unsafely-treat-insecure-origin-as-secure` y pulsar el icono en el escritorio, la aplicación sigue abriendo Google Chrome con la barra de navegación superior visible (`media_1795470193243_48f5560e.jpg`).
+  - *Diagnóstico técnico*: El motor de WebAPK de Android (Google Play Services) degrada a Chrome Custom Tab cuando el origen es HTTP sin certificado TLS de confianza, y los lanzadores de MIUI/HyperOS conservan bookmarks antiguos.
+  - *Líneas de solución para mañana*:
+    1. Proveer la compilación directa del instalador APK nativo (`app-debug.apk`) con Capacitor y GitHub Actions, garantizando una app 100% nativa sin barras de navegador.
+    2. O evaluar HTTPS local (mkcert / túnel local) para habilitar WebAPK de primer nivel en Chrome.
+- **Incidencia 2: El código QR no es detectado por la cámara del teléfono**:
+  - *Síntoma*: Al apuntar la cámara del teléfono Xiaomi al código QR en el monitor del PC, no se detecta el enlace.
+  - *Diagnóstico técnico*: Densidad de versión del QR debido a la longitud del token criptográfico (64 caracteres), reflejos del panel LCD del monitor y posible desactivación del lector QR en los ajustes de la cámara nativa de HyperOS.
+  - *Líneas de solución para mañana*:
+    1. Implementar emparejamiento alternativo por **código PIN de 6 dígitos** (ej. `382-910`) de un solo uso generado en Streamlit.
+    2. Código QR ultra-simplificado sin parámetros query extensos.
+
 ---
 
 ## 3. Mejoras Archivadas para Futuras Especificaciones (Post-Spec 016)

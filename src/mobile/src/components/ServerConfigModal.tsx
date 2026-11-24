@@ -1,6 +1,6 @@
 import { useState, ChangeEvent } from "react";
-import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react";
-import { testServerConnection, TestConnectionResult } from "../services/api";
+import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck, Zap } from "lucide-react";
+import { testServerConnection, TestConnectionResult, pairWithPin } from "../services/api";
 
 interface ServerConfigModalProps {
   isOpen: boolean;
@@ -23,10 +23,45 @@ export const ServerConfigModal = ({
 }: ServerConfigModalProps) => {
   const [serverUrl, setServerUrl] = useState(currentServerUrl || "");
   const [pairingToken, setPairingToken] = useState(currentPairingToken || "");
+  const [pin, setPin] = useState("");
+  const [isPairingPin, setIsPairingPin] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
 
   if (!isOpen) return null;
+
+  const handlePairPin = async () => {
+    if (!pin.trim() || pin.trim().length !== 6) {
+      setTestResult({
+        success: false,
+        isPaired: false,
+        message: "Introduce el código PIN de 6 dígitos que ves en tu PC.",
+      });
+      return;
+    }
+    setIsPairingPin(true);
+    setTestResult(null);
+    try {
+      const res = await pairWithPin(serverUrl, pin);
+      if (res.success && res.pairingToken) {
+        setPairingToken(res.pairingToken);
+        setTestResult({
+          success: true,
+          isPaired: true,
+          message: res.message,
+        });
+        onSave(serverUrl.trim(), res.pairingToken.trim());
+      } else {
+        setTestResult({
+          success: false,
+          isPaired: false,
+          message: res.message,
+        });
+      }
+    } finally {
+      setIsPairingPin(false);
+    }
+  };
 
   const handleTest = async () => {
     setIsTesting(true);
@@ -126,6 +161,45 @@ export const ServerConfigModal = ({
           </div>
           <p className="text-[10px] text-slate-500">
             Ej: <code className="text-slate-400">http://192.168.1.45:8000</code> o la IP de tu Zona Wi-Fi.
+          </p>
+        </div>
+
+        {/* Bloque: Emparejamiento por PIN (Recomendado sin cámara) */}
+        <div className="bg-slate-950/80 border border-blue-500/40 rounded-2xl p-3 flex flex-col gap-2 shadow-inner">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-extrabold text-blue-300 flex items-center gap-1.5">
+              <KeyRound className="w-3.5 h-3.5 text-blue-400" />
+              <span>Vincular con PIN (Sin Cámara)</span>
+            </label>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              Recomendado
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                setPin(e.target.value.replace(/\D/g, ""));
+                setTestResult(null);
+              }}
+              placeholder="Ej: 582914"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-center text-sm font-mono tracking-widest font-bold text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-400"
+            />
+            <button
+              type="button"
+              disabled={isPairingPin || pin.length !== 6}
+              onClick={handlePairPin}
+              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1 transition-all"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>{isPairingPin ? "..." : "Vincular"}</span>
+            </button>
+          </div>
+          <p className="text-[9.5px] text-slate-400">
+            Mira el código generado en tu PC (<strong>Ajustes &gt; Companion Móvil</strong>).
           </p>
         </div>
 

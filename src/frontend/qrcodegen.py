@@ -127,6 +127,33 @@ class QrCode:
             f'{rects_str}\n</svg>'
         )
 
+    def to_png_bytes(self, border: int = 4, scale: int = 8, fg_color: str = "#000000", bg_color: str = "#ffffff") -> bytes:
+        """Genera un archivo de imagen PNG con nitidez absoluta píxel a píxel para escaneo sin aberraciones."""
+        from PIL import Image, ImageDraw
+        import io
+
+        if border < 0:
+            raise ValueError("El borde no puede ser negativo")
+        total_modules = self.size + border * 2
+        img_size = total_modules * scale
+        img = Image.new("RGB", (img_size, img_size), bg_color)
+        draw = ImageDraw.Draw(img)
+        for y in range(self.size):
+            for x in range(self.size):
+                if self.get_module(x, y):
+                    draw.rectangle(
+                        [
+                            (x + border) * scale,
+                            (y + border) * scale,
+                            (x + border + 1) * scale - 1,
+                            (y + border + 1) * scale - 1,
+                        ],
+                        fill=fg_color,
+                    )
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
     def _draw_function_patterns(self) -> None:
         for i in range(self.size):
             self._set_function_module(6, i, i % 2 == 0)

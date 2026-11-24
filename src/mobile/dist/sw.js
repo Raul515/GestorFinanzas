@@ -4,6 +4,8 @@ const ASSETS_TO_CACHE = [
   "/mobile/",
   "/mobile/index.html",
   "/mobile/manifest.json",
+  "/mobile/icon-192.png",
+  "/mobile/icon-512.png",
   "/mobile/icon-192.svg",
   "/mobile/icon-512.svg"
 ];

@@ -39,3 +39,9 @@ def test_mobile_view_helpers():
     ip = get_local_ip()
     assert isinstance(ip, str)
     assert len(ip) > 0
+
+    # Formateo de PIN de 6 dígitos
+    pin = "582914"
+    formatted = f"{pin[:3]} {pin[3:]}" if len(pin) == 6 else pin
+    assert formatted == "582 914"
+

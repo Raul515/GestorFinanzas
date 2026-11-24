@@ -34,6 +34,63 @@ export interface TestConnectionResult {
   statusCode?: number;
 }
 
+export interface PairWithPinResult {
+  success: boolean;
+  pairingToken?: string;
+  message: string;
+}
+
+export const pairWithPin = async (
+  targetUrl: string,
+  pin: string
+): Promise<PairWithPinResult> => {
+  let cleanUrl = targetUrl.trim().replace(/\/+$/, "");
+  if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+    cleanUrl = "http://" + cleanUrl;
+  }
+  if (!cleanUrl) {
+    return { success: false, message: "La URL del servidor no puede estar vacía" };
+  }
+  const cleanPin = pin.trim();
+  if (!/^\d{6}$/.test(cleanPin)) {
+    return { success: false, message: "El PIN debe tener exactamente 6 dígitos numéricos" };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(`${cleanUrl}/api/mobile/pair-pin`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ pin: cleanPin, device_name: "Mobile App" }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && data.pairing_token) {
+      return {
+        success: true,
+        pairingToken: data.pairing_token,
+        message: data.message || "✓ Dispositivo vinculado con éxito.",
+      };
+    }
+    return {
+      success: false,
+      message: data.detail || data.message || "PIN no válido o caducado.",
+    };
+  } catch {
+    return {
+      success: false,
+      message: "No se pudo conectar con el servidor. Verifica la URL o la red Wi-Fi.",
+    };
+  }
+};
+
 export const testServerConnection = async (
   targetUrl: string,
   token?: string

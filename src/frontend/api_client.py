@@ -2128,6 +2128,21 @@ def get_cached_pairing_token(force_refresh: bool = False) -> Optional[str]:
     return get_mobile_pairing_token()
 
 
+def generate_mobile_pin(ttl_seconds: int = 600) -> Optional[Dict[str, Any]]:
+    """Solicita la generación de un PIN temporal de 6 dígitos para emparejamiento asistido sin cámara."""
+    url = f"{API_URL}/api/mobile/admin/generate-pin?ttl_seconds={ttl_seconds}"
+    try:
+        response = _session.post(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        logger.warning("Fallo al generar PIN de emparejamiento admin (%s): %s", response.status_code, response.text)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error de red al generar PIN móvil en %s: %s", url, e)
+    except Exception as e:
+        logger.error("Error inesperado en generate_mobile_pin(): %s", e)
+    return None
+
+
 def get_mobile_status() -> Optional[Dict[str, Any]]:
     """Consulta el estado de salud y métricas del servicio de sincronización móvil."""
     global _cached_pairing_token

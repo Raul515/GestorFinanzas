@@ -17,6 +17,9 @@ from backend.domain.schemas.mobile import (
     MobileBudgetUpdate,
     MobileCatalogResponse,
     MobileMonthlySummaryResponse,
+    MobilePinGenerateResponse,
+    MobilePinPairRequest,
+    MobilePinPairResponse,
     MobileSubcategoryCreate,
     MobileSubcategoryResponse,
     MobileSyncRequest,
@@ -178,15 +181,8 @@ def get_status(
     return service.get_sync_status(db, authenticated=is_authenticated)
 
 
-@router.get("/admin/pairing-token", response_model=MobileAdminPairingTokenResponse)
-def get_admin_pairing_token(
-    request: Request,
-    service: MobileSyncService = Depends(get_sync_service),
-) -> MobileAdminPairingTokenResponse:
-    """
-    Retorna el pairing token maestro exclusivamente para la administración local (Streamlit en el PC).
-    Rechaza peticiones originadas desde direcciones IP externas / no loopback (SEC-01).
-    """
+def _verify_admin_network_access(request: Request, endpoint_name: str) -> None:
+    """Verifica que la petición administrativa provenga de loopback o de la subred interna autorizada (SEC-01)."""
     client_ip = request.client.host if request.client else "unknown"
     is_allowed = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
     if not is_allowed:
@@ -204,12 +200,58 @@ def get_admin_pairing_token(
             pass
 
     if not is_allowed:
-        logger.warning("Intento de acceso denegado a /api/mobile/admin/pairing-token desde IP no autorizada: %s", client_ip)
+        logger.warning("Intento de acceso denegado a %s desde IP no autorizada: %s", endpoint_name, client_ip)
         raise HTTPException(
             status_code=403,
             detail="Acceso denegado. Este endpoint está reservado exclusivamente al host local o red interna.",
         )
+
+
+@router.get("/admin/pairing-token", response_model=MobileAdminPairingTokenResponse)
+def get_admin_pairing_token(
+    request: Request,
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobileAdminPairingTokenResponse:
+    """
+    Retorna el pairing token maestro exclusivamente para la administración local (Streamlit en el PC).
+    Rechaza peticiones originadas desde direcciones IP externas / no loopback (SEC-01).
+    """
+    _verify_admin_network_access(request, "/api/mobile/admin/pairing-token")
     return MobileAdminPairingTokenResponse(pairing_token=service.get_or_create_pairing_token())
+
+
+@router.post("/admin/generate-pin", response_model=MobilePinGenerateResponse)
+def generate_admin_pairing_pin(
+    request: Request,
+    ttl_seconds: int = Query(600, ge=60, le=3600),
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobilePinGenerateResponse:
+    """
+    Genera un código PIN de 6 dígitos temporal para vincular un dispositivo móvil sin cámara (SEC-01).
+    Solo accesible desde loopback o red local interna de administración.
+    """
+    _verify_admin_network_access(request, "/api/mobile/admin/generate-pin")
+    pin_data = service.generate_pairing_pin(ttl_seconds=ttl_seconds)
+    return MobilePinGenerateResponse(**pin_data)
+
+
+@router.post("/pair-pin", response_model=MobilePinPairResponse)
+def pair_device_with_pin(
+    payload: MobilePinPairRequest,
+    service: MobileSyncService = Depends(get_sync_service),
+) -> MobilePinPairResponse:
+    """
+    Canjea un PIN temporal de 6 dígitos por el token maestro de emparejamiento.
+    Accesible desde cualquier cliente en la red Wi-Fi; protegido contra fuerza bruta.
+    """
+    success, token, message = service.pair_with_pin(payload.pin)
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+    return MobilePinPairResponse(
+        success=True,
+        pairing_token=token,
+        message=message,
+    )
 
 
 @router.post("/process-folder", response_model=Dict[str, Any])

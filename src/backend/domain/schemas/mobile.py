@@ -196,3 +196,31 @@ class MobileReceiptUploadResponse(BaseModel):
     receipt_url: str
 
 
+class MobilePinGenerateResponse(BaseModel):
+    """Respuesta de generación de PIN temporal de vinculación."""
+    pin: str = Field(..., description="PIN numérico de 6 dígitos")
+    expires_in_seconds: int = Field(600, description="Tiempo de validez en segundos")
+    expires_at_utc: str = Field(..., description="Timestamp ISO de expiración")
+
+
+class MobilePinPairRequest(BaseModel):
+    """Petición desde el móvil para canjear un PIN por el token maestro."""
+    pin: str = Field(..., min_length=6, max_length=6, description="PIN numérico de 6 dígitos")
+    device_name: Optional[str] = Field("Mobile Device", description="Nombre descriptivo del dispositivo")
+
+    @field_validator("pin")
+    @classmethod
+    def validate_pin_format(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned.isdigit() or len(cleaned) != 6:
+            raise ValueError("El PIN debe estar formado por exactamente 6 dígitos numéricos.")
+        return cleaned
+
+
+class MobilePinPairResponse(BaseModel):
+    """Respuesta tras canjear un PIN de vinculación."""
+    success: bool
+    pairing_token: Optional[str] = None
+    message: str
+
+

@@ -65,6 +65,7 @@ class MobileSyncService:
         self.apk_dir = self.mobile_dir / "apk"
         self.receipts_dir = self.mobile_dir / "receipts"
         self.pairing_file = self.mobile_dir / "pairing_secret.txt"
+        self.pin_file = self.mobile_dir / "active_pin.json"
 
         self._ensure_directories()
 
@@ -94,6 +95,91 @@ class MobileSyncService:
             return False
         master_token = self.get_or_create_pairing_token()
         return hmac.compare_digest(token.strip(), master_token)
+
+    def generate_pairing_pin(self, ttl_seconds: int = 600) -> Dict[str, Any]:
+        """Genera un PIN de 6 dígitos aleatorio criptográfico y lo persiste con fecha de expiración."""
+        pin = f"{secrets.randbelow(1000000):06d}"
+        now_dt = datetime.now(timezone.utc)
+        expires_at_dt = now_dt + timedelta(seconds=ttl_seconds)
+
+        pin_data = {
+            "pin": pin,
+            "expires_at_timestamp": expires_at_dt.timestamp(),
+            "expires_at_utc": expires_at_dt.isoformat(),
+            "failed_attempts": 0,
+        }
+        try:
+            with open(self.pin_file, "w", encoding="utf-8") as f:
+                json.dump(pin_data, f)
+            logger.info("Nuevo PIN de emparejamiento móvil generado: [***%s]", pin[-2:])
+        except Exception as e:
+            logger.error("Error guardando active_pin.json: %s", e)
+            raise
+        return {
+            "pin": pin,
+            "expires_in_seconds": ttl_seconds,
+            "expires_at_utc": expires_at_dt.isoformat(),
+        }
+
+    def pair_with_pin(self, candidate_pin: str) -> Tuple[bool, Optional[str], str]:
+        """
+        Valida un PIN suministrado por el cliente móvil.
+        Si es correcto, consume el PIN y retorna (True, master_token, mensaje).
+        Si falla, incrementa intentos fallidos y retorna (False, None, error_message).
+        """
+        if not self.pin_file.exists():
+            return False, None, "No hay ningún PIN de vinculación activo. Genéralo en tu ordenador."
+
+        try:
+            with open(self.pin_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.error("Error leyendo active_pin.json: %s", e)
+            return False, None, "Error de lectura del PIN activo."
+
+        now_ts = datetime.now(timezone.utc).timestamp()
+        if now_ts > data.get("expires_at_timestamp", 0):
+            try:
+                self.pin_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False, None, "El código PIN ha caducado. Genera uno nuevo en tu ordenador."
+
+        failed = data.get("failed_attempts", 0)
+        if failed >= 5:
+            try:
+                self.pin_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False, None, "Demasiados intentos erróneos. El PIN ha sido invalidado por seguridad."
+
+        stored_pin = str(data.get("pin", "")).strip()
+        if hmac.compare_digest(candidate_pin.strip(), stored_pin):
+            try:
+                self.pin_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            master_token = self.get_or_create_pairing_token()
+            logger.info("Emparejamiento por PIN exitoso")
+            return True, master_token, "✓ Dispositivo emparejado con éxito."
+
+        failed += 1
+        data["failed_attempts"] = failed
+        remaining = max(0, 5 - failed)
+        try:
+            with open(self.pin_file, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+        if remaining == 0:
+            try:
+                self.pin_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False, None, "PIN incorrecto. Has superado el límite de 5 intentos. Genera uno nuevo en tu ordenador."
+
+        return False, None, f"PIN incorrecto. Te quedan {remaining} intentos."
 
     @staticmethod
     def is_income_category(cat: Optional[Category]) -> bool:

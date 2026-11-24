@@ -1,6 +1,6 @@
 """
 Vista interactiva del Companion Móvil Quick-Capture en Streamlit.
-Permite conectar teléfonos móviles (Android e iOS) a la micro-app PWA mediante código QR,
+Permite conectar teléfonos móviles (Android e iOS) a la micro-app PWA mediante código PIN de vinculación de 6 dígitos,
 consultar el estado del motor de sincronización offline y auditar los gastos capturados desde el móvil.
 """
 
@@ -59,11 +59,21 @@ def format_display_date(date_val: Any) -> str:
     return date_str
 
 
+def generate_qr_png_bytes(url: str, ecc: QrCode.Ecc = QrCode.Ecc.MEDIUM) -> bytes:
+    """Genera una imagen PNG nítida de alto contraste para lectura instantánea desde monitores."""
+    try:
+        qr = QrCode.encode_text(url, ecc)
+        return qr.to_png_bytes(border=4, scale=10, fg_color="#000000", bg_color="#ffffff")
+    except Exception as exc:
+        logger.warning("Fallo generando código QR PNG para %s: %s", url, exc)
+        return b""
+
+
 def generate_qr_svg_base64(url: str) -> str:
-    """Genera el código QR en SVG base64 para incrustar directamente en la interfaz."""
+    """Genera el código QR en SVG base64 como fallback (borde ISO 4)."""
     try:
         qr = QrCode.encode_text(url, QrCode.Ecc.MEDIUM)
-        svg_code = qr.to_svg_str(border=2, fg_color="#0f172a", bg_color="#ffffff")
+        svg_code = qr.to_svg_str(border=4, fg_color="#000000", bg_color="#ffffff")
         b64 = base64.b64encode(svg_code.encode("utf-8")).decode("utf-8")
         return f"data:image/svg+xml;base64,{b64}"
     except Exception as exc:
@@ -88,17 +98,12 @@ def render_mobile_view() -> None:
     is_docker_detected = local_ip.startswith("172.")
 
     server_base_url = f"http://{local_ip}:8000"
-    url_params = []
-    if pairing_token:
-        url_params.append(f"token={pairing_token}")
-    if local_ip != "localhost":
-        url_params.append(f"server={server_base_url}")
-    token_query = f"?{'&'.join(url_params)}" if url_params else ""
+    token_query = f"?token={pairing_token}" if pairing_token else ""
     mobile_url = f"{server_base_url}/mobile/{token_query}"
-    localhost_url = f"http://localhost:8000/mobile/?token={pairing_token}" if pairing_token else "http://localhost:8000/mobile/"
+    localhost_url = f"http://localhost:8000/mobile/{token_query}"
 
     # ==============================================================================
-    # SECCIÓN 1: ACCESO RÁPIDO CON CÓDIGO QR Y ENLACES
+    # SECCIÓN 1: ACCESO RÁPIDO CON CÓDIGO PIN DE 6 DÍGITOS Y ENLACES
     # ==============================================================================
     st.subheader("🔗 Conexión Rápida desde el Teléfono")
 
@@ -137,84 +142,113 @@ def render_mobile_view() -> None:
                 st.session_state.pop("custom_mobile_host_ip", None)
                 st.rerun()
 
-    col_qr, col_info = st.columns([1, 2])
+    # Gestión del PIN de emparejamiento (6 dígitos)
+    pin_data = st.session_state.get("mobile_pairing_pin_data")
+    if not pin_data:
+        pin_data = api_client.generate_mobile_pin(ttl_seconds=600)
+        if pin_data:
+            st.session_state["mobile_pairing_pin_data"] = pin_data
 
-    with col_qr:
-        qr_uri = generate_qr_svg_base64(mobile_url)
-        if qr_uri:
-            st.markdown(
-                f"""
-                <div style="background-color: #ffffff; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 8px;">
-                    <img src="{qr_uri}" style="width: 190px; height: 190px; display: block; margin: 0 auto; border-radius: 6px;" alt="Código QR Micro-app" />
-                    <div style="font-size: 0.85rem; color: #475569; margin-top: 8px; font-weight: 600;">
-                        📷 Escanea con la cámara de tu móvil
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Abre la URL en tu navegador móvil.")
+    active_pin = pin_data.get("pin", "------") if pin_data else "------"
+    formatted_pin = f"{active_pin[:3]} {active_pin[3:]}" if len(active_pin) == 6 else active_pin
+    clean_mobile_url = f"{server_base_url}/mobile/"
+    auto_pair_url = f"{clean_mobile_url}?pin={active_pin}" if active_pin != "------" else clean_mobile_url
+    localhost_pin_url = f"http://localhost:8000/mobile/?pin={active_pin}" if active_pin != "------" else localhost_url
 
-        st.caption(f"📍 IP local detectada: **`{local_ip}`**")
-        if pairing_token:
-            st.caption(f"🔑 Token de enlace: `...{pairing_token[-8:]}`")
+    col_pin, col_info = st.columns([1, 2])
 
-    with col_info:
+    with col_pin:
         st.markdown(
             f"""
-            <div style="background: #f8fafc; border-left: 5px solid #3b82f6; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px;">
-                <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700;">
-                    URL de la Micro-app PWA con Token de Emparejamiento:
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #3b82f6; border-radius: 16px; padding: 22px 16px; text-align: center; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.25); margin-bottom: 12px;">
+                <div style="color: #94a3b8; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;">
+                    🔑 CÓDIGO DE VINCULACIÓN
                 </div>
-                <div style="font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-top: 4px; word-break: break-all;">
-                    <code>{mobile_url}</code>
+                <div style="font-family: 'Courier New', Courier, monospace; font-size: 2.6rem; font-weight: 800; letter-spacing: 0.2em; color: #38bdf8; text-shadow: 0 0 15px rgba(56, 189, 248, 0.4); margin: 14px 0;">
+                    {formatted_pin}
                 </div>
-                <div style="font-size: 0.8rem; color: #059669; font-weight: 600; margin-top: 6px;">
-                    🛡️ Vinculación blindada: solo tu teléfono podrá registrar datos en este PC (evita contaminación si otros se conectan a tu Wi-Fi).
+                <div style="color: #10b981; font-size: 0.8rem; font-weight: 600;">
+                    ⏱️ Validez: 10 minutos (un solo uso)
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+        if st.button("🔄 Generar Nuevo PIN", use_container_width=True, help="Genera un nuevo código de vinculación de 6 dígitos con validez de 10 minutos."):
+            new_pin_data = api_client.generate_mobile_pin(ttl_seconds=600)
+            if new_pin_data:
+                st.session_state["mobile_pairing_pin_data"] = new_pin_data
+            st.rerun()
+
+        st.caption(f"📍 Servidor en red Wi-Fi: **`{local_ip}`**")
+        st.caption("🛡️ Rate-limiting: Bloqueo tras 5 intentos fallidos.")
+
+    with col_info:
+        st.markdown(
+            f"""
+            <div style="background: #f8fafc; border-left: 5px solid #3b82f6; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px;">
+                <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 700;">
+                    Dirección web de la aplicación móvil:
+                </div>
+                <div style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 4px; word-break: break-all;">
+                    <code>{clean_mobile_url}</code>
+                </div>
+                <div style="font-size: 0.82rem; color: #475569; margin-top: 6px;">
+                    Abre la dirección en el navegador de tu móvil e introduce el <b>PIN de 6 dígitos</b> para emparejar tu teléfono al instante.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.code(clean_mobile_url, language=None)
+
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
-            st.link_button("🌐 Abrir PWA en el PC", localhost_url, use_container_width=True)
+            st.link_button("🌐 Probar en este PC", localhost_pin_url, use_container_width=True)
         with col_btn2:
             st.link_button("📖 Ver Guía Completa", "https://github.com/", use_container_width=True, help="Consulta docs/guia_companion_movil.md en el repositorio.")
 
-        guide_tabs = st.tabs(["🍏 iPhone (Safari)", "🤖 Android (Chrome PWA)", "📦 Android APK", "🔄 Syncthing (Opcional)"])
+        guide_tabs = st.tabs(["🤖 Android (Chrome PWA)", "🍏 iPhone (Safari)", "📦 Android APK (Sin Barras)", "🔄 Syncthing (Opcional)"])
 
         with guide_tabs[0]:
             st.markdown(
-                """
-                1. Conecta el iPhone a la **misma red Wi-Fi** que tu ordenador.
-                2. Escanea el código QR con la cámara del iPhone o abre el enlace en **Safari**.
-                3. La app detectará y guardará tu **token de emparejamiento** automáticamente.
-                4. Toca el botón **Compartir** (cuadrado con flecha hacia arriba) y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
-                5. ¡Listo! Se abrirá a pantalla completa como una app nativa y funcionará sin cobertura.
+                f"""
+                1. Conecta tu teléfono a la **misma Wi-Fi** que este PC.
+                2. Abre en **Google Chrome**: `http://{local_ip}:8000/mobile`
+                3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
+                4. Pulsa el menú de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
+                5. ¡Listo! Tendrás el acceso directo listo para capturar gastos en 1 tap con operativa 100% offline.
+
+                > ℹ️ **Nota sobre la barra superior de Chrome en Android**:
+                > En redes Wi-Fi locales bajo HTTP, Android muestra una barra de navegación delgada debido a las políticas WebAPK de Google. La app funciona de forma idéntica y sin límites. Si prefieres **pantalla completa pura de borde a borde (sin barra)**, puedes instalar la **📦 Android APK**.
+                >
+                > 💡 **Si Chrome indica «Esta aplicación no se puede instalar»**:
+                > 1. En Chrome en el móvil abre: `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
+                > 2. Actívalo en **Enabled** y escribe: `http://{local_ip}:8000`
+                > 3. Pulsa **Relaunch**.
                 """
             )
 
         with guide_tabs[1]:
             st.markdown(
-                """
-                1. Conecta tu teléfono a la **misma Wi-Fi** que el ordenador.
-                2. Escanea el código QR o abre la URL en **Google Chrome**.
-                3. Tu teléfono quedará emparejado automáticamente con este PC.
-                4. Pulsa el botón de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a pantalla principal»**.
-                5. Tendrás el icono en tu pantalla de inicio listo para registrar gastos en 1 tap.
+                f"""
+                1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
+                2. Abre en **Safari**: `http://{local_ip}:8000/mobile`
+                3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
+                4. Toca el botón **Compartir** (icono de cuadrado con flecha hacia arriba) y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
+                5. ¡Listo! En iOS, Safari abre la aplicación al **100% a pantalla completa nativa sin ninguna barra de navegación ni menús**.
                 """
             )
 
         with guide_tabs[2]:
             st.markdown(
                 f"""
-                1. Descarga el artefacto **`app-debug.apk`** compilado en GitHub Actions e instálalo en tu Android.
-                2. Al abrir la app por primera vez, escanea el código QR o introduce la URL con tu token:
-                   `{mobile_url}`
-                3. ¡Listo! La app recordará tu servidor y tu token permanentemente.
+                1. Diseñado para quienes desean eliminar totalmente la barra superior de Chrome en Android.
+                2. En la sección inferior **«📦 Distribución y Actualizaciones»**, descarga el archivo `.apk` publicado.
+                3. Instálalo en tu Android permitiendo la instalación desde fuentes desconocidas.
+                4. Al abrir la app por primera vez, pulsa el engranaje de configuración `[⚙️]`, introduce la IP `{local_ip}` y el PIN de 6 dígitos (`{active_pin}`).
+                5. ¡Disfruta de una experiencia 100% nativa de pantalla completa sin barras!
                 """
             )
 
