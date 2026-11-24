@@ -3,7 +3,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "com.gestorfinanzas.mobile",
   appName: "Gestor Finanzas",
-  webDir: "dist",
+  webDir: "dist-apk",
   server: {
     androidScheme: "https",
     cleartext: true,
@@ -11,6 +11,7 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: true,
     captureInput: true,
+    adjustMarginsForEdgeToEdge: "auto",
   },
 };
 

@@ -49,7 +49,7 @@ import {
 } from "./services/api";
 import { Settings } from "lucide-react";
 
-const CURRENT_APP_VERSION = { code: 1, name: "1.0.0" };
+const CURRENT_APP_VERSION = { code: 14, name: "1.4.0" };
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("capture");

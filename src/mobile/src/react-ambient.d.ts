@@ -153,6 +153,44 @@ declare module "@capacitor/cli" {
   }
 }
 
+declare module "@capacitor/core" {
+  export const Capacitor: {
+    isNativePlatform(): boolean;
+    getPlatform(): string;
+  };
+}
+
+declare module "@capacitor/browser" {
+  export const Browser: {
+    open(options: { url: string }): Promise<void>;
+  };
+}
+
+declare module "@capacitor/filesystem" {
+  export enum Directory {
+    Documents = "DOCUMENTS",
+    Data = "DATA",
+    Library = "LIBRARY",
+    Cache = "CACHE",
+    External = "EXTERNAL",
+    ExternalStorage = "EXTERNAL_STORAGE",
+  }
+  export enum Encoding {
+    UTF8 = "utf8",
+    ASCII = "ascii",
+    UTF16 = "utf16",
+  }
+  export const Filesystem: {
+    writeFile(options: { path: string; data: string; directory?: Directory; encoding?: Encoding }): Promise<{ uri: string }>;
+  };
+}
+
+declare module "@capacitor/share" {
+  export const Share: {
+    share(options: { title?: string; text?: string; url?: string; files?: string[]; dialogTitle?: string }): Promise<{ activityType?: string }>;
+  };
+}
+
 declare module "*.css" {
   const content: any;
   export default content;

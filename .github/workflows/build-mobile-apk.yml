@@ -37,15 +37,55 @@ jobs:
         run: |
           npm install
 
-      - name: Compilar frontend web (Vite)
+      - name: Verificar tipos TypeScript y compilar frontend web (Vite)
         working-directory: src/mobile
         run: |
+          npx tsc --noEmit
           npm run build
 
       - name: Inicializar y sincronizar Capacitor Android
         working-directory: src/mobile
         run: |
           npx cap add android || npx cap sync android
+
+      - name: Configurar permisos AndroidManifest y versión APK (HTTP LAN, Cámara y Edge-to-Edge)
+        working-directory: src/mobile
+        run: |
+          python3 - << 'EOF'
+          from pathlib import Path
+          import re
+
+          manifest_path = Path("android/app/src/main/AndroidManifest.xml")
+          manifest = manifest_path.read_text(encoding="utf-8")
+
+          if 'android:usesCleartextTraffic="true"' not in manifest:
+              manifest = manifest.replace("<application", '<application android:usesCleartextTraffic="true"', 1)
+
+          if "android.permission.CAMERA" not in manifest:
+              manifest = manifest.replace(
+                  "</manifest>",
+                  '    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>',
+                  1,
+              )
+
+          if "android.media.action.IMAGE_CAPTURE" not in manifest:
+              queries_block = (
+                  "    <queries>\n"
+                  "        <intent>\n"
+                  '            <action android:name="android.media.action.IMAGE_CAPTURE" />\n'
+                  "        </intent>\n"
+                  "    </queries>\n"
+              )
+              manifest = manifest.replace("</manifest>", f"{queries_block}</manifest>", 1)
+
+          manifest_path.write_text(manifest, encoding="utf-8")
+
+          gradle_path = Path("android/app/build.gradle")
+          gradle = gradle_path.read_text(encoding="utf-8")
+          gradle = re.sub(r"versionCode\s+\d+", "versionCode 14", gradle, count=1)
+          gradle = re.sub(r'versionName\s+"[^"]+"', 'versionName "1.4.0"', gradle, count=1)
+          gradle_path.write_text(gradle, encoding="utf-8")
+          EOF
 
       - name: Compilar APK Debug con Gradle
         working-directory: src/mobile/android

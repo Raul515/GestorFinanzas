@@ -488,3 +488,9 @@ backups/*
 tmp/
 tmp/**
 backups/code_snapshot_prev.tar.gz
+
+# MICRO-APP MÓVIL / CAPACITOR ANDROID (SPEC 016)
+node_modules/
+src/mobile/node_modules/
+src/mobile/android/
+src/mobile/dist-apk/
