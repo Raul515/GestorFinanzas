@@ -1,5 +1,5 @@
-// Service Worker para Gestor Finanzas Quick-Capture PWA (Spec 016)
-const CACHE_NAME = "gestor-finanzas-mobile-v1";
+// Service Worker para Gestor Finanzas Quick-Capture PWA (Spec 016 - Rediseño v2)
+const CACHE_NAME = "gestor-finanzas-mobile-v2";
 const ASSETS_TO_CACHE = [
   "/mobile/",
   "/mobile/index.html",
