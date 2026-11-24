@@ -23,8 +23,14 @@ export const HistoryView = ({
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
   const pendingTx = transactions.filter((t) => t.status === "PENDING_SYNC");
+  const errorTx = transactions.filter((t) => t.status === "SYNC_ERROR");
   const syncedTx = transactions.filter((t) => t.status === "SYNCED");
-  const totalMonthSpent = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = transactions
+    .filter((t) => t.type !== "INCOME")
+    .reduce((sum, t) => sum + t.amount, 0);
+  const totalIncome = transactions
+    .filter((t) => t.type === "INCOME")
+    .reduce((sum, t) => sum + t.amount, 0);
 
   const formatDateDisplay = (isoDate: string) => {
     const [y, m, d] = isoDate.split("-");
@@ -44,10 +50,15 @@ export const HistoryView = ({
       <div className="p-4 rounded-2xl bg-[#0F172A] border border-white/[0.08] flex flex-col gap-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] text-slate-400 font-medium">Total Registrado en Móvil</div>
+            <div className="text-[11px] text-slate-400 font-medium">Gastos en Memoria Local</div>
             <div className="text-xl font-black text-slate-100 font-mono tracking-tight mt-0.5">
-              -{totalMonthSpent.toFixed(2)} €
+              -{totalExpenses.toFixed(2)} €
             </div>
+            {totalIncome > 0 && (
+              <div className="text-[10.5px] font-bold text-emerald-400 font-mono mt-0.5">
+                Ingresos: +{totalIncome.toFixed(2)} €
+              </div>
+            )}
           </div>
 
           <button
@@ -155,6 +166,56 @@ export const HistoryView = ({
           </div>
         )}
       </div>
+
+      {/* Sección 1b: Errores de Validación (Cola Envenenada) */}
+      {errorTx.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between px-1 mb-2">
+            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Rechazados por Validación ({errorTx.length})</span>
+            </h4>
+          </div>
+          <div className="flex flex-col gap-2">
+            {errorTx.map((tx) => {
+              const emoji = getSubcategoryEmoji(tx.subcategory_name);
+              return (
+                <div
+                  key={tx.event_id}
+                  className="p-3 rounded-2xl bg-[#0F172A] border border-rose-500/35 flex items-center justify-between gap-3 shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-lg shrink-0">
+                      {emoji}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-100 truncate">{tx.description}</div>
+                      <div className="text-[10.5px] text-rose-300/80 flex items-center gap-1.5 mt-0.5">
+                        <span className="truncate">{tx.subcategory_name}</span>
+                        <span>•</span>
+                        <span>{formatDateDisplay(tx.date)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono font-black text-sm text-rose-400">
+                      {tx.type === "INCOME" ? "+" : "-"}{tx.amount.toFixed(2)} €
+                    </span>
+                    <button
+                      type="button"
+                      title="Eliminar apunte con error"
+                      onClick={() => setTxToDelete(tx)}
+                      className="p-1.5 rounded-xl text-rose-400 hover:text-rose-300 active:bg-white/[0.06] transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Sección 2: Gastos Sincronizados y Confirmados */}
       <div>

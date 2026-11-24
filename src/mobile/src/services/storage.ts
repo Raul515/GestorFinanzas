@@ -1,3 +1,6 @@
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import {
   CatalogData,
   HistoricalTransactionItem,
@@ -14,20 +17,48 @@ const STORAGE_KEYS = {
   PAIRING_TOKEN: "gestor_mobile_pairing_token",
   PENDING_DELETES: "gestor_mobile_pending_deletes",
   MONTHLY_SUMMARY: "gestor_mobile_monthly_summary",
+  MONTHLY_SUMMARIES_MAP: "gestor_mobile_monthly_summaries_map",
   HISTORY_CACHE: "gestor_mobile_history_cache",
   QUICK_PRESETS: "gestor_mobile_quick_presets",
 };
 
+export const getLocalDateString = (d: Date = new Date()): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+export const getLocalMonthString = (d: Date = new Date()): string => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+};
+
+export const isIncomeSubcategory = (
+  sub?: Pick<SubcategoryItem, "category_type" | "category_name"> | null
+): boolean => {
+  if (!sub) return false;
+  const cType = (sub.category_type || "").toLowerCase();
+  const cName = (sub.category_name || "").toLowerCase();
+  return cType === "income" || cType === "ingreso" || cName.includes("ingreso");
+};
+
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
 export const DEFAULT_FALLBACK_SUBCATEGORIES: SubcategoryItem[] = [
-  { id: 1, name: "Café y Desayunos", category_id: 3, category_name: "Deseos (30%)", is_frequent: true },
-  { id: 2, name: "Supermercado", category_id: 2, category_name: "Necesidades Básicas (50%)", is_frequent: true },
-  { id: 3, name: "Restaurante", category_id: 3, category_name: "Deseos (30%)", is_frequent: true },
-  { id: 4, name: "Gasolina", category_id: 2, category_name: "Necesidades Básicas (50%)", is_frequent: true },
-  { id: 5, name: "Farmacia", category_id: 2, category_name: "Necesidades Básicas (50%)", is_frequent: true },
-  { id: 6, name: "Ocio y Cultura", category_id: 3, category_name: "Deseos (30%)", is_frequent: true },
-  { id: 7, name: "Vivienda y Alquiler", category_id: 2, category_name: "Necesidades Básicas (50%)", is_frequent: false },
-  { id: 8, name: "Suministros (Luz, Agua)", category_id: 2, category_name: "Necesidades Básicas (50%)", is_frequent: false },
+  { id: 1, name: "Café y Desayunos", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: 2, name: "Supermercado", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: 3, name: "Restaurante", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: 4, name: "Gasolina", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: 5, name: "Farmacia", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: 6, name: "Pádel / Ocio", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: 7, name: "Alquiler / Hipoteca", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
+  { id: 8, name: "Suministros (Luz, Agua)", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
+  { id: 9, name: "Suscripciones", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: false },
+  { id: 10, name: "Fondo de Emergencia", category_id: 4, category_name: "Ahorro e Inversión (20%)", category_type: "expense", is_frequent: false },
+  { id: 11, name: "Salario NETO / Nómina", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
+  { id: 12, name: "Bizum / Ingreso extra", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
+  { id: 13, name: "Devoluciones y Reembolsos", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: false },
 ];
 
 export const DEFAULT_FALLBACK_CONCEPTS: string[] = [
@@ -253,9 +284,135 @@ export const loadStoredMonthlySummary = (): MobileMonthlySummary | null => {
 export const saveStoredMonthlySummary = (summary: MobileMonthlySummary): void => {
   try {
     localStorage.setItem(STORAGE_KEYS.MONTHLY_SUMMARY, JSON.stringify(summary));
+    if (summary.month) {
+      upsertStoredMonthlySummary(summary);
+    }
   } catch (err) {
     console.error("Error guardando resumen mensual en almacenamiento local:", err);
   }
+};
+
+export const loadStoredMonthlySummariesMap = (): Record<string, MobileMonthlySummary> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.MONTHLY_SUMMARIES_MAP);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+    const single = loadStoredMonthlySummary();
+    if (single && single.month) {
+      return { [single.month]: single };
+    }
+  } catch {
+    // fallback
+  }
+  return {};
+};
+
+export const saveStoredMonthlySummariesMap = (map: Record<string, MobileMonthlySummary>): void => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.MONTHLY_SUMMARIES_MAP, JSON.stringify(map));
+  } catch (err) {
+    console.error("Error guardando mapa de resúmenes mensuales:", err);
+  }
+};
+
+export const upsertStoredMonthlySummary = (summary: MobileMonthlySummary): Record<string, MobileMonthlySummary> => {
+  const current = loadStoredMonthlySummariesMap();
+  const updated = { ...current, [summary.month]: summary };
+  saveStoredMonthlySummariesMap(updated);
+  return updated;
+};
+
+export const getOfflineMonthlySummary = (
+  monthStr: string,
+  transactions: MobileTransaction[],
+  subcategories: SubcategoryItem[]
+): MobileMonthlySummary => {
+  const targetMonth = monthStr || getLocalMonthString();
+  const subcatMap = new Map<number, SubcategoryItem>();
+  subcategories.forEach((s) => subcatMap.set(s.id, s));
+
+  const monthTxs = (transactions || []).filter((t) => t.date && t.date.startsWith(targetMonth));
+  let spent = 0;
+  let income = 0;
+  let needsSpent = 0;
+  let wantsSpent = 0;
+  let savingsSpent = 0;
+  const subcatSpentMap: Record<number, number> = {};
+
+  monthTxs.forEach((t) => {
+    const amt = Number(t.amount) || 0;
+    if (t.type === "INCOME") {
+      income += amt;
+      return;
+    }
+    spent += amt;
+    const sub = subcatMap.get(t.subcategory_id);
+    const catLower = (sub?.category_name || "").toLowerCase();
+    if (catLower.includes("necesidad") || catLower.includes("50") || sub?.category_id === 2) {
+      needsSpent += amt;
+    } else if (catLower.includes("ahorro") || catLower.includes("20") || sub?.category_id === 4) {
+      savingsSpent += amt;
+    } else {
+      wantsSpent += amt;
+    }
+    if (t.subcategory_id) {
+      subcatSpentMap[t.subcategory_id] = (subcatSpentMap[t.subcategory_id] || 0) + amt;
+    }
+  });
+
+  const baseIncome = Math.round(income * 100) / 100;
+  const needsTarget = Math.round(baseIncome * 0.5 * 100) / 100;
+  const wantsTarget = Math.round(baseIncome * 0.3 * 100) / 100;
+  const savingsTarget = Math.round(baseIncome * 0.2 * 100) / 100;
+  const lastSummary = loadStoredMonthlySummary();
+
+  return {
+    month: targetMonth,
+    total_income: baseIncome,
+    total_spent: Math.round(spent * 100) / 100,
+    remaining_budget: Math.round((baseIncome - spent) * 100) / 100,
+    needs: {
+      category_name: "Necesidades Básicas (50%)",
+      rule_percentage: 50,
+      spent: Math.round(needsSpent * 100) / 100,
+      budget: needsTarget,
+      remaining: Math.round((needsTarget - needsSpent) * 100) / 100,
+      progress_percentage: needsTarget > 0 ? Math.round((needsSpent / needsTarget) * 1000) / 10 : needsSpent > 0 ? 100 : 0,
+    },
+    wants: {
+      category_name: "Deseos (30%)",
+      rule_percentage: 30,
+      spent: Math.round(wantsSpent * 100) / 100,
+      budget: wantsTarget,
+      remaining: Math.round((wantsTarget - wantsSpent) * 100) / 100,
+      progress_percentage: wantsTarget > 0 ? Math.round((wantsSpent / wantsTarget) * 1000) / 10 : wantsSpent > 0 ? 100 : 0,
+    },
+    savings: {
+      category_name: "Ahorro e Inversión (20%)",
+      rule_percentage: 20,
+      spent: Math.round(savingsSpent * 100) / 100,
+      budget: savingsTarget,
+      remaining: Math.round((savingsTarget - savingsSpent) * 100) / 100,
+      progress_percentage: savingsTarget > 0 ? Math.round((savingsSpent / savingsTarget) * 1000) / 10 : savingsSpent > 0 ? 100 : 0,
+    },
+    emergency_fund: lastSummary?.emergency_fund || {
+      current_amount: 0,
+      target_amount: 0,
+      months_covered: 0,
+      is_funded: false,
+    },
+    subcategories: subcategories
+      .filter((s) => !isIncomeSubcategory(s))
+      .map((s) => ({
+        subcategory_id: s.id,
+        subcategory_name: s.name,
+        category_name: s.category_name,
+        spent: Math.round((subcatSpentMap[s.id] || 0) * 100) / 100,
+        budget: 0,
+      })),
+  };
 };
 
 export const loadStoredHistoryCache = (): HistoricalTransactionItem[] => {
@@ -335,11 +492,12 @@ export const isIOSDevice = (): boolean => {
 export const exportTransactionsToJsonFile = async (transactions: MobileTransaction[]): Promise<void> => {
   const pending = transactions.filter((t) => t.status === "PENDING_SYNC");
   const payload = {
-    device_id: "mobile-pwa",
+    device_id: Capacitor.isNativePlatform() ? "mobile-apk" : "mobile-pwa",
     exported_at_utc: new Date().toISOString(),
     transactions: pending.map((t) => ({
       event_id: t.event_id,
       scope: t.scope,
+      type: t.type || "EXPENSE",
       amount: t.amount,
       description: t.description,
       date: t.date,
@@ -352,6 +510,30 @@ export const exportTransactionsToJsonFile = async (transactions: MobileTransacti
   const jsonStr = JSON.stringify(payload, null, 2);
   const filename = `evt_mob_${Date.now()}.json`;
 
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const savedFile = await Filesystem.writeFile({
+        path: filename,
+        data: jsonStr,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8,
+      });
+      await Share.share({
+        title: "Exportación Gestor Finanzas",
+        text: `Lote de ${pending.length} movimientos pendientes exportados.`,
+        url: savedFile.uri,
+        files: [savedFile.uri],
+        dialogTitle: "Guardar o compartir JSON",
+      });
+      return;
+    } catch (nativeErr: any) {
+      if (nativeErr?.message && String(nativeErr.message).toLowerCase().includes("cancel")) {
+        return;
+      }
+      console.warn("Fallo en exportación nativa Capacitor, usando fallback web:", nativeErr);
+    }
+  }
+
   if (typeof navigator !== "undefined" && navigator.share && navigator.canShare) {
     try {
       const file = new File([jsonStr], filename, { type: "application/json" });
@@ -359,7 +541,7 @@ export const exportTransactionsToJsonFile = async (transactions: MobileTransacti
         await navigator.share({
           files: [file],
           title: "Exportación Gestor Finanzas",
-          text: `Lote de ${pending.length} gastos pendientes exportados.`
+          text: `Lote de ${pending.length} gastos pendientes exportados.`,
         });
         return;
       }

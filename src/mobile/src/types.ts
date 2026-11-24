@@ -24,7 +24,7 @@ export interface MobileTransaction {
   subcategory_id: number;
   subcategory_name: string;
   created_at_utc: string;
-  status: "PENDING_SYNC" | "SYNCED";
+  status: "PENDING_SYNC" | "SYNCED" | "SYNC_ERROR";
   receipt_base64?: string | null;
   receipt_filename?: string | null;
 }
@@ -80,6 +80,7 @@ export interface MobileVersionInfo {
 
 export interface HistoricalTransactionItem {
   id: number;
+  mobile_event_id?: string | null;
   date: string;
   amount: number;
   description: string;

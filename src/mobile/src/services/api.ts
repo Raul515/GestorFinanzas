@@ -158,11 +158,25 @@ const getCommonHeaders = (): Record<string, string> => {
   return headers;
 };
 
+const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 8000
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const fetchCatalog = async (): Promise<CatalogData | null> => {
   try {
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/catalog`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/catalog`, {
       headers: getCommonHeaders(),
-    });
+    }, 5000);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -172,7 +186,13 @@ export const fetchCatalog = async (): Promise<CatalogData | null> => {
 
 export const syncTransactionsWithBackend = async (
   pendingTxs: MobileTransaction[]
-): Promise<{ success: boolean; processedCount: number; ignoredCount: number; isUnauthorized?: boolean } | null> => {
+): Promise<{
+  success: boolean;
+  processedCount: number;
+  ignoredCount: number;
+  isUnauthorized?: boolean;
+  isValidationError?: boolean;
+} | null> => {
   if (pendingTxs.length === 0) {
     return { success: true, processedCount: 0, ignoredCount: 0 };
   }
@@ -199,14 +219,18 @@ export const syncTransactionsWithBackend = async (
       ...getCommonHeaders(),
       "Content-Type": "application/json",
     };
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/sync`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/sync`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
-    });
+    }, 12000);
 
     if (res.status === 403) {
       return { success: false, processedCount: 0, ignoredCount: 0, isUnauthorized: true };
+    }
+
+    if (res.status === 422) {
+      return { success: false, processedCount: 0, ignoredCount: 0, isValidationError: true };
     }
 
     if (!res.ok) return null;
@@ -250,9 +274,9 @@ export const checkServerStatus = async (): Promise<{ isOnline: boolean; isPaired
 export const fetchMonthlySummary = async (month?: string): Promise<MobileMonthlySummary | null> => {
   try {
     const query = month ? `?month=${encodeURIComponent(month)}` : "";
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/summary${query}`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/summary${query}`, {
       headers: getCommonHeaders(),
-    });
+    }, 6000);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -266,7 +290,7 @@ export const updateMonthlyBudget = async (
   month?: string
 ): Promise<boolean> => {
   try {
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/budget`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/budget`, {
       method: "POST",
       headers: {
         ...getCommonHeaders(),
@@ -277,7 +301,7 @@ export const updateMonthlyBudget = async (
         allocated_amount: allocatedAmount,
         month: month || undefined,
       }),
-    });
+    }, 6000);
     return res.ok;
   } catch {
     return false;
@@ -289,7 +313,7 @@ export const createSubcategoryOnTheFly = async (
   categoryName: string
 ): Promise<SubcategoryItem | null> => {
   try {
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/subcategory`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/subcategory`, {
       method: "POST",
       headers: {
         ...getCommonHeaders(),
@@ -299,7 +323,7 @@ export const createSubcategoryOnTheFly = async (
         name,
         category_name: categoryName,
       }),
-    });
+    }, 6000);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -309,9 +333,9 @@ export const createSubcategoryOnTheFly = async (
 
 export const fetchLatestVersion = async (): Promise<MobileVersionInfo | null> => {
   try {
-    const res = await fetch(`${getBaseApiUrl()}/api/mobile/version`, {
+    const res = await fetchWithTimeout(`${getBaseApiUrl()}/api/mobile/version`, {
       headers: getCommonHeaders(),
-    });
+    }, 4000);
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -327,14 +351,15 @@ export const deleteMobileTransaction = async (
   idOrEventId: string | number
 ): Promise<boolean> => {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${getBaseApiUrl()}/api/mobile/transactions/${encodeURIComponent(String(idOrEventId))}`,
       {
         method: "DELETE",
         headers: getCommonHeaders(),
-      }
+      },
+      6000
     );
-    return res.ok;
+    return res.ok || res.status === 404;
   } catch {
     return false;
   }
@@ -345,9 +370,10 @@ export const searchMobileTransactions = async (
   limit = 50
 ): Promise<SearchResponse | null> => {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${getBaseApiUrl()}/api/mobile/transactions/search?q=${encodeURIComponent(query)}&limit=${limit}`,
-      { headers: getCommonHeaders() }
+      { headers: getCommonHeaders() },
+      8000
     );
     if (!res.ok) return null;
     return await res.json();
@@ -360,9 +386,10 @@ export const fetchHistoryCache = async (
   months = 12
 ): Promise<HistoricalTransactionItem[] | null> => {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${getBaseApiUrl()}/api/mobile/transactions/history-cache?months=${months}`,
-      { headers: getCommonHeaders() }
+      { headers: getCommonHeaders() },
+      8000
     );
     if (!res.ok) return null;
     return await res.json();

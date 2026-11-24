@@ -1,54 +1,79 @@
 import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { RefreshCw, ShieldCheck, AlertTriangle, Edit3, Check, X, TrendingUp, PieChart } from "lucide-react";
-import { MobileMonthlySummary, MobileSubcategorySummary } from "../types";
+import { MobileMonthlySummary, MobileSubcategorySummary, MobileTransaction, SubcategoryItem } from "../types";
 import { fetchMonthlySummary, updateMonthlyBudget } from "../services/api";
+import { getLocalMonthString, getOfflineMonthlySummary } from "../services/storage";
 import { getSubcategoryEmoji } from "./CategoryChips";
 
 interface MonthlySummaryViewProps {
   isServerOnline: boolean;
+  transactions: MobileTransaction[];
+  subcategories: SubcategoryItem[];
+  cachedSummariesMap: Record<string, MobileMonthlySummary>;
+  onSummaryLoaded: (summary: MobileMonthlySummary) => void;
+  onRequestReconnect: () => Promise<boolean> | void;
 }
 
-export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) => {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}`;
-  });
+export const MonthlySummaryView = ({
+  isServerOnline,
+  transactions,
+  subcategories,
+  cachedSummariesMap,
+  onSummaryLoaded,
+  onRequestReconnect,
+}: MonthlySummaryViewProps) => {
+  const [currentMonth, setCurrentMonth] = useState(() => getLocalMonthString());
 
-  const [summary, setSummary] = useState<MobileMonthlySummary | null>(null);
+  const [summary, setSummary] = useState<MobileMonthlySummary | null>(
+    () => cachedSummariesMap[getLocalMonthString()] || getOfflineMonthlySummary(getLocalMonthString(), transactions, subcategories)
+  );
   const [loading, setLoading] = useState(false);
   const [editingSubcatId, setEditingSubcatId] = useState<number | null>(null);
   const [editAmountStr, setEditAmountStr] = useState("");
   const [savingBudget, setSavingBudget] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadData = useCallback(async (monthStr: string) => {
-    if (!isServerOnline) {
-      setErrorMessage("Modo offline: Conéctate a tu red local para consultar y actualizar el resumen.");
-      return;
-    }
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      const data = await fetchMonthlySummary(monthStr);
-      if (data) {
-        setSummary(data);
-      } else {
-        setErrorMessage("No se pudo cargar el resumen mensual. Verifica la conexión con tu PC.");
+  const loadData = useCallback(
+    async (monthStr: string, forceReconnect = false) => {
+      const localFallback =
+        cachedSummariesMap[monthStr] || getOfflineMonthlySummary(monthStr, transactions, subcategories);
+      setSummary(localFallback);
+
+      let online = isServerOnline;
+      if (forceReconnect) {
+        const reconnected = await onRequestReconnect();
+        if (typeof reconnected === "boolean") {
+          online = reconnected;
+        }
       }
-    } catch {
-      setErrorMessage("Error de conexión al cargar el resumen.");
-    } finally {
-      setLoading(false);
-    }
-  }, [isServerOnline]);
+
+      if (!online) {
+        setErrorMessage(null);
+        return;
+      }
+
+      setLoading(true);
+      setErrorMessage(null);
+      try {
+        const data = await fetchMonthlySummary(monthStr);
+        if (data) {
+          setSummary(data);
+          onSummaryLoaded(data);
+        } else {
+          setSummary(localFallback);
+        }
+      } catch {
+        setSummary(localFallback);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isServerOnline, cachedSummariesMap, transactions, subcategories, onSummaryLoaded, onRequestReconnect]
+  );
 
   useEffect(() => {
-    if (isServerOnline) {
-      loadData(currentMonth);
-    }
-  }, [currentMonth, isServerOnline, loadData]);
+    loadData(currentMonth, false);
+  }, [currentMonth, isServerOnline]);
 
   const handleStartEdit = (subcat: MobileSubcategorySummary) => {
     setEditingSubcatId(subcat.subcategory_id);
@@ -58,13 +83,14 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
   const handleSaveBudget = async (subcategoryId: number) => {
     const num = parseFloat(editAmountStr.replace(",", ".")) || 0;
     setSavingBudget(true);
+    setErrorMessage(null);
     try {
       const ok = await updateMonthlyBudget(subcategoryId, num, currentMonth);
       if (ok) {
         setEditingSubcatId(null);
-        await loadData(currentMonth);
+        await loadData(currentMonth, false);
       } else {
-        alert("No se pudo actualizar el presupuesto. Comprueba la conexión.");
+        setErrorMessage("No se pudo actualizar el presupuesto. Comprueba la conexión.");
       }
     } finally {
       setSavingBudget(false);
@@ -160,15 +186,31 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
           </button>
           <button
             type="button"
-            onClick={() => loadData(currentMonth)}
-            disabled={loading || !isServerOnline}
+            onClick={() => loadData(currentMonth, true)}
+            disabled={loading}
             className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
-            title={isServerOnline ? "Recargar métricas" : "Servidor desconectado"}
+            title={isServerOnline ? "Recargar métricas" : "Reconectar y recargar"}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
           </button>
         </div>
       </div>
+
+      {!isServerOnline && (
+        <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 text-amber-300 rounded-xl text-[11px] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+            <span className="truncate">Modo Offline: métricas locales ({currentMonth})</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadData(currentMonth, true)}
+            className="text-[11px] font-bold text-amber-300 underline shrink-0"
+          >
+            Reconectar
+          </button>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-2xl text-xs flex items-center gap-2">

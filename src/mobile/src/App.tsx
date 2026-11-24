@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { QuickCaptureView } from "./components/QuickCaptureView";
 import { SearchView } from "./components/SearchView";
 import { HistoryView } from "./components/HistoryView";
@@ -23,16 +25,21 @@ import {
   isIOSDevice,
   getStoredPairingToken,
   saveStoredPairingToken,
+  clearStoredPairingToken,
   loadStoredPendingDeletes,
   addPendingDelete,
   removePendingDelete,
   loadStoredMonthlySummary,
   saveStoredMonthlySummary,
+  loadStoredMonthlySummariesMap,
+  upsertStoredMonthlySummary,
   loadStoredHistoryCache,
   saveStoredHistoryCache,
   getStoredServerUrl,
   saveStoredServerUrl,
+  clearStoredServerUrl,
   extractAndSaveServerUrlFromUrl,
+  isIncomeSubcategory,
 } from "./services/storage";
 import {
   getBaseApiUrl,
@@ -56,6 +63,7 @@ export function App() {
   const [catalog, setCatalog] = useState(loadStoredCatalog);
   const [transactions, setTransactions] = useState<MobileTransaction[]>(loadStoredTransactions);
   const [monthlySummary, setMonthlySummary] = useState(loadStoredMonthlySummary);
+  const [monthlySummariesMap, setMonthlySummariesMap] = useState(loadStoredMonthlySummariesMap);
   const [historyCache, setHistoryCache] = useState<HistoricalTransactionItem[]>(loadStoredHistoryCache);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [isPaired, setIsPaired] = useState(true);
@@ -111,12 +119,35 @@ export function App() {
       if (remoteSummary) {
         setMonthlySummary(remoteSummary);
         saveStoredMonthlySummary(remoteSummary);
+        setMonthlySummariesMap(upsertStoredMonthlySummary(remoteSummary));
       }
 
       const remoteHistory = await fetchHistoryCache(12);
-      if (remoteHistory && remoteHistory.length > 0) {
+      if (remoteHistory !== null) {
         setHistoryCache(remoteHistory);
         saveStoredHistoryCache(remoteHistory);
+
+        // Reconciliación bidireccional: purgar transacciones SYNCED eliminadas desde PC/Streamlit
+        const serverEventIds = new Set(
+          remoteHistory.map((t) => t.mobile_event_id).filter(Boolean) as string[]
+        );
+        const serverDates = remoteHistory.map((t) => t.date).filter(Boolean).sort();
+        const minServerDate = serverDates.length > 0 ? serverDates[0] : null;
+
+        setTransactions((prev) => {
+          const reconciled = prev.filter((t) => {
+            if (t.status !== "SYNCED") return true;
+            if (minServerDate && t.date >= minServerDate) {
+              return serverEventIds.has(t.event_id);
+            }
+            return true;
+          });
+          if (reconciled.length !== prev.length) {
+            saveStoredTransactions(reconciled);
+            return reconciled;
+          }
+          return prev;
+        });
       }
     } catch (e) {
       console.warn("Fallo en sincronización secundaria de datos móviles:", e);
@@ -124,10 +155,10 @@ export function App() {
   }, []);
 
   // Comprobar conectividad y estado básico de salud de forma ligera
-  const checkConnectivity = useCallback(async () => {
+  const checkConnectivity = useCallback(async (): Promise<boolean> => {
     // Pausar sondeo si la pestaña móvil está en segundo plano para ahorrar batería y red
     if (typeof document !== "undefined" && document.visibilityState !== "visible") {
-      return;
+      return isServerOnline;
     }
 
     try {
@@ -157,20 +188,22 @@ export function App() {
           setAvailableUpdate(null);
         }
       }
+      return status.isOnline;
     } catch {
       setIsServerOnline(false);
+      return false;
     }
   }, [isServerOnline, refreshHeavyData]);
 
   // Función de sincronización con el backend
   const handleTriggerSync = useCallback(async () => {
     const pending = transactions.filter((t) => t.status === "PENDING_SYNC");
-    if (pending.length === 0 || isSyncing) return;
+    const pendingDeletes = loadStoredPendingDeletes();
+    if ((pending.length === 0 && pendingDeletes.length === 0) || isSyncing) return;
 
     setIsSyncing(true);
     try {
       // 1. Procesar borrados pendientes de sincronizar
-      const pendingDeletes = loadStoredPendingDeletes();
       if (pendingDeletes.length > 0) {
         for (const delId of pendingDeletes) {
           try {
@@ -182,6 +215,11 @@ export function App() {
             // Reintento en el siguiente ciclo
           }
         }
+      }
+
+      if (pending.length === 0) {
+        refreshHeavyData(true);
+        return;
       }
 
       // 2. Ingestar transacciones nuevas en cola
@@ -202,6 +240,15 @@ export function App() {
       } else if (result && result.isUnauthorized) {
         setIsPaired(false);
         setShowServerConfigModal(true);
+      } else if (result && result.isValidationError) {
+        // Mitigación de Cola Envenenada (HTTP 422): evitar reintentos infinitos
+        setTransactions((prev) => {
+          const updated = prev.map((t) =>
+            t.status === "PENDING_SYNC" ? { ...t, status: "SYNC_ERROR" as const } : t
+          );
+          saveStoredTransactions(updated);
+          return updated;
+        });
       } else {
         setIsServerOnline(false);
       }
@@ -212,7 +259,7 @@ export function App() {
     }
   }, [transactions, isSyncing, refreshHeavyData]);
 
-  // Sondeo adaptativo cada 60s con pausa en segundo plano
+  // Sondeo adaptativo cada 60s con pausa en segundo plano y reconexión inmediata al volver Wi-Fi
   useEffect(() => {
     checkConnectivity();
 
@@ -225,11 +272,22 @@ export function App() {
         checkConnectivity();
       }
     };
+    const handleOnline = () => {
+      checkConnectivity();
+    };
+    const handleOffline = () => {
+      setIsServerOnline(false);
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, [checkConnectivity]);
 
@@ -287,26 +345,49 @@ export function App() {
   };
 
   const handleDeleteTransaction = async (tx: MobileTransaction) => {
+    // Buscar la versión actual en memoria (puede haber pasado a SYNCED antes de pulsar Deshacer)
+    const liveTx = transactions.find((t) => t.event_id === tx.event_id) || tx;
+
     // 1. Eliminar inmediatamente del estado y almacenamiento local
     setTransactions((prev) => {
-      const updated = prev.filter((t) => t.event_id !== tx.event_id);
+      const updated = prev.filter((t) => t.event_id !== liveTx.event_id);
       saveStoredTransactions(updated);
       return updated;
     });
 
+    // Revertir incremento optimista de Deseos si aplica
+    if (liveTx.type !== "INCOME" && monthlySummary?.wants) {
+      const isWants = catalog.personal_subcategories.some(
+        (s) => s.id === liveTx.subcategory_id && (s.category_name.toLowerCase().includes("deseo") || s.category_id === 3)
+      );
+      if (isWants && liveTx.amount > 0) {
+        const newSpent = Math.max(0, monthlySummary.wants.spent - liveTx.amount);
+        const updatedSummary = {
+          ...monthlySummary,
+          wants: {
+            ...monthlySummary.wants,
+            spent: newSpent,
+            remaining: monthlySummary.wants.budget - newSpent,
+          },
+        };
+        setMonthlySummary(updatedSummary);
+        saveStoredMonthlySummary(updatedSummary);
+      }
+    }
+
     // 2. Si la transacción ya estaba subida al servidor, solicitar borrado remoto o encolarlo
-    if (tx.status === "SYNCED") {
+    if (liveTx.status === "SYNCED") {
       if (isServerOnline && isPaired) {
         try {
-          const ok = await deleteMobileTransaction(tx.event_id);
+          const ok = await deleteMobileTransaction(liveTx.event_id);
           if (!ok) {
-            addPendingDelete(tx.event_id);
+            addPendingDelete(liveTx.event_id);
           }
         } catch {
-          addPendingDelete(tx.event_id);
+          addPendingDelete(liveTx.event_id);
         }
       } else {
-        addPendingDelete(tx.event_id);
+        addPendingDelete(liveTx.event_id);
       }
     }
   };
@@ -338,12 +419,14 @@ export function App() {
       }
     }
 
-    // Si estamos offline o falló la conexión, crear con ID temporal negativo
+    // Si estamos offline o falló la conexión, crear con ID temporal negativo y tipo correcto
+    const isIncome = isIncomeSubcategory({ category_name: categoryName });
     const tempSubcat: SubcategoryItem = {
       id: -Date.now(),
       name,
-      category_id: categoryName.includes("50%") ? 2 : 3,
+      category_id: isIncome ? 1 : categoryName.includes("50%") ? 2 : categoryName.includes("20%") ? 4 : 3,
       category_name: categoryName,
+      category_type: isIncome ? "income" : "expense",
       is_frequent: true,
     };
     const updatedCat = addSubcategoryToStoredCatalog(tempSubcat);
@@ -354,12 +437,30 @@ export function App() {
   const handleSaveServerConfig = (newServerUrl: string, newPairingToken: string) => {
     if (newServerUrl) {
       saveStoredServerUrl(newServerUrl);
+    } else {
+      clearStoredServerUrl();
     }
     if (newPairingToken) {
       saveStoredPairingToken(newPairingToken);
+    } else {
+      clearStoredPairingToken();
     }
+    lastDataFetchRef.current = 0;
     checkConnectivity();
     refreshHeavyData(true);
+  };
+
+  const handleOpenOtaDownload = async () => {
+    const url = getApkDownloadUrl();
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Browser.open({ url });
+        return;
+      } catch (err) {
+        console.warn("Fallo al abrir descarga OTA con Browser plugin, usando window.open:", err);
+      }
+    }
+    window.open(url, "_blank");
   };
 
   return (
@@ -409,7 +510,7 @@ export function App() {
           </div>
           <button
             type="button"
-            onClick={() => window.open(getApkDownloadUrl(), "_blank")}
+            onClick={handleOpenOtaDownload}
             className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-extrabold text-[11px] active:scale-95 shadow-sm"
           >
             Actualizar
@@ -445,7 +546,17 @@ export function App() {
             onExportJson={handleExportJson}
           />
         ) : (
-          <MonthlySummaryView isServerOnline={isServerOnline} />
+          <MonthlySummaryView
+            isServerOnline={isServerOnline}
+            transactions={transactions}
+            subcategories={catalog.personal_subcategories}
+            cachedSummariesMap={monthlySummariesMap}
+            onSummaryLoaded={(loaded) => {
+              const updatedMap = upsertStoredMonthlySummary(loaded);
+              setMonthlySummariesMap(updatedMap);
+            }}
+            onRequestReconnect={checkConnectivity}
+          />
         )}
       </main>
 

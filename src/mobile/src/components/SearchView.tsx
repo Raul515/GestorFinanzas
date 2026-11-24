@@ -48,7 +48,7 @@ export const SearchView = ({
         subcategory_name: t.subcategory_name || "",
         category_name: "Cuenta Personal",
         receipt_filename: t.receipt_filename || undefined,
-        receipt_url: getReceiptImageUrl(t.receipt_filename),
+        receipt_url: t.receipt_base64 || getReceiptImageUrl(t.receipt_filename),
       })),
       ...historyCache,
     ];
