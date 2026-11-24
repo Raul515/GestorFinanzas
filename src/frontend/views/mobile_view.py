@@ -234,10 +234,18 @@ def render_mobile_view() -> None:
             st.markdown(
                 f"""
                 1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
-                2. Abre en **Safari**: `http://{local_ip}:8000/mobile`
-                3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
-                4. Toca el botón **Compartir** (icono de cuadrado con flecha hacia arriba) y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
-                5. ¡Listo! En iOS, Safari abre la aplicación al **100% a pantalla completa nativa sin ninguna barra de navegación ni menús**.
+                2. Abre en **Safari**: `http://{local_ip}:8000/mobile/` *(con la barra final `/`)*.
+                3. **Instalación como App Nativa**:
+                   - Toca el botón **Compartir** de Safari (icono de cuadrado con flecha hacia arriba `⬆️`).
+                   - Desliza hacia abajo y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
+                   - Confirma pulsando **Añadir** arriba a la derecha.
+                4. **Vinculación en la App Instalada**:
+                   - Abre el nuevo icono **Gestor Finanzas** desde la pantalla de inicio de tu iPhone (se abrirá a pantalla completa pura, sin barras de Safari).
+                   - Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular** *(o pulsa en ⚙️ para confirmar la conexión)*.
+                5. ¡Listo! Disfrutarás de una experiencia móvil fluida con teclado numérico ergonómico y selector de mes táctil.
+
+                > 🍏 **Consejo de Operativa Offline en iPhone (HTTP LAN)**:
+                > Debido a políticas estrictas de Apple WebKit para redes locales HTTP, para capturar gastos sin cobertura fuera de casa, **mantén la app abierta en segundo plano** (no la cierres deslizando hacia arriba en el selector de apps). Al volver a tu Wi-Fi, se reconectará y sincronizará en automático.
                 """
             )
 

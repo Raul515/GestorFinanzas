@@ -1,6 +1,7 @@
 import { useState, ChangeEvent } from "react";
 import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck, Zap } from "lucide-react";
 import { testServerConnection, TestConnectionResult, pairWithPin } from "../services/api";
+import { isIOSDevice } from "../services/storage";
 
 interface ServerConfigModalProps {
   isOpen: boolean;
@@ -93,8 +94,8 @@ export const ServerConfigModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-4 text-slate-100">
+    <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))]">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-sm w-full max-h-[calc(var(--vvh,100dvh)*0.90)] overflow-y-auto shadow-2xl flex flex-col gap-4 text-slate-100">
         {/* Cabecera del modal */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
@@ -264,10 +265,31 @@ export const ServerConfigModal = ({
           <button
             type="button"
             onClick={handleSave}
+            title="Cambio temporal: redirige solo los datos hacia la nueva IP manteniendo esta app"
             className="flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-colors"
           >
             <span>Guardar y Aplicar</span>
           </button>
+        </div>
+
+        {/* Aviso informativo para iOS en HTTP */}
+        {typeof window !== "undefined" && window.location.protocol === "http:" && isIOSDevice() && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-[9.5px] leading-snug text-amber-200">
+            🍏 <strong className="text-amber-100">Uso en iPhone (HTTP Wi-Fi):</strong> Apple restringe la caché offline si la app se cierra por completo fuera de casa sin HTTPS. Para capturar sin cobertura en la calle, <strong>mantén la app en segundo plano</strong> (sin forzar el cierre). Al volver a tu Wi-Fi sincronizará automáticamente.
+          </div>
+        )}
+
+        {/* Guía rápida de cambio de IP */}
+        <div className="bg-slate-950/60 border border-slate-700/70 rounded-xl p-2.5 flex flex-col gap-1 text-[10px] leading-snug text-slate-400">
+          <div className="font-extrabold text-slate-300 text-[10.5px]">💡 ¿Qué opción usar si cambia tu IP?</div>
+          <div>
+            <span className="text-emerald-400 font-bold">• Cambio temporal</span> (ej. Wi-Fi un rato y vuelves al cable) ➔{" "}
+            <strong className="text-slate-200">Guardar y Aplicar</strong>
+          </div>
+          <div>
+            <span className="text-sky-400 font-bold">• Cambio de IP definitivo</span> (mudar web, token y actualizaciones) ➔{" "}
+            <strong className="text-slate-200">Migrar PWA</strong>
+          </div>
         </div>
       </div>
     </div>

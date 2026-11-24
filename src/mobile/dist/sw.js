@@ -1,5 +1,5 @@
-// Service Worker para Gestor Finanzas Quick-Capture PWA (Spec 016 - Rediseño v2)
-const CACHE_NAME = "gestor-finanzas-mobile-v2";
+// Service Worker para Gestor Finanzas Quick-Capture PWA (Spec 016 - v14)
+const CACHE_NAME = "gestor-finanzas-mobile-v14";
 const ASSETS_TO_CACHE = [
   "/mobile/",
   "/mobile/index.html",
@@ -13,7 +13,13 @@ const ASSETS_TO_CACHE = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return Promise.all(
+        ASSETS_TO_CACHE.map((assetUrl) =>
+          fetch(assetUrl, { cache: "no-store" })
+            .then((res) => (res.ok ? cache.put(assetUrl, res) : cache.add(assetUrl)))
+            .catch(() => cache.add(assetUrl))
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -53,7 +59,23 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Recursos estáticos del frontend: cache-first con fallback a red
+  // Navegación HTML principal (/mobile/ o /mobile/index.html): network-first sin caché HTTP
+  if (event.request.mode === "navigate" || url.pathname === "/mobile/" || url.pathname === "/mobile/index.html") {
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" })
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/mobile/index.html")))
+    );
+    return;
+  }
+
+  // Recursos estáticos (iconos, manifest): cache-first con fallback a red
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

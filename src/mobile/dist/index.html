@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Gestor Finanzas • Móvil</title>
   <meta name="theme-color" content="#070B12" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Finanzas" />
   <link rel="manifest" href="/mobile/manifest.json" />
+  <link rel="apple-touch-icon" href="/mobile/icon-192.png" />
   <style>
     * {
       box-sizing: border-box;
@@ -33,6 +34,17 @@
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       overscroll-behavior-y: contain;
+    }
+
+    input, textarea, select {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    @supports (-webkit-touch-callout: none) {
+      input, textarea, select {
+        font-size: 16px !important;
+      }
     }
 
     .no-scrollbar::-webkit-scrollbar {
@@ -58,6 +70,13 @@
 
     .toast-anim {
       animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .btn-press {
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .btn-press:active {
@@ -129,23 +148,33 @@
     };
 
     const DEFAULT_QUICK_PRESETS = [
-      { id: "preset-cafe", name: "Café", emoji: "☕", amount: 1.50, subcategory_name: "Café y Desayunos", concept: "Café" },
-      { id: "preset-cena", name: "Cena", emoji: "🍽️", amount: 20.00, subcategory_name: "Restaurante", concept: "Cena" },
-      { id: "preset-cine", name: "Cine", emoji: "🎬", amount: 5.50, subcategory_name: "Ocio y Cultura", concept: "Cine" }
+      { id: "preset-cafe", name: "Café", emoji: "☕", amount: 1.50, subcategory_name: "Salir a comer fuera", concept: "Café" },
+      { id: "preset-cena", name: "Cena", emoji: "🍽️", amount: 20.00, subcategory_name: "Salir a comer fuera", concept: "Cena" },
+      { id: "preset-cine", name: "Cine", emoji: "🎬", amount: 5.50, subcategory_name: "Entretenimiento (Tomar algo...)", concept: "Cine" }
     ];
 
     const DEFAULT_SUBCATEGORIES = [
-      { id: 1, name: "Café y Desayunos", category_name: "Deseos (30%)", is_frequent: true, emoji: "☕" },
-      { id: 2, name: "Supermercado", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "🛒" },
-      { id: 3, name: "Restaurante", category_name: "Deseos (30%)", is_frequent: true, emoji: "🍽️" },
-      { id: 4, name: "Gasolina", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "⛽" },
-      { id: 5, name: "Farmacia", category_name: "Necesidades Básicas (50%)", is_frequent: true, emoji: "💊" },
-      { id: 6, name: "Pádel / Ocio", category_name: "Deseos (30%)", is_frequent: true, emoji: "🎾" },
-      { id: 7, name: "Alquiler / Hipoteca", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "🏠" },
-      { id: 8, name: "Suministros (Luz, Agua)", category_name: "Necesidades Básicas (50%)", is_frequent: false, emoji: "💡" },
-      { id: 9, name: "Suscripciones", category_name: "Deseos (30%)", is_frequent: false, emoji: "📱" },
-      { id: 10, name: "Fondo de Emergencia", category_name: "Ahorro e Inversión (20%)", is_frequent: false, emoji: "🛡️" }
+      { id: 1, name: "Café y Desayunos", category_name: "Deseos (30%)", category_type: "expense", is_frequent: true, emoji: "☕" },
+      { id: 2, name: "Supermercado", category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true, emoji: "🛒" },
+      { id: 3, name: "Restaurante", category_name: "Deseos (30%)", category_type: "expense", is_frequent: true, emoji: "🍽️" },
+      { id: 4, name: "Gasolina", category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true, emoji: "⛽" },
+      { id: 5, name: "Farmacia", category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true, emoji: "💊" },
+      { id: 6, name: "Pádel / Ocio", category_name: "Deseos (30%)", category_type: "expense", is_frequent: true, emoji: "🎾" },
+      { id: 7, name: "Alquiler / Hipoteca", category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false, emoji: "🏠" },
+      { id: 8, name: "Suministros (Luz, Agua)", category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false, emoji: "💡" },
+      { id: 9, name: "Suscripciones", category_name: "Deseos (30%)", category_type: "expense", is_frequent: false, emoji: "📱" },
+      { id: 10, name: "Fondo de Emergencia", category_name: "Ahorro e Inversión (20%)", category_type: "expense", is_frequent: false, emoji: "🛡️" },
+      { id: 11, name: "Salario NETO / Nómina", category_name: "Ingresos Netos", category_type: "income", is_frequent: true, emoji: "💰" },
+      { id: 12, name: "Bizum / Ingreso extra", category_name: "Ingresos Netos", category_type: "income", is_frequent: true, emoji: "📲" },
+      { id: 13, name: "Devoluciones y Reembolsos", category_name: "Ingresos Netos", category_type: "income", is_frequent: false, emoji: "🔄" }
     ];
+
+    function isIncomeSubcat(s) {
+      if (!s) return false;
+      const cType = (s.category_type || "").toLowerCase();
+      const cName = (s.category_name || "").toLowerCase();
+      return cType === "income" || cType === "ingreso" || cName.includes("ingreso");
+    }
 
     const DEFAULT_CONCEPTS = ["Café con tostada", "Desayuno", "Mercadona", "Menú del día", "Gasolina", "Farmacia"];
 
@@ -343,12 +372,26 @@
             !window.location.origin.startsWith("file://")
           );
 
-          if (hasNetworkOrigin) {
-            // Si la PWA se está sirviendo directamente desde una IP de red real, sincronizar el servidor con ese origen activo
-            saveStoredServerUrl(window.location.origin);
-          } else if (stored) {
+          if (stored) {
             state.serverUrl = stored;
+          } else if (hasNetworkOrigin) {
+            // Solo inicializar con el origen de red activo si no hay URL guardada manualmente por el usuario
+            saveStoredServerUrl(window.location.origin);
           }
+        }
+
+        const urlPresets = params.get("presets");
+        if (urlPresets && urlPresets.trim()) {
+          try {
+            const decoded = JSON.parse(decodeURIComponent(escape(atob(urlPresets.trim()))));
+            if (Array.isArray(decoded) && decoded.length > 0) {
+              localStorage.setItem(STORAGE_KEYS.QUICK_PRESETS, JSON.stringify(decoded));
+            }
+          } catch (presetErr) {
+            console.warn("No se pudieron importar atajos desde URL:", presetErr);
+          }
+          params.delete("presets");
+          hasUrlParams = true;
         }
 
         if (hasUrlParams) {
@@ -379,7 +422,10 @@
               ...s,
               emoji: getEmojiForName(s.name)
             }));
-            state.selectedSubcat = state.subcategories.find(s => s.is_frequent) || state.subcategories[0];
+            const isInc = state.txType === "INCOME";
+            const validSubs = state.subcategories.filter(s => isInc ? isIncomeSubcat(s) : !isIncomeSubcat(s));
+            state.selectedSubcat = validSubs.find(s => s.is_frequent) || validSubs[0] || null;
+            syncPresetCategoriesWithCatalog();
           }
           if (parsed.frequent_concepts && parsed.frequent_concepts.length > 0) {
             state.frequentConcepts = parsed.frequent_concepts;
@@ -434,10 +480,25 @@
       }
     }
 
+    function isIOSDevice() {
+      if (typeof navigator === "undefined") return false;
+      return /iPad|iPhone|iPod/.test(navigator.userAgent || "") ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    }
+
     let presetPressTimer = null;
     let didTriggerPresetLongPress = false;
+    let isPresetDragging = false;
+    let presetTouchStartX = null;
+    let presetTouchStartY = null;
+    let presetsScrollLeft = 0;
+    let chipsScrollLeft = 0;
 
-    function handlePresetMouseDown(presetId) {
+    function handlePresetMouseDown(presetId, e) {
+      if (window.matchMedia("(pointer: coarse)").matches && e && e.type && e.type.startsWith("mouse")) {
+        return;
+      }
+      isPresetDragging = false;
       didTriggerPresetLongPress = false;
       presetPressTimer = setTimeout(() => {
         didTriggerPresetLongPress = true;
@@ -445,15 +506,64 @@
       }, 500);
     }
 
-    function handlePresetMouseUp(presetId) {
+    function handlePresetTouchStart(presetId, e) {
+      isPresetDragging = false;
+      didTriggerPresetLongPress = false;
+      if (e.touches && e.touches[0]) {
+        presetTouchStartX = e.touches[0].clientX;
+        presetTouchStartY = e.touches[0].clientY;
+      }
+      if (presetPressTimer) clearTimeout(presetPressTimer);
+      presetPressTimer = setTimeout(() => {
+        if (!isPresetDragging) {
+          didTriggerPresetLongPress = true;
+          handleDirectSavePreset(presetId);
+        }
+      }, 500);
+    }
+
+    function handlePresetTouchMove(e) {
+      if (presetTouchStartX === null || presetTouchStartY === null) return;
+      if (e.touches && e.touches[0]) {
+        const dx = Math.abs(e.touches[0].clientX - presetTouchStartX);
+        const dy = Math.abs(e.touches[0].clientY - presetTouchStartY);
+        if (dx > 6 || dy > 6) {
+          isPresetDragging = true;
+          if (presetPressTimer) {
+            clearTimeout(presetPressTimer);
+            presetPressTimer = null;
+          }
+        }
+      }
+    }
+
+    function handlePresetTouchEnd(presetId, e) {
       if (presetPressTimer) {
         clearTimeout(presetPressTimer);
         presetPressTimer = null;
       }
-      if (!didTriggerPresetLongPress) {
+      if (!isPresetDragging && !didTriggerPresetLongPress) {
         handleSelectPreset(presetId);
       }
       didTriggerPresetLongPress = false;
+      isPresetDragging = false;
+      presetTouchStartX = null;
+      presetTouchStartY = null;
+    }
+
+    function handlePresetMouseUp(presetId, e) {
+      if (window.matchMedia("(pointer: coarse)").matches && e && e.type && e.type.startsWith("mouse")) {
+        return;
+      }
+      if (presetPressTimer) {
+        clearTimeout(presetPressTimer);
+        presetPressTimer = null;
+      }
+      if (!isPresetDragging && !didTriggerPresetLongPress) {
+        handleSelectPreset(presetId);
+      }
+      didTriggerPresetLongPress = false;
+      isPresetDragging = false;
     }
 
     function handlePresetMouseCancel() {
@@ -462,6 +572,155 @@
         presetPressTimer = null;
       }
       didTriggerPresetLongPress = false;
+      isPresetDragging = false;
+      presetTouchStartX = null;
+      presetTouchStartY = null;
+    }
+
+    const MONTH_NAMES_ES = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+
+    function formatMonthLabelEs(monthStr) {
+      const parts = String(monthStr || "").split("-");
+      if (parts.length !== 2) return monthStr || "";
+      const mIdx = parseInt(parts[1], 10) - 1;
+      const mName = MONTH_NAMES_ES[mIdx] || parts[1];
+      return `${mName} ${parts[0]}`;
+    }
+
+    function getMonthOptionsList(activeMonth) {
+      const now = new Date();
+      const opts = [];
+      const seen = new Set();
+      for (let offset = 3; offset >= -24; offset--) {
+        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        if (!seen.has(val)) {
+          seen.add(val);
+          opts.push(val);
+        }
+      }
+      if (activeMonth && !seen.has(activeMonth)) {
+        opts.push(activeMonth);
+        opts.sort((a, b) => b.localeCompare(a));
+      }
+      return opts;
+    }
+
+    function shiftSummaryMonth(delta) {
+      const base = state.summaryMonth || getLocalMonthString();
+      const parts = base.split("-").map(Number);
+      if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return;
+      const d = new Date(parts[0], (parts[1] - 1) + delta, 1);
+      const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      handleMonthChange(next);
+    }
+
+    function findMatchingSubcategory(p, subcats) {
+      if (!subcats || subcats.length === 0) return null;
+      const targetId = (p && typeof p === "object") ? p.subcategory_id : null;
+      const rawName = (p && typeof p === "object") ? (p.subcategory_name || p.name || "") : String(p || "");
+      const targetName = rawName.toLowerCase().trim();
+
+      // 1. Coincidencia directa por ID
+      if (targetId) {
+        const byId = subcats.find(s => s.id === targetId);
+        if (byId) return byId;
+      }
+
+      if (!targetName) return null;
+
+      // 2. Coincidencia exacta por nombre
+      let found = subcats.find(s => s.name.toLowerCase() === targetName);
+      if (found) return found;
+
+      // 3. Coincidencia por contención (substring)
+      found = subcats.find(s => s.name.toLowerCase().includes(targetName) || targetName.includes(s.name.toLowerCase()));
+      if (found) return found;
+
+      // 4. Mapeo semántico inteligente según palabras clave frecuentes
+      const isCoffee = targetName.includes("café") || targetName.includes("cafe") || targetName.includes("desayuno");
+      const isDining = targetName.includes("cena") || targetName.includes("comida") || targetName.includes("restaurante") || targetName.includes("comer") || targetName.includes("almuerzo");
+      const isLeisure = targetName.includes("cine") || targetName.includes("ocio") || targetName.includes("cultura") || targetName.includes("copa") || targetName.includes("tomar");
+      const isGrocery = targetName.includes("super") || targetName.includes("compra") || targetName.includes("aliment") || targetName.includes("mercado");
+      const isGym = targetName.includes("gym") || targetName.includes("gimnasio") || targetName.includes("deporte");
+      const isFuel = targetName.includes("gasolina") || targetName.includes("diesel") || targetName.includes("transporte") || targetName.includes("metro");
+
+      if (isCoffee) {
+        const specific = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("café") || sn.includes("cafe") || sn.includes("desayuno");
+        });
+        if (specific) return specific;
+        const dining = subcats.find(s => s.name.toLowerCase().includes("salir a comer") || s.name.toLowerCase().includes("restaurante"));
+        if (dining) return dining;
+        const leisure = subcats.find(s => s.name.toLowerCase().includes("tomar algo") || s.name.toLowerCase().includes("entretenimiento"));
+        if (leisure) return leisure;
+      }
+
+      if (isDining) {
+        const specific = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("restaurante") || sn.includes("cena") || sn.includes("comida") || sn.includes("almuerzo");
+        });
+        if (specific) return specific;
+        const dining = subcats.find(s => s.name.toLowerCase().includes("salir a comer"));
+        if (dining) return dining;
+        const food = subcats.find(s => s.name.toLowerCase().includes("alimentación"));
+        if (food) return food;
+      }
+
+      if (isLeisure) {
+        const leisure = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("entretenimiento") || sn.includes("ocio") || sn.includes("hobbies") || sn.includes("cine");
+        });
+        if (leisure) return leisure;
+      }
+
+      if (isGrocery) {
+        const groc = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("alimentación") || sn.includes("supermercado") || sn.includes("compra");
+        });
+        if (groc) return groc;
+      }
+
+      if (isGym) {
+        const gym = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("gimnasio") || sn.includes("gym") || sn.includes("deporte");
+        });
+        if (gym) return gym;
+      }
+
+      if (isFuel) {
+        const fuel = subcats.find(s => {
+          const sn = s.name.toLowerCase();
+          return sn.includes("gasolina") || sn.includes("transporte") || sn.includes("combustible");
+        });
+        if (fuel) return fuel;
+      }
+
+      return null;
+    }
+
+    function syncPresetCategoriesWithCatalog() {
+      if (!state.subcategories || state.subcategories.length === 0) return;
+      let updated = false;
+      state.presets = state.presets.map(p => {
+        const matched = findMatchingSubcategory(p, state.subcategories);
+        if (matched && (!p.subcategory_id || p.subcategory_id !== matched.id || p.subcategory_name !== matched.name)) {
+          updated = true;
+          return { ...p, subcategory_id: matched.id, subcategory_name: matched.name };
+        }
+        return p;
+      });
+      if (updated) {
+        savePresetsLocally();
+      }
     }
 
     function handleSelectPreset(presetId) {
@@ -470,10 +729,7 @@
       if (!p) return;
       state.txType = "EXPENSE";
       state.amountStr = String(p.amount).replace(".", ",");
-      const matched = state.subcategories.find(s =>
-        (p.subcategory_id && s.id === p.subcategory_id) ||
-        (s.name.toLowerCase() === p.subcategory_name.toLowerCase())
-      );
+      const matched = findMatchingSubcategory(p, state.subcategories);
       if (matched) {
         state.selectedSubcat = matched;
       }
@@ -485,14 +741,12 @@
       const p = state.presets.find(x => x.id === presetId);
       if (!p) return;
 
-      const targetSub = state.subcategories.find(s =>
-        (p.subcategory_id && s.id === p.subcategory_id) ||
-        (s.name.toLowerCase() === p.subcategory_name.toLowerCase())
-      ) || state.selectedSubcat || state.subcategories[0];
+      const targetSub = findMatchingSubcategory(p, state.subcategories) || state.selectedSubcat || state.subcategories[0];
 
       // Salvaguarda del Techo de Presupuesto de Deseos (Fase 10)
       const isWants = targetSub && ((targetSub.category_name && targetSub.category_name.toLowerCase().includes("deseo")) || targetSub.category_id === 3);
-      const wants = state.monthlySummary && state.monthlySummary.wants;
+      const captureSummary = getSummaryForCapture();
+      const wants = captureSummary && captureSummary.wants;
       if (isWants && wants && wants.budget > 0) {
         const projected = wants.spent + p.amount;
         if (projected >= wants.budget) {
@@ -519,9 +773,10 @@
       state.transactions.unshift(newTx);
       saveTransactions();
 
+      // Actualizar optimísticamente la métrica de Deseos en el resumen de captura
       if (isWants && wants) {
         wants.spent += newTx.amount;
-        wants.remaining = wants.budget - wants.spent;
+        wants.remaining = (wants.budget || 0) - wants.spent;
       }
 
       state.toastMessage = `${p.emoji} ${p.name} (${p.amount.toFixed(2).replace(".", ",")} €) guardado`;
@@ -534,7 +789,7 @@
           state.showToast = false;
           state.toastUndoEventId = null;
           state.toastMessage = "";
-          render();
+          renderFromBackground();
         }
       }, 4000);
 
@@ -560,10 +815,22 @@
       }
     }
 
-    function updatePresetProp(id, prop, value) {
-      state.presets = state.presets.map(p => p.id === id ? { ...p, [prop]: value } : p);
+    function updatePresetProp(id, prop, value, shouldRender = true) {
+      state.presets = state.presets.map(p => {
+        if (p.id === id) {
+          const updated = { ...p, [prop]: value };
+          if (prop === "subcategory_name") {
+            const foundSub = state.subcategories.find(s => s.name === value);
+            if (foundSub) {
+              updated.subcategory_id = foundSub.id;
+            }
+          }
+          return updated;
+        }
+        return p;
+      });
       savePresetsLocally();
-      render();
+      if (shouldRender) render();
     }
 
     function deletePreset(id) {
@@ -636,10 +903,30 @@
     // ==========================================
     // SINCRONIZACIÓN CON EL BACKEND
     // ==========================================
+    let pendingBackgroundRender = false;
+    let swRegRef = null;
+
+    function isInputFocused() {
+      if (typeof document === "undefined" || !document.activeElement) return false;
+      const tag = (document.activeElement.tagName || "").toUpperCase();
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
+    function renderFromBackground() {
+      if (isInputFocused()) {
+        pendingBackgroundRender = true;
+        return;
+      }
+      pendingBackgroundRender = false;
+      render();
+    }
+
     async function checkServer() {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
+      const prevOnline = state.isOnline;
+      const prevPaired = state.isPaired;
       try {
         const res = await fetch(`${getBaseApiUrl()}/api/mobile/status`, { headers: getAuthHeaders() });
         if (res.ok) {
@@ -650,17 +937,24 @@
           } else if (data.pairing_token) {
             state.isPaired = (state.pairingToken === data.pairing_token);
           }
-          // Descargar catálogo solo si aún no se tiene en memoria
-          if (!state.subcategories || state.subcategories.length === 0) {
+          // Si acabamos de reconectar desde offline estando emparejados, resincronizar catálogo, resumen e histórico
+          if (!prevOnline && state.isPaired) {
             fetchCatalog();
+            fetchMonthlySummary();
+            fetchHistoryCache();
+          } else {
+            // Descargar catálogo solo si aún no se tiene en memoria
+            if (!state.subcategories || state.subcategories.length === 0) {
+              fetchCatalog();
+            }
+            if ((state.activeTab === "summary" || state.activeTab === "month") && !state.monthlySummary) {
+              fetchMonthlySummary();
+            }
           }
           // Si hay pendientes y está emparejado, sincronizar automáticamente
           const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
           if (pending.length > 0 && !state.isSyncing && state.isPaired) {
             syncTransactions();
-          }
-          if ((state.activeTab === "summary" || state.activeTab === "month") && !state.monthlySummary) {
-            fetchMonthlySummary();
           }
           checkOtaVersion();
         } else if (res.status === 403) {
@@ -672,7 +966,9 @@
       } catch {
         state.isOnline = false;
       }
-      render();
+      if (prevOnline !== state.isOnline || prevPaired !== state.isPaired) {
+        renderFromBackground();
+      }
     }
 
     async function fetchCatalog() {
@@ -685,8 +981,9 @@
               ...s,
               emoji: getEmojiForName(s.name)
             }));
+            syncPresetCategoriesWithCatalog();
             saveCatalogLocally(data);
-            render();
+            renderFromBackground();
           }
         } else if (res.status === 403) {
           state.isPaired = false;
@@ -747,7 +1044,7 @@
       if (pending.length === 0 || state.isSyncing) return;
 
       state.isSyncing = true;
-      render();
+      renderFromBackground();
 
       try {
         const payload = {
@@ -800,13 +1097,19 @@
         state.isOnline = false;
       } finally {
         state.isSyncing = false;
-        render();
+        renderFromBackground();
       }
     }
 
     async function createSubcategoryOnTheFly() {
       const name = state.newSubcatName.trim();
-      const catName = state.newSubcatCategory;
+      const isIncome = state.txType === "INCOME";
+      let catName = state.newSubcatCategory;
+      if (isIncome) {
+        catName = "Ingresos Netos";
+      } else if (catName.toLowerCase().includes("ingreso")) {
+        catName = "Deseos (30%)";
+      }
       if (!name) return;
 
       let newSub = null;
@@ -822,7 +1125,11 @@
           });
           if (res.ok) {
             const data = await res.json();
-            newSub = { ...data, emoji: getEmojiForName(data.name) };
+            newSub = {
+              ...data,
+              category_type: isIncome ? "income" : "expense",
+              emoji: getEmojiForName(data.name)
+            };
           }
         } catch (e) {
           console.error("Error creando subcategoría online:", e);
@@ -833,8 +1140,9 @@
         newSub = {
           id: -Date.now(),
           name,
-          category_id: catName.includes("50%") ? 2 : 3,
+          category_id: isIncome ? 1 : (catName.includes("50%") ? 2 : (catName.includes("20%") ? 4 : 3)),
           category_name: catName,
+          category_type: isIncome ? "income" : "expense",
           is_frequent: true,
           emoji: getEmojiForName(name)
         };
@@ -849,21 +1157,163 @@
       render();
     }
 
-    async function fetchMonthlySummary() {
-      state.loadingSummary = true;
+    function openCreateSubcatModal(initialName = "") {
+      state.isCreatingSubcat = true;
+      state.newSubcatName = initialName;
+      state.newSubcatCategory = state.txType === "INCOME" ? "Ingresos Netos" : "Deseos (30%)";
       render();
+    }
+
+    function openCategoryModal() {
+      state.modalOpen = true;
+      state.isCreatingSubcat = false;
+      state.searchQuery = "";
+      render();
+      const inp = document.getElementById("categorySearchInput");
+      if (inp) inp.focus();
+    }
+
+    function selectSubcategory(id) {
+      const sub = state.subcategories.find(x => x.id === id);
+      if (!sub) return;
+      const isIncome = state.txType === "INCOME";
+      if (isIncome !== isIncomeSubcat(sub)) {
+        console.warn("Subcategoría incompatible con tipo:", sub.name, state.txType);
+        return;
+      }
+      state.selectedSubcat = sub;
+      state.modalOpen = false;
+      render();
+    }
+
+    function getOfflineSummaryForMonth(monthStr) {
+      const targetMonth = monthStr || state.summaryMonth || getLocalMonthString();
+      const txs = (state.transactions || []).filter(t => t.date && t.date.startsWith(targetMonth));
+      let spent = 0;
+      let income = 0;
+      let needsSpent = 0;
+      let wantsSpent = 0;
+      let savingsSpent = 0;
+
+      const subcatSpentMap = {};
+      txs.forEach(t => {
+        const amt = parseFloat(t.amount) || 0;
+        if (t.type === "INCOME") {
+          income += amt;
+        } else {
+          spent += amt;
+          const cat = (t.category_name || "").toLowerCase();
+          if (cat.includes("necesidad") || cat.includes("50")) needsSpent += amt;
+          else if (cat.includes("deseo") || cat.includes("30")) wantsSpent += amt;
+          else if (cat.includes("ahorro") || cat.includes("20")) savingsSpent += amt;
+          else wantsSpent += amt;
+
+          if (t.subcategory_id) {
+            subcatSpentMap[t.subcategory_id] = (subcatSpentMap[t.subcategory_id] || 0) + amt;
+          }
+        }
+      });
+
+      const baseIncome = Math.round(income * 100) / 100;
+      const needsTarget = Math.round(baseIncome * 0.50 * 100) / 100;
+      const wantsTarget = Math.round(baseIncome * 0.30 * 100) / 100;
+      const savingsTarget = Math.round(baseIncome * 0.20 * 100) / 100;
+
+      return {
+        month: targetMonth,
+        total_spent: Math.round(spent * 100) / 100,
+        total_income: baseIncome,
+        total_budgeted: 0,
+        remaining_budget: Math.round((baseIncome - spent) * 100) / 100,
+        needs: {
+          category_id: 2,
+          category_name: "Necesidades Básicas (50%)",
+          spent: Math.round(needsSpent * 100) / 100,
+          budget: needsTarget,
+          remaining: Math.round((needsTarget - needsSpent) * 100) / 100,
+          progress_percentage: needsTarget > 0 ? Math.round((needsSpent / needsTarget) * 1000) / 10 : (needsSpent > 0 ? 100 : 0)
+        },
+        wants: {
+          category_id: 3,
+          category_name: "Deseos (30%)",
+          spent: Math.round(wantsSpent * 100) / 100,
+          budget: wantsTarget,
+          remaining: Math.round((wantsTarget - wantsSpent) * 100) / 100,
+          progress_percentage: wantsTarget > 0 ? Math.round((wantsSpent / wantsTarget) * 1000) / 10 : (wantsSpent > 0 ? 100 : 0)
+        },
+        savings: {
+          category_id: 4,
+          category_name: "Ahorro e Inversión (20%)",
+          spent: Math.round(savingsSpent * 100) / 100,
+          budget: savingsTarget,
+          remaining: Math.round((savingsTarget - savingsSpent) * 100) / 100,
+          progress_percentage: savingsTarget > 0 ? Math.round((savingsSpent / savingsTarget) * 1000) / 10 : (savingsSpent > 0 ? 100 : 0)
+        },
+        emergency_fund: { current_amount: 1200, target_amount: 3000, months_covered: 1.2, is_funded: false },
+        subcategories: (state.subcategories || []).map(s => ({
+          subcategory_id: s.id,
+          subcategory_name: s.name,
+          category_name: s.category_name,
+          spent: Math.round((subcatSpentMap[s.id] || 0) * 100) / 100,
+          budget: 0
+        }))
+      };
+    }
+
+    function handleMonthChange(newMonth) {
+      if (!newMonth) return;
+      state.summaryMonth = newMonth;
+      if (state.monthlySummariesCache && state.monthlySummariesCache[newMonth]) {
+        state.monthlySummary = state.monthlySummariesCache[newMonth];
+      } else {
+        state.monthlySummary = getOfflineSummaryForMonth(newMonth);
+      }
+      render();
+      fetchMonthlySummary();
+    }
+
+    function getSummaryForCapture() {
+      // El mes relevante para la salvaguarda y el semáforo es siempre el de la fecha seleccionada del gasto (habitualmente hoy)
+      const txMonth = (state.selectedDate || getLocalDateString()).substring(0, 7);
+      if (state.monthlySummariesCache && state.monthlySummariesCache[txMonth]) {
+        return state.monthlySummariesCache[txMonth];
+      }
+      if (state.summaryMonth === txMonth && state.monthlySummary) {
+        return state.monthlySummary;
+      }
+      return getOfflineSummaryForMonth(txMonth);
+    }
+
+    async function fetchMonthlySummary() {
+      const targetMonth = state.summaryMonth;
+      state.loadingSummary = true;
+      renderFromBackground();
       try {
-        const res = await fetch(`${getBaseApiUrl()}/api/mobile/summary?month=${state.summaryMonth}`, {
-          headers: getAuthHeaders()
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(`${getBaseApiUrl()}/api/mobile/summary?month=${targetMonth}`, {
+          headers: getAuthHeaders(),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         if (res.ok) {
-          state.monthlySummary = await res.json();
+          const data = await res.json();
+          if (data && data.month === state.summaryMonth) {
+            state.monthlySummary = data;
+          }
+          if (!state.monthlySummariesCache) state.monthlySummariesCache = {};
+          if (data && data.month) {
+            state.monthlySummariesCache[data.month] = data;
+          }
+          state.isOnline = true;
+        } else {
+          state.monthlySummary = (state.monthlySummariesCache && state.monthlySummariesCache[state.summaryMonth]) || getOfflineSummaryForMonth(state.summaryMonth);
         }
       } catch (e) {
-        console.error(e);
+        state.monthlySummary = (state.monthlySummariesCache && state.monthlySummariesCache[state.summaryMonth]) || getOfflineSummaryForMonth(state.summaryMonth);
       } finally {
         state.loadingSummary = false;
-        render();
+        renderFromBackground();
       }
     }
 
@@ -893,13 +1343,17 @@
     }
 
     async function checkOtaVersion() {
+      if (isIOSDevice()) {
+        state.availableUpdate = null;
+        return;
+      }
       try {
         const res = await fetch(`${getBaseApiUrl()}/api/mobile/version`, { headers: getAuthHeaders() });
         if (res.ok) {
           const v = await res.json();
           if (v.version_code > state.currentVersionCode && v.apk_available) {
             state.availableUpdate = v;
-            render();
+            renderFromBackground();
           } else {
             state.availableUpdate = null;
           }
@@ -912,9 +1366,30 @@
         const res = await fetch(`${getBaseApiUrl()}/api/mobile/transactions/history-cache?months=12`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data)) {
             state.historyCache = data;
             localStorage.setItem(STORAGE_KEYS.HISTORY_CACHE, JSON.stringify(data));
+
+            // Reconciliación bidireccional: si una transacción en state.transactions estaba marcada como SYNCED
+            // pero ya no existe en el servidor (fue eliminada desde PC/Streamlit), la eliminamos de la memoria local.
+            const serverEventIds = new Set(data.map(t => t.mobile_event_id).filter(Boolean));
+            const serverTxDates = data.map(t => t.date).filter(Boolean).sort();
+            const minServerDate = serverTxDates.length > 0 ? serverTxDates[0] : null;
+
+            const initialCount = state.transactions.length;
+            state.transactions = state.transactions.filter(t => {
+              if (t.status !== "SYNCED") return true; // Mantener siempre las que están pendientes de sincronizar
+              // Si la fecha del gasto cae dentro del periodo cubierto por el servidor y su UUID no está, fue eliminada en el servidor
+              if (minServerDate && t.date >= minServerDate) {
+                return serverEventIds.has(t.event_id);
+              }
+              return true;
+            });
+
+            if (state.transactions.length !== initialCount) {
+              saveTransactions();
+              renderFromBackground();
+            }
           }
         }
       } catch (e) { }
@@ -940,18 +1415,40 @@
       }
     }
 
-    function exportJson() {
+    async function exportJson() {
       const pending = state.transactions.filter(t => t.status === "PENDING_SYNC");
       const payload = {
         device_id: "mobile-pwa",
         exported_at_utc: new Date().toISOString(),
         transactions: pending
       };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const filename = `evt_mob_${Date.now()}.json`;
+
+      if (typeof navigator !== "undefined" && navigator.share && navigator.canShare) {
+        try {
+          const file = new File([jsonStr], filename, { type: "application/json" });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: "Exportación Gestor Finanzas",
+              text: `Lote de ${pending.length} gastos pendientes exportados.`
+            });
+            return;
+          }
+        } catch (err) {
+          if (err && err.name === "AbortError") {
+            return;
+          }
+          console.warn("Fallo al compartir archivo con navigator.share, usando fallback de descarga:", err);
+        }
+      }
+
+      const blob = new Blob([jsonStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `evt_mob_${Date.now()}.json`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1001,18 +1498,20 @@
       state.txType = t;
       triggerHaptic(15);
       const isIncome = t === "INCOME";
-      const filtered = state.subcategories.filter(s =>
-        isIncome
-          ? (s.category_type === "income" || (s.category_name && s.category_name.toLowerCase().includes("ingreso")))
-          : (s.category_type !== "income" && (!s.category_name || !s.category_name.toLowerCase().includes("ingreso")))
-      );
-      state.selectedSubcat = filtered.find(s => s.is_frequent) || filtered[0] || state.subcategories[0] || null;
+      const filtered = state.subcategories.filter(s => isIncome ? isIncomeSubcat(s) : !isIncomeSubcat(s));
+      state.selectedSubcat = filtered.find(s => s.is_frequent) || filtered[0] || null;
       render();
     }
 
     function saveExpense() {
       const num = parseFloat(state.amountStr.replace(",", ".")) || 0;
       if (num <= 0 || !state.selectedSubcat) return;
+
+      const isIncome = state.txType === "INCOME";
+      if (isIncome !== isIncomeSubcat(state.selectedSubcat)) {
+        console.warn("Categoría seleccionada incompatible con el tipo de transacción");
+        return;
+      }
 
       triggerHaptic(40);
 
@@ -1033,6 +1532,16 @@
       state.transactions.unshift(newTx);
       saveTransactions();
 
+      // Actualizar optimísticamente la métrica de Deseos en el resumen de captura
+      const isWants = state.txType === "EXPENSE" && state.selectedSubcat && ((state.selectedSubcat.category_name && state.selectedSubcat.category_name.toLowerCase().includes("deseo")) || state.selectedSubcat.category_id === 3);
+      if (isWants) {
+        const capSum = getSummaryForCapture();
+        if (capSum && capSum.wants) {
+          capSum.wants.spent += newTx.amount;
+          capSum.wants.remaining = (capSum.wants.budget || 0) - capSum.wants.spent;
+        }
+      }
+
       state.amountStr = "0";
       state.concept = "";
       state.receiptBase64 = null;
@@ -1041,7 +1550,7 @@
 
       setTimeout(() => {
         state.showToast = false;
-        render();
+        renderFromBackground();
       }, 2000);
 
       if (state.isOnline && state.isPaired) {
@@ -1158,7 +1667,13 @@
       state.showTokenModal = false;
       state.testServerResult = null;
       render();
-      checkServer();
+      checkServer().then(() => {
+        if (state.isOnline && state.isPaired) {
+          fetchCatalog();
+          fetchMonthlySummary();
+          fetchHistoryCache();
+        }
+      });
     }
 
     function handleResetServerOrigin() {
@@ -1166,8 +1681,76 @@
       if (urlInput && typeof window !== "undefined" && window.location.origin) {
         urlInput.value = window.location.origin;
         state.testServerResult = null;
-        render();
+        handleServerUrlDraftChange(window.location.origin);
       }
+    }
+
+    function renderServerMigrationBox(candidateUrl) {
+      const orig = typeof window !== "undefined" && window.location && window.location.origin ? window.location.origin : "";
+      let cleanTarget = (candidateUrl || "").trim().replace(/\/+$/, "");
+      if (cleanTarget && !cleanTarget.startsWith("http://") && !cleanTarget.startsWith("https://")) {
+        cleanTarget = "http://" + cleanTarget;
+      }
+      const isWebPwa = orig.startsWith("http://") && !orig.startsWith("http://localhost") && !orig.startsWith("http://127.0.0.1");
+      if (isWebPwa && cleanTarget && cleanTarget !== orig) {
+        return `
+          <div style="background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:10px; color:#bae6fd; line-height:1.35;">
+              ℹ️ Esta PWA está abierta en <code>${escapeHtml(orig)}</code>. Para saltar de forma definitiva a la nueva IP conservando tu token y atajos:
+            </div>
+            <button type="button" onclick="migratePwaToServer();" title="Cambio de IP definitivo: muda la web, tu token y tus atajos a la nueva IP para recibir actualizaciones" class="btn-press" style="width:100%; padding:8px; border-radius:9px; background:rgba(56,189,248,0.2); border:1px solid rgba(56,189,248,0.4); color:#7dd3fc; font-weight:800; font-size:11px; cursor:pointer;">
+              📲 Migrar PWA y Token a ${escapeHtml(cleanTarget)}
+            </button>
+            ${isIOSDevice() ? `
+              <div style="font-size:9.5px; color:#94a3b8; line-height:1.3;">
+                🍏 <em>Nota iOS:</em> Al abrir la nueva IP en Safari, pulsa <strong>Compartir ➔ Añadir a pantalla de inicio</strong> para el nuevo acceso directo.
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }
+      return "";
+    }
+
+    function handleServerUrlDraftChange(val) {
+      const box = document.getElementById("serverMigrationContainer");
+      if (box) {
+        box.innerHTML = renderServerMigrationBox(val);
+      }
+    }
+
+    async function migratePwaToServer() {
+      const urlInput = document.getElementById("serverUrlInput");
+      const tokenInput = document.getElementById("serverTokenInput");
+      let targetUrl = (urlInput ? urlInput.value.trim() : state.serverUrl || "").replace(/\/+$/, "");
+      if (!targetUrl) return;
+      if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+        targetUrl = "http://" + targetUrl;
+      }
+      const token = (tokenInput ? tokenInput.value.trim() : state.pairingToken || "");
+      saveStoredServerUrl(targetUrl);
+      if (token) {
+        state.pairingToken = token;
+        try { localStorage.setItem(STORAGE_KEYS.PAIRING_TOKEN, token); } catch (e) {}
+      }
+
+      try {
+        await syncTransactions();
+      } catch (e) {}
+
+      const queryParams = [];
+      if (token) queryParams.push(`token=${encodeURIComponent(token)}`);
+      queryParams.push(`server=${encodeURIComponent(targetUrl)}`);
+      try {
+        if (Array.isArray(state.presets) && state.presets.length > 0) {
+          const encodedPresets = btoa(unescape(encodeURIComponent(JSON.stringify(state.presets))));
+          if (encodedPresets.length < 1800) {
+            queryParams.push(`presets=${encodeURIComponent(encodedPresets)}`);
+          }
+        }
+      } catch (e) {}
+
+      window.location.href = `${targetUrl}/mobile/?${queryParams.join("&")}`;
     }
 
     async function handlePairWithPin() {
@@ -1256,19 +1839,29 @@
     // ==========================================
     function render() {
       const app = document.getElementById("app");
+      const existingPresetsScroll = document.getElementById("quickPresetsScrollContainer");
+      if (existingPresetsScroll) {
+        presetsScrollLeft = existingPresetsScroll.scrollLeft;
+      }
+      const existingChipsScroll = document.getElementById("categoryChipsScrollContainer");
+      if (existingChipsScroll) {
+        chipsScrollLeft = existingChipsScroll.scrollLeft;
+      }
+
       const pendingCount = state.transactions.filter(t => t.status === "PENDING_SYNC").length;
       const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
       const canSave = numAmount > 0 && state.selectedSubcat !== null;
 
       const isIncome = state.txType === "INCOME";
-      const typedSubs = state.subcategories.filter(s =>
-        isIncome
-          ? (s.category_type === "income" || (s.category_name && s.category_name.toLowerCase().includes("ingreso")))
-          : (s.category_type !== "income" && (!s.category_name || !s.category_name.toLowerCase().includes("ingreso")))
-      );
-      const subListToUse = typedSubs.length > 0 ? typedSubs : state.subcategories;
-      const frequentSubs = subListToUse.filter(s => s.is_frequent);
-      const activeSubs = frequentSubs.length > 0 ? frequentSubs : subListToUse.slice(0, 6);
+      const typedSubs = state.subcategories.filter(s => isIncome ? isIncomeSubcat(s) : !isIncomeSubcat(s));
+      const frequentSubs = typedSubs.filter(s => s.is_frequent);
+      let activeSubs = frequentSubs.length > 0 ? [...frequentSubs] : typedSubs.slice(0, 6);
+      if (state.selectedSubcat && isIncomeSubcat(state.selectedSubcat) === isIncome && !activeSubs.some(s => s.id === state.selectedSubcat.id)) {
+        activeSubs.unshift(state.selectedSubcat);
+      }
+      if (!state.selectedSubcat || isIncomeSubcat(state.selectedSubcat) !== isIncome) {
+        state.selectedSubcat = typedSubs.find(s => s.is_frequent) || typedSubs[0] || null;
+      }
 
       const [y, m, d] = state.selectedDate.split("-");
       const dateFormatted = `${d}/${m}/${y}`;
@@ -1276,7 +1869,7 @@
       app.innerHTML = `
           <!-- Toast de confirmación con soporte Deshacer -->
           ${state.showToast ? `
-            <div style="position:fixed; top:12px; left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:6px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;" class="toast-anim">
+            <div style="position:fixed; top:calc(12px + env(safe-area-inset-top, 0px)); left:50%; z-index:9999; background:#10b981; color:#020617; font-weight:800; font-size:12px; padding:6px 14px; border-radius:9999px; box-shadow:0 10px 25px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px;" class="toast-anim">
               <span>✓ ${escapeHtml(state.toastMessage || (state.txType === "INCOME" ? "¡Ingreso guardado!" : "¡Gasto guardado!"))}</span>
               ${state.toastUndoEventId ? `
                 <button onclick="undoDirectSave();" class="btn-press" style="background:#020617; color:#fff; border:none; border-radius:9999px; font-weight:800; font-size:10px; padding:2px 8px; cursor:pointer;">Deshacer</button>
@@ -1289,7 +1882,7 @@
             <div style="display:flex; align-items:center; gap:8px;">
               <span style="width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 10px rgba(16,185,129,0.7);"></span>
               <span style="font-weight:900; font-size:14px; letter-spacing:-0.3px; color:#f1f5f9;">Gestor Finanzas</span>
-              <span style="font-size:9px; font-weight:800; padding:2px 6px; border-radius:6px; background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.25);">MÓVIL</span>
+              <span style="font-size:9px; font-weight:800; padding:2px 6px; border-radius:6px; background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.25);">MÓVIL v14</span>
             </div>
             
             <div style="display:flex; align-items:center; gap:6px;">
@@ -1354,13 +1947,23 @@
           ${state.viewingReceiptUrl ? renderReceiptModal() : ""}
           ${state.managePresetsModalOpen ? renderManagePresetsModal() : ""}
         `;
+
+      const newPresetsScroll = document.getElementById("quickPresetsScrollContainer");
+      if (newPresetsScroll && presetsScrollLeft > 0) {
+        newPresetsScroll.scrollLeft = presetsScrollLeft;
+      }
+      const newChipsScroll = document.getElementById("categoryChipsScrollContainer");
+      if (newChipsScroll && chipsScrollLeft > 0) {
+        newChipsScroll.scrollLeft = chipsScrollLeft;
+      }
     }
 
     function renderCaptureView(canSave, dateFormatted, activeSubs) {
       let wantsAlertHtml = "";
       const sel = state.selectedSubcat;
       const isWants = state.txType === "EXPENSE" && sel && ((sel.category_name && sel.category_name.toLowerCase().includes("deseo")) || sel.category_id === 3);
-      const wants = state.monthlySummary && state.monthlySummary.wants;
+      const captureSummary = getSummaryForCapture();
+      const wants = captureSummary && captureSummary.wants;
       if (isWants && wants && wants.budget > 0) {
         const numAmount = parseFloat(state.amountStr.replace(",", ".")) || 0;
         const projectedSpent = wants.spent + numAmount;
@@ -1440,18 +2043,31 @@
             <!-- Semáforo de Deseos (Fase 10) -->
             ${wantsAlertHtml}
 
+            <!-- Indicador de Categoría Activa -->
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:#94a3b8; padding:0 2px; margin-bottom:4px;">
+              <span style="font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Categoría activa:</span>
+              <span style="font-weight:800; color:#34d399; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:8px; padding:2px 8px;">
+                ${escapeHtml(state.selectedSubcat ? `${state.selectedSubcat.emoji || '🏷️'} ${state.selectedSubcat.name}` : 'Ninguna')}
+              </span>
+            </div>
+
             <!-- Chips de Categorías Frecuentes -->
-            <div style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:2px 0;" class="no-scrollbar">
+            <div
+              id="categoryChipsScrollContainer"
+              onscroll="chipsScrollLeft = this.scrollLeft;"
+              style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:2px 0; -webkit-overflow-scrolling:touch; touch-action:pan-x; overscroll-behavior-x:contain;"
+              class="no-scrollbar"
+            >
               ${activeSubs.map(s => {
         const isSel = state.selectedSubcat && state.selectedSubcat.id === s.id;
         return `
-                  <button onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); render();" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0F172A'}; border:1px solid ${isSel ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.08)'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:6px 11px; border-radius:11px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
+                  <button onclick="selectSubcategory(${s.id});" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0F172A'}; border:1px solid ${isSel ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.08)'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:6px 11px; border-radius:11px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
                     <span>${escapeHtml(s.emoji || "🏷️")}</span>
                     <span>${escapeHtml(s.name)}</span>
                   </button>
                 `;
       }).join("")}
-              <button onclick="state.modalOpen = true; state.isCreatingSubcat = false; render();" class="btn-press" style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; white-space:nowrap; shrink:0; cursor:pointer;">
+              <button onclick="openCategoryModal();" class="btn-press" style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; white-space:nowrap; shrink:0; cursor:pointer;">
                 🔍 Ver todas
               </button>
             </div>
@@ -1516,7 +2132,50 @@
         `;
     }
 
-    function renderSearchView() {
+    function handleSearchInputChange(val) {
+      state.searchQueryHist = val;
+      state.searchServerResults = null;
+      const clearBtn = document.getElementById("searchClearBtn");
+      if (clearBtn) clearBtn.style.display = val ? "block" : "none";
+      const dyn = document.getElementById("searchDynamicContainer");
+      if (dyn) {
+        dyn.innerHTML = renderSearchDynamicContent();
+      }
+    }
+
+    function handleSearchTagClick(tag) {
+      state.searchQueryHist = tag;
+      state.searchServerResults = null;
+      const input = document.getElementById("searchInputField");
+      if (input) {
+        input.value = tag;
+        input.focus();
+      }
+      const clearBtn = document.getElementById("searchClearBtn");
+      if (clearBtn) clearBtn.style.display = "block";
+      const dyn = document.getElementById("searchDynamicContainer");
+      if (dyn) {
+        dyn.innerHTML = renderSearchDynamicContent();
+      }
+    }
+
+    function handleSearchClear() {
+      state.searchQueryHist = "";
+      state.searchServerResults = null;
+      const input = document.getElementById("searchInputField");
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+      const clearBtn = document.getElementById("searchClearBtn");
+      if (clearBtn) clearBtn.style.display = "none";
+      const dyn = document.getElementById("searchDynamicContainer");
+      if (dyn) {
+        dyn.innerHTML = renderSearchDynamicContent();
+      }
+    }
+
+    function renderSearchDynamicContent() {
       const q = (state.searchQueryHist || "").trim().toLowerCase();
       let displayResults = [];
 
@@ -1550,92 +2209,99 @@
         return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
       };
 
-      return `
-          <div style="display:flex; flex-direction:column; gap:12px; padding:12px 14px 40px 14px;">
-            <!-- Barra de Búsqueda -->
-            <div style="position:relative; display:flex; align-items:center;">
-              <span style="position:absolute; left:12px; color:#64748b; font-size:14px; pointer-events:none;">🔍</span>
-              <input type="text"
-                placeholder="¿Cuánto me costó... (ej. itv, zara, taller)?"
-                value="${state.searchQueryHist}"
-                oninput="state.searchQueryHist = this.value; state.searchServerResults = null; render();"
-                onkeydown="if(event.key === 'Enter') searchServerHistory(this.value);"
-                autofocus
-                style="width:100%; background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 36px; color:#f8fafc; font-size:12px; font-weight:600; outline:none;" />
-              ${state.searchQueryHist ? `
-                <button onclick="state.searchQueryHist = ''; state.searchServerResults = null; render();" style="position:absolute; right:10px; background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:4px;">✕</button>
-              ` : ""}
+      if (!q) {
+        return `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Consultas Frecuentes</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              ${[...new Set([...state.frequentConcepts, "Gasolina", "Supermercado", "Restaurante", "Farmacia"])].slice(0, 8).map(tag => `
+                <button onclick="handleSearchTagClick('${tag}');" class="btn-press" style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; cursor:pointer;">
+                  ${tag}
+                </button>
+              `).join("")}
             </div>
 
-            <!-- Sugerencias Rápidas si no hay texto -->
-            ${!state.searchQueryHist ? `
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Consultas Frecuentes</div>
-                <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                  ${[...new Set([...state.frequentConcepts, "Gasolina", "Supermercado", "Restaurante", "Farmacia"])].slice(0, 8).map(tag => `
-                    <button onclick="state.searchQueryHist = '${tag}'; render();" class="btn-press" style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; cursor:pointer;">
-                      ${tag}
-                    </button>
-                  `).join("")}
-                </div>
-
-                <div style="margin-top:10px; padding:14px; border-radius:16px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); text-align:center; font-size:11px; color:#94a3b8; line-height:1.5;">
-                  <div style="font-weight:800; color:#f1f5f9; font-size:13px; margin-bottom:4px;">🔍 Memoria Instantánea en tu Bolsillo</div>
-                  Escribe cualquier concepto o comercio para ver cuánto pagaste la última vez, sin importar si estás en la tienda sin internet o en casa.
-                </div>
-              </div>
-            ` : `
-              <!-- Resultados -->
-              <div style="display:flex; flex-direction:column; gap:8px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8;">
-                  <span>${displayResults.length} resultado${displayResults.length === 1 ? "" : "s"} para "${state.searchQueryHist}"</span>
-                  ${state.isOnline && state.isPaired && state.searchServerResults === null ? `
-                    <button onclick="searchServerHistory(state.searchQueryHist);" class="btn-press" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:9999px; padding:3px 8px; color:#34d399; font-weight:800; font-size:11px; cursor:pointer;">
-                      ${state.isSearchingServer ? "Buscando en servidor..." : "Buscar en todo el histórico"}
-                    </button>
-                  ` : ""}
-                </div>
-
-                ${displayResults.length === 0 ? `
-                  <div style="padding:20px; text-align:center; background:#0F172A; border-radius:16px; border:1px solid rgba(255,255,255,0.08); color:#64748b; font-size:12px;">
-                    🔎 No se encontraron gastos para "${state.searchQueryHist}".
-                  </div>
-                ` : `
-                  <div style="display:flex; flex-direction:column; gap:6px;">
-                    ${displayResults.map((item, idx) => {
-        const isLatest = idx === 0;
-        const emoji = getEmojiForName(item.subcategory_name || "");
-        return `
-                        <div style="padding:10px 12px; border-radius:14px; background:#0F172A; border:1px solid ${isLatest ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.08)'}; ${isLatest ? 'box-shadow:0 0 12px rgba(16,185,129,0.08);' : ''} display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                            <span style="font-size:18px; width:34px; height:34px; border-radius:10px; background:#172033; border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${emoji}</span>
-                            <div style="min-width:0;">
-                              <div style="display:flex; align-items:center; gap:6px;">
-                                <span style="font-weight:700; font-size:13px; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.description}</span>
-                                ${isLatest ? `<span style="font-size:9px; font-weight:900; background:rgba(16,185,129,0.15); color:#34d399; padding:1px 5px; border-radius:4px; text-transform:uppercase;">Último</span>` : ""}
-                              </div>
-                              <div style="font-size:10px; color:#94a3b8; margin-top:1px;">
-                                ${item.subcategory_name} • 📅 ${formatDate(item.date)}
-                              </div>
-                            </div>
-                          </div>
-                          <div style="display:flex; align-items:center; gap:6px;">
-                            ${(item.receipt_filename || item.receipt_url) ? `
-                              <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; padding:4px 6px;">📷</button>
-                            ` : ""}
-                            <div style="font-family:ui-monospace, monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
-                              ${item.type === 'INCOME' ? '+' : '-'}${item.amount.toFixed(2)} €
-                            </div>
-                          </div>
-                        </div>
-                      `;
-      }).join("")}
-                  </div>
-                `}
-              </div>
-            `}
+            <div style="margin-top:10px; padding:14px; border-radius:16px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); text-align:center; font-size:11px; color:#94a3b8; line-height:1.5;">
+              <div style="font-weight:800; color:#f1f5f9; font-size:13px; margin-bottom:4px;">🔍 Memoria Instantánea en tu Bolsillo</div>
+              Escribe cualquier concepto o comercio para ver cuánto pagaste la última vez, sin importar si estás en la tienda sin internet o en casa.
+            </div>
           </div>
         `;
+      }
+
+      return `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8;">
+            <span>${displayResults.length} resultado${displayResults.length === 1 ? "" : "s"} para "${escapeHtml(state.searchQueryHist)}"</span>
+            ${state.isOnline && state.isPaired && state.searchServerResults === null ? `
+              <button onclick="searchServerHistory(state.searchQueryHist);" class="btn-press" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:9999px; padding:3px 8px; color:#34d399; font-weight:800; font-size:11px; cursor:pointer;">
+                ${state.isSearchingServer ? "Buscando en servidor..." : "Buscar en todo el histórico"}
+              </button>
+            ` : ""}
+          </div>
+
+          ${displayResults.length === 0 ? `
+            <div style="padding:20px; text-align:center; background:#0F172A; border-radius:16px; border:1px solid rgba(255,255,255,0.08); color:#64748b; font-size:12px;">
+              🔎 No se encontraron gastos para "${escapeHtml(state.searchQueryHist)}".
+            </div>
+          ` : `
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              ${displayResults.map((item, idx) => {
+                const isLatest = idx === 0;
+                const emoji = getEmojiForName(item.subcategory_name || "");
+                return `
+                  <div style="padding:10px 12px; border-radius:14px; background:#0F172A; border:1px solid ${isLatest ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.08)'}; ${isLatest ? 'box-shadow:0 0 12px rgba(16,185,129,0.08);' : ''} display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                      <span style="font-size:18px; width:34px; height:34px; border-radius:10px; background:#172033; border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${emoji}</span>
+                      <div style="min-width:0;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <span style="font-weight:700; font-size:13px; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.description || "")}</span>
+                          ${isLatest ? `<span style="font-size:9px; font-weight:900; background:rgba(16,185,129,0.15); color:#34d399; padding:1px 5px; border-radius:4px; text-transform:uppercase;">Último</span>` : ""}
+                        </div>
+                        <div style="font-size:10px; color:#94a3b8; margin-top:1px;">
+                          ${escapeHtml(item.subcategory_name || "")} • 📅 ${formatDate(item.date)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                      ${(item.receipt_filename || item.receipt_url) ? `
+                        <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; padding:4px 6px;">📷</button>
+                      ` : ""}
+                      <div style="font-family:ui-monospace, monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
+                        ${item.type === 'INCOME' ? '+' : '-'}${item.amount.toFixed(2)} €
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderSearchView() {
+      return `
+        <div style="display:flex; flex-direction:column; gap:12px; padding:12px 14px 40px 14px;">
+          <!-- Barra de Búsqueda Reactiva -->
+          <div style="position:relative; display:flex; align-items:center;">
+            <span style="position:absolute; left:12px; color:#64748b; font-size:14px; pointer-events:none;">🔍</span>
+            <input type="text"
+              id="searchInputField"
+              placeholder="¿Cuánto me costó... (ej. itv, zara, taller)?"
+              value="${escapeHtml(state.searchQueryHist || "")}"
+              oninput="handleSearchInputChange(this.value);"
+              onkeydown="if(event.key === 'Enter') searchServerHistory(this.value);"
+              style="width:100%; background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 36px; color:#f8fafc; font-size:12px; font-weight:600; outline:none;" />
+            <button id="searchClearBtn" onclick="handleSearchClear();" style="position:absolute; right:10px; background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:4px; display:${state.searchQueryHist ? 'block' : 'none'};">✕</button>
+          </div>
+
+          <!-- Contenido Dinámico Reactivo (sin perder foco de teclado) -->
+          <div id="searchDynamicContainer">
+            ${renderSearchDynamicContent()}
+          </div>
+        </div>
+      `;
     }
 
     function renderHistoryView(pendingCount) {
@@ -1739,15 +2405,31 @@
       return `
           <div style="display:flex; flex-direction:column; gap:12px; padding:12px 14px 40px 14px;">
             <!-- Barra Superior de Mes y Refresco -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-weight:900; font-size:16px; color:#f8fafc;">📊 Mi Mes</span>
-              <div style="display:flex; align-items:center; gap:6px;">
-                <input type="month" value="${state.summaryMonth}" onchange="state.summaryMonth = this.value; fetchMonthlySummary();" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:4px 8px; color:#f8fafc; font-size:11px; font-weight:700;" />
-                <button onclick="fetchMonthlySummary();" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:6px 9px; color:#34d399; cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <span style="font-weight:900; font-size:16px; color:#f8fafc; white-space:nowrap;">📊 Mi Mes</span>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <button type="button" onclick="shiftSummaryMonth(-1);" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; border-radius:9px; padding:5px 8px; color:#94a3b8; font-size:11px; font-weight:800; cursor:pointer;" title="Mes anterior">◀</button>
+                <select onchange="handleMonthChange(this.value);" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:5px 8px; color:#f8fafc; font-size:11px; font-weight:700; outline:none;">
+                  ${getMonthOptionsList(state.summaryMonth).map(mVal => `
+                    <option value="${mVal}" ${mVal === state.summaryMonth ? "selected" : ""}>${escapeHtml(formatMonthLabelEs(mVal))}</option>
+                  `).join("")}
+                </select>
+                <button type="button" onclick="shiftSummaryMonth(1);" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; border-radius:9px; padding:5px 8px; color:#94a3b8; font-size:11px; font-weight:800; cursor:pointer;" title="Mes siguiente">▶</button>
+                <button onclick="checkServer(); fetchMonthlySummary();" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:5px 8px; color:#34d399; cursor:pointer;" title="Recargar resumen">
                   🔄
                 </button>
               </div>
             </div>
+
+            ${!state.isOnline ? `
+              <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:5px 10px; display:flex; align-items:center; justify-content:space-between; font-size:10px; color:#fbbf24;">
+                <div style="display:flex; align-items:center; gap:5px;">
+                  <span>⚠️</span>
+                  <span>Modo Offline: métricas calculadas en el móvil para ${state.summaryMonth}</span>
+                </div>
+                <button onclick="checkServer(); fetchMonthlySummary();" style="background:none; border:none; color:#fbbf24; text-decoration:underline; cursor:pointer; font-size:10px; font-weight:700;">Reconectar</button>
+              </div>
+            ` : ""}
 
             ${state.loadingSummary ? `
               <div style="padding:30px; text-align:center; color:#94a3b8; font-size:13px;">
@@ -1886,18 +2568,61 @@
         `;
     }
 
-    function renderCategoryModal() {
-      const q = state.searchQuery.toLowerCase();
-      const filtered = state.subcategories.filter(s =>
-        !q || s.name.toLowerCase().includes(q) || s.category_name.toLowerCase().includes(q)
+    function renderCategoryModalListContent() {
+      const q = (state.searchQuery || "").toLowerCase();
+      const isIncome = state.txType === "INCOME";
+      const allowedSubs = (state.subcategories || []).filter(s => isIncome ? isIncomeSubcat(s) : !isIncomeSubcat(s));
+      const filtered = allowedSubs.filter(s =>
+        !q || s.name.toLowerCase().includes(q) || (s.category_name && s.category_name.toLowerCase().includes(q))
       );
 
+      if (filtered.length === 0) {
+        return `
+          <div style="text-align:center; padding:20px; color:#64748b; font-size:12px;">
+            No existe "${escapeHtml(state.searchQuery)}".<br />
+            <button onclick="openCreateSubcatModal(state.searchQuery);" class="btn-press" style="margin-top:10px; background:#10b981; color:#020617; border:none; border-radius:10px; font-weight:800; font-size:11px; padding:8px 14px; cursor:pointer;">
+              ➕ Crear "${escapeHtml(state.searchQuery || 'Nueva')}"
+            </button>
+          </div>
+        `;
+      }
+
       return `
-          <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:flex-end;">
-            <div style="background:#0f172a; border-top:1px solid #1e293b; border-radius:24px 24px 0 0; max-height:85vh; display:flex; flex-direction:column; width:100%; max-width:400px; margin:0 auto; padding:16px;">
+        ${filtered.map(s => `
+          <div onclick="selectSubcategory(${s.id});" class="btn-press" style="padding:10px 12px; border-radius:12px; display:flex; align-items:center; justify-content:space-between; background:${state.selectedSubcat && state.selectedSubcat.id === s.id ? 'rgba(16,185,129,0.15)' : 'transparent'}; cursor:pointer;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-size:18px;">${escapeHtml(s.emoji || "🏷️")}</span>
+              <div>
+                <div style="font-weight:700; font-size:13px; color:#f8fafc;">${escapeHtml(s.name)}</div>
+                <div style="font-size:10px; color:#64748b;">${escapeHtml(s.category_name)}</div>
+              </div>
+            </div>
+            ${state.selectedSubcat && state.selectedSubcat.id === s.id ? `<span style="color:#10b981; font-weight:900;">✓</span>` : ""}
+          </div>
+        `).join("")}
+        <button onclick="openCreateSubcatModal('');" class="btn-press" style="margin-top:8px; padding:10px; border-radius:12px; border:1px dashed #1e293b; background:none; color:#94a3b8; font-size:11px; font-weight:700; cursor:pointer;">
+          ➕ Añadir otra subcategoría
+        </button>
+      `;
+    }
+
+    function handleCategorySearchInput(val) {
+      state.searchQuery = val;
+      const container = document.getElementById("categoryModalListContainer");
+      if (container) {
+        container.innerHTML = renderCategoryModalListContent();
+      }
+    }
+
+    function renderCategoryModal() {
+      const isIncome = state.txType === "INCOME";
+
+      return `
+          <div id="categoryModalOverlay" style="position:fixed; top:0; left:0; right:0; height:var(--vvh, 100dvh); z-index:999; background:rgba(0,0,0,0.85); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:flex-end;">
+            <div style="background:#0f172a; border-top:1px solid #1e293b; border-radius:24px 24px 0 0; height:min(78dvh, calc(var(--vvh, 100dvh) * 0.88)); max-height:calc(var(--vvh, 100dvh) * 0.90); display:flex; flex-direction:column; width:100%; max-width:400px; margin:0 auto; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <span style="font-weight:800; font-size:15px; color:#f8fafc;">
-                  ${state.isCreatingSubcat ? "➕ Nueva Subcategoría" : "Seleccionar Categoría"}
+                  ${state.isCreatingSubcat ? "➕ Nueva Subcategoría" : (isIncome ? "Seleccionar Ingreso" : "Seleccionar Categoría de Gasto")}
                 </span>
                 <button onclick="state.modalOpen = false; state.isCreatingSubcat = false; render();" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
               </div>
@@ -1906,22 +2631,30 @@
                 <div style="display:flex; flex-direction:column; gap:12px; padding:6px 0;">
                   <div>
                     <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Nombre</label>
-                    <input type="text" placeholder="Ej. Pádel, Sushi, Gas..." value="${state.newSubcatName}" oninput="state.newSubcatName = this.value;" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" autofocus />
+                    <input type="text" placeholder="${isIncome ? 'Ej. Salario Extra, Venta Wallapop...' : 'Ej. Pádel, Sushi, Gas...'}" value="${escapeHtml(state.newSubcatName)}" oninput="state.newSubcatName = this.value;" style="width:100%; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" autofocus />
                   </div>
 
                   <div>
-                    <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Tipo (Regla 50/30/20 o Ingreso)</label>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                      <button onclick="state.newSubcatCategory = 'Necesidades Básicas (50%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('50%') ? '#10b981' : '#1e293b'}; background:${state.newSubcatCategory.includes('50%') ? 'rgba(16,185,129,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('50%') ? '#34d399' : '#94a3b8'}; cursor:pointer;">
-                        🛒 Necesidad
-                      </button>
-                      <button onclick="state.newSubcatCategory = 'Deseos (30%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('30%') ? '#f59e0b' : '#1e293b'}; background:${state.newSubcatCategory.includes('30%') ? 'rgba(245,158,11,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('30%') ? '#fbbf24' : '#94a3b8'}; cursor:pointer;">
-                        ☕ Deseo
-                      </button>
-                      <button onclick="state.newSubcatCategory = 'Ingresos Netos'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('Ingreso') ? '#38bdf8' : '#1e293b'}; background:${state.newSubcatCategory.includes('Ingreso') ? 'rgba(56,189,248,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('Ingreso') ? '#38bdf8' : '#94a3b8'}; cursor:pointer;">
-                        💰 Ingreso
-                      </button>
-                    </div>
+                    <label style="font-size:11px; font-weight:700; color:#94a3b8; display:block; margin-bottom:4px;">Tipo (${isIncome ? 'Categoría de Ingreso' : 'Regla 50/30/20'})</label>
+                    ${isIncome ? `
+                      <div style="display:grid; grid-template-columns:1fr; gap:6px;">
+                        <button onclick="state.newSubcatCategory = 'Ingresos Netos'; render();" class="btn-press" style="padding:10px; border-radius:12px; font-size:11px; font-weight:800; border:1px solid #38bdf8; background:rgba(56,189,248,0.15); color:#38bdf8; cursor:pointer;">
+                          💰 Ingresos Netos
+                        </button>
+                      </div>
+                    ` : `
+                      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                        <button onclick="state.newSubcatCategory = 'Necesidades Básicas (50%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('50%') ? '#10b981' : '#1e293b'}; background:${state.newSubcatCategory.includes('50%') ? 'rgba(16,185,129,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('50%') ? '#34d399' : '#94a3b8'}; cursor:pointer;">
+                          🛒 Necesidad
+                        </button>
+                        <button onclick="state.newSubcatCategory = 'Deseos (30%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('30%') ? '#f59e0b' : '#1e293b'}; background:${state.newSubcatCategory.includes('30%') ? 'rgba(245,158,11,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('30%') ? '#fbbf24' : '#94a3b8'}; cursor:pointer;">
+                          ☕ Deseo
+                        </button>
+                        <button onclick="state.newSubcatCategory = 'Ahorro e Inversión (20%)'; render();" class="btn-press" style="padding:10px 4px; border-radius:12px; font-size:10px; font-weight:700; border:1px solid ${state.newSubcatCategory.includes('20%') ? '#818cf8' : '#1e293b'}; background:${state.newSubcatCategory.includes('20%') ? 'rgba(129,140,248,0.15)' : '#020617'}; color:${state.newSubcatCategory.includes('20%') ? '#a5b4fc' : '#94a3b8'}; cursor:pointer;">
+                          📈 Ahorro
+                        </button>
+                      </div>
+                    `}
                   </div>
 
                   <div style="display:flex; gap:8px; margin-top:8px;">
@@ -1934,38 +2667,15 @@
                   </div>
                 </div>
               ` : `
-                <div style="display:flex; gap:6px; margin-bottom:10px;">
-                  <input type="text" placeholder="Buscar categoría..." value="${state.searchQuery}" oninput="state.searchQuery = this.value; render();" autofocus style="flex:1; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:13px; outline:none;" />
-                  <button onclick="state.isCreatingSubcat = true; state.newSubcatName = state.searchQuery; render();" class="btn-press" style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); color:#34d399; font-weight:800; font-size:14px; padding:0 14px; border-radius:12px; cursor:pointer;" title="Crear nueva">
+                <div style="display:flex; gap:6px; margin-bottom:10px; flex-shrink:0;">
+                  <input type="text" id="categorySearchInput" placeholder="${isIncome ? 'Buscar subcategoría de ingreso...' : 'Buscar categoría...'}" value="${escapeHtml(state.searchQuery)}" oninput="handleCategorySearchInput(this.value);" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="flex:1; background:#020617; border:1px solid #1e293b; border-radius:12px; padding:10px 12px; color:#f8fafc; font-size:14px; outline:none;" />
+                  <button onclick="openCreateSubcatModal(state.searchQuery);" class="btn-press" style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); color:#34d399; font-weight:800; font-size:14px; padding:0 14px; border-radius:12px; cursor:pointer;" title="Crear nueva">
                     ➕
                   </button>
                 </div>
 
-                <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:4px;" class="no-scrollbar">
-                  ${filtered.length === 0 ? `
-                    <div style="text-align:center; padding:20px; color:#64748b; font-size:12px;">
-                      No existe "${state.searchQuery}".<br />
-                      <button onclick="state.isCreatingSubcat = true; state.newSubcatName = state.searchQuery; render();" class="btn-press" style="margin-top:10px; background:#10b981; color:#020617; border:none; border-radius:10px; font-weight:800; font-size:11px; padding:8px 14px; cursor:pointer;">
-                        ➕ Crear "${state.searchQuery || 'Nueva'}"
-                      </button>
-                    </div>
-                  ` : `
-                    ${filtered.map(s => `
-                      <div onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); state.modalOpen = false; render();" class="btn-press" style="padding:10px 12px; border-radius:12px; display:flex; align-items:center; justify-content:space-between; background:${state.selectedSubcat && state.selectedSubcat.id === s.id ? 'rgba(16,185,129,0.15)' : 'transparent'}; cursor:pointer;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                          <span style="font-size:18px;">${s.emoji || "🏷️"}</span>
-                          <div>
-                            <div style="font-weight:700; font-size:13px; color:#f8fafc;">${s.name}</div>
-                            <div style="font-size:10px; color:#64748b;">${s.category_name}</div>
-                          </div>
-                        </div>
-                        ${state.selectedSubcat && state.selectedSubcat.id === s.id ? `<span style="color:#10b981; font-weight:900;">✓</span>` : ""}
-                      </div>
-                    `).join("")}
-                    <button onclick="state.isCreatingSubcat = true; state.newSubcatName = ''; render();" class="btn-press" style="margin-top:8px; padding:10px; border-radius:12px; border:1px dashed #1e293b; background:none; color:#94a3b8; font-size:11px; font-weight:700; cursor:pointer;">
-                      ➕ Añadir otra subcategoría
-                    </button>
-                  `}
+                <div id="categoryModalListContainer" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:4px;" class="no-scrollbar">
+                  ${renderCategoryModalListContent()}
                 </div>
               `}
             </div>
@@ -1978,8 +2688,8 @@
       const currentUrl = state.serverUrl || (typeof window !== "undefined" && window.location.origin ? window.location.origin : "");
 
       return `
-        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
-          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:24px; max-width:380px; margin:0 auto; width:100%; padding:20px; display:flex; flex-direction:column; gap:14px; box-shadow:0 25px 50px rgba(0,0,0,0.85);">
+        <div style="position:fixed; top:0; left:0; right:0; height:var(--vvh, 100dvh); z-index:99999; background:rgba(0,0,0,0.85); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px;">
+          <div class="no-scrollbar" style="background:#0f172a; border:1px solid #1e293b; border-radius:24px; max-width:380px; max-height:calc(var(--vvh, 100dvh) * 0.90); overflow-y:auto; margin:0 auto; width:100%; padding:20px; display:flex; flex-direction:column; gap:14px; box-shadow:0 25px 50px rgba(0,0,0,0.85);">
             <!-- Cabecera -->
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:10px;">
               <div style="display:flex; align-items:center; gap:8px;">
@@ -2011,7 +2721,7 @@
                   Usar origen actual
                 </button>
               </div>
-              <input id="serverUrlInput" type="text" value="${escapeHtml(currentUrl)}" placeholder="http://192.168.1.45:8000" style="background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:11.5px; outline:none;" />
+              <input id="serverUrlInput" type="text" value="${escapeHtml(currentUrl)}" oninput="handleServerUrlDraftChange(this.value);" placeholder="http://192.168.1.45:8000" style="background:#020617; border:1px solid #1e293b; border-radius:10px; padding:8px 10px; color:#f8fafc; font-family:monospace; font-size:11.5px; outline:none;" />
               <div style="font-size:9.5px; color:#64748b;">
                 Ej: <code style="color:#94a3b8;">http://192.168.1.45:8000</code> o la IP de tu Zona Wi-Fi.
               </div>
@@ -2060,9 +2770,26 @@
               <button onclick="handleTestServerConfig();" ${state.testingServer ? 'disabled' : ''} class="btn-press" style="flex:1; padding:9px; border-radius:10px; background:#1e293b; color:#cbd5e1; border:1px solid #334155; font-weight:700; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
                 <span>${state.testingServer ? '⏳ Probando...' : '⚡ Probar'}</span>
               </button>
-              <button onclick="handleSaveServerConfig();" class="btn-press" style="flex:1; padding:9px; border-radius:10px; background:#10b981; color:#020617; border:none; font-weight:900; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+              <button onclick="handleSaveServerConfig();" title="Cambio temporal: redirige solo los datos hacia la nueva IP manteniendo esta PWA" class="btn-press" style="flex:1; padding:9px; border-radius:10px; background:#10b981; color:#020617; border:none; font-weight:900; font-size:11px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
                 <span>Guardar y Aplicar</span>
               </button>
+            </div>
+            <div id="serverMigrationContainer">${renderServerMigrationBox(currentUrl)}</div>
+            <!-- Aviso informativo para iOS en HTTP -->
+            ${(isIOSDevice() && typeof window !== "undefined" && window.location.protocol === "http:") ? `
+              <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:12px; padding:8px 10px; font-size:9.5px; line-height:1.35; color:#fde68a;">
+                🍏 <strong>Uso en iPhone (HTTP Wi-Fi):</strong> Apple restringe la caché offline si la app se cierra por completo fuera de casa sin HTTPS. Para capturar sin cobertura en la calle, <strong>mantén la app en segundo plano</strong> (sin forzar el cierre). Al volver a tu Wi-Fi, sincronizará automáticamente.
+              </div>
+            ` : ""}
+            <!-- Guía rápida de cambio de IP -->
+            <div style="background:rgba(2,6,23,0.55); border:1px solid rgba(51,65,85,0.7); border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:4px; font-size:10px; line-height:1.35; color:#94a3b8;">
+              <div style="font-weight:800; color:#cbd5e1; font-size:10.5px;">💡 ¿Qué opción usar si cambia tu IP?</div>
+              <div>
+                <span style="color:#34d399; font-weight:700;">• Cambio temporal</span> (ej. Wi-Fi un rato y vuelves al cable) ➔ <strong style="color:#e2e8f0;">Guardar y Aplicar</strong>
+              </div>
+              <div>
+                <span style="color:#38bdf8; font-weight:700;">• Cambio de IP definitivo</span> (mudar web, token y actualizaciones) ➔ <strong style="color:#e2e8f0;">Migrar PWA</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -2077,19 +2804,25 @@
       if (state.txType !== "EXPENSE") return "";
       return `
         <div style="margin:4px 0; display:flex; flex-direction:column; gap:4px;">
-          <div style="display:flex; align-items:center; gap:6px; overflow-x:auto; padding:2px 0;" class="no-scrollbar">
-            <div style="display:flex; gap:6px; flex-shrink:0;">
+          <div style="display:flex; align-items:center; gap:6px; width:100%;">
+            <div
+              id="quickPresetsScrollContainer"
+              onscroll="presetsScrollLeft = this.scrollLeft;"
+              style="flex:1; min-width:0; display:flex; align-items:center; gap:6px; overflow-x:auto; padding:2px 0; -webkit-overflow-scrolling:touch; touch-action:pan-x; overscroll-behavior-x:contain;"
+              class="no-scrollbar"
+            >
               ${state.presets.map(p => `
                 <button
                   type="button"
-                  onmousedown="handlePresetMouseDown('${p.id}');"
-                  onmouseup="handlePresetMouseUp('${p.id}');"
+                  onmousedown="handlePresetMouseDown('${p.id}', event);"
+                  onmouseup="handlePresetMouseUp('${p.id}', event);"
                   onmouseleave="handlePresetMouseCancel();"
-                  ontouchstart="handlePresetMouseDown('${p.id}');"
-                  ontouchend="handlePresetMouseUp('${p.id}');"
+                  ontouchstart="handlePresetTouchStart('${p.id}', event);"
+                  ontouchend="handlePresetTouchEnd('${p.id}', event);"
+                  ontouchmove="handlePresetTouchMove(event);"
                   ontouchcancel="handlePresetMouseCancel();"
                   class="btn-press"
-                  style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#f8fafc; font-size:11px; font-weight:700; cursor:pointer;"
+                  style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#f8fafc; font-size:11px; font-weight:700; cursor:pointer; flex-shrink:0; white-space:nowrap; touch-action:pan-x;"
                 >
                   <span style="font-size:13px;">${p.emoji}</span>
                   <span>${p.name}</span>
@@ -2098,10 +2831,11 @@
               `).join("")}
             </div>
             <button
+              type="button"
               onclick="state.managePresetsModalOpen = true; render();"
               class="btn-press"
-              style="padding:6px 8px; border-radius:12px; background:#0f172a; border:1px solid #1e293b; color:#94a3b8; font-size:11px; cursor:pointer; margin-left:auto; flex-shrink:0;"
-              title="Gestionar atajos"
+              style="padding:6px 9px; height:31px; border-radius:12px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); color:#94a3b8; font-size:12px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 4px rgba(0,0,0,0.3);"
+              title="Personalizar atajos"
             >
               ⚙️
             </button>
@@ -2115,8 +2849,8 @@
 
     function renderManagePresetsModal() {
       return `
-        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.85); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
-          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:20px; max-width:360px; margin:0 auto; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.8); overflow:hidden;">
+        <div style="position:fixed; top:0; left:0; right:0; height:var(--vvh, 100dvh); z-index:99999; background:rgba(0,0,0,0.85); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); display:flex; flex-direction:column; justify-content:center; padding:16px;">
+          <div style="background:#0f172a; border:1px solid #1e293b; border-radius:20px; max-width:360px; margin:0 auto; width:100%; max-height:calc(var(--vvh, 100dvh) * 0.85); display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.8); overflow:hidden;">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #1e293b;">
               <span style="font-weight:900; font-size:14px; color:#34d399;">⚙️ Atajos 1-Tap (${state.presets.length})</span>
               <button onclick="state.managePresetsModalOpen = false; render();" style="background:none; border:none; color:#94a3b8; font-size:16px; cursor:pointer;">✕</button>
@@ -2125,22 +2859,31 @@
               ${state.presets.map((p) => `
                 <div style="background:rgba(2,6,23,0.6); border:1px solid #1e293b; border-radius:12px; padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
                   <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-                    <div style="display:flex; align-items:center; gap:6px;">
-                      <span style="font-size:16px;">${p.emoji}</span>
-                      <input type="text" value="${p.name}" onchange="updatePresetProp('${p.id}', 'name', this.value);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:11px; font-weight:700; padding:2px 6px; width:80px;" />
+                    <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:0;">
+                      <span style="font-size:16px; flex-shrink:0;">${p.emoji}</span>
+                      <input type="text" value="${escapeHtml(p.name)}" oninput="updatePresetProp('${p.id}', 'name', this.value, false);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-size:11px; font-weight:700; padding:3px 6px; flex:1; min-width:0; width:100%;" />
                     </div>
-                    <div style="display:flex; align-items:center; gap:4px;">
-                      <input type="number" step="0.01" value="${p.amount}" onchange="updatePresetProp('${p.id}', 'amount', parseFloat(this.value)||0);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-size:11px; font-weight:800; padding:2px 6px; width:65px; text-align:right;" />
+                    <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                      <input type="number" step="0.01" value="${p.amount}" oninput="updatePresetProp('${p.id}', 'amount', parseFloat(this.value)||0, false);" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-size:11px; font-weight:800; padding:3px 6px; width:78px; text-align:right;" />
                       <span style="font-size:11px; color:#64748b; font-weight:800;">€</span>
                       <button onclick="deletePreset('${p.id}');" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; padding:2px 4px;">🗑️</button>
                     </div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; color:#64748b; border-top:1px solid #0f172a; padding-top:4px;">
-                    <span>📂 Subcategoría:</span>
-                    <select onchange="updatePresetProp('${p.id}', 'subcategory_name', this.value);" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; border-radius:6px; font-size:10px; padding:2px 4px; max-width:160px;">
-                      ${state.subcategories.map(s => `
-                        <option value="${s.name}" ${s.name === p.subcategory_name ? 'selected' : ''}>${s.name}</option>
-                      `).join("")}
+                  <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:10px; color:#64748b; border-top:1px solid #0f172a; padding-top:4px;">
+                    <span style="flex-shrink:0;">📂 Subcategoría:</span>
+                    <select onchange="updatePresetProp('${p.id}', 'subcategory_name', this.value, false);" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; border-radius:6px; font-size:10px; padding:2px 4px; max-width:170px; min-width:0; flex:1;">
+                      ${(() => {
+                        const expenseSubs = state.subcategories.filter(s => !isIncomeSubcat(s));
+                        const matchedSub = findMatchingSubcategory(p, expenseSubs);
+                        const activeSubName = (p.subcategory_id && expenseSubs.some(s => s.id === p.subcategory_id))
+                          ? (expenseSubs.find(s => s.id === p.subcategory_id)?.name)
+                          : (p.subcategory_name && expenseSubs.some(s => s.name === p.subcategory_name)
+                              ? p.subcategory_name
+                              : (matchedSub ? matchedSub.name : (expenseSubs[0]?.name || "")));
+                        return expenseSubs.map(s => `
+                          <option value="${escapeHtml(s.name)}" ${s.name === activeSubName ? 'selected' : ''}>${escapeHtml(s.name)}</option>
+                        `).join("");
+                      })()}
                     </select>
                   </div>
                 </div>
@@ -2150,13 +2893,13 @@
               <div style="background:#020617; border:1px dashed #334155; border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:6px; margin-top:4px;">
                 <div style="font-size:11px; font-weight:800; color:#34d399;">+ Añadir nuevo atajo</div>
                 <div style="display:flex; gap:6px;">
-                  <input id="newPresetEmoji" type="text" placeholder="Emoji" value="⚡" maxlength="2" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:12px; text-align:center; width:36px; padding:4px;" />
-                  <input id="newPresetName" type="text" placeholder="Nombre (ej. Pan)" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:11px; flex:1; padding:4px 8px;" />
+                  <input id="newPresetEmoji" type="text" placeholder="Emoji" value="⚡" maxlength="2" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:12px; text-align:center; width:46px; flex-shrink:0; padding:4px;" />
+                  <input id="newPresetName" type="text" placeholder="Nombre (ej. Pan)" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#fff; font-size:11px; flex:1; min-width:0; padding:4px 8px;" />
                 </div>
                 <div style="display:flex; gap:6px;">
-                  <input id="newPresetAmount" type="number" step="0.01" placeholder="Importe €" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-weight:800; font-size:11px; width:80px; padding:4px 6px;" />
-                  <select id="newPresetSubcat" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:10px; flex:1; padding:4px;">
-                    ${state.subcategories.map(s => `<option value="${s.name}">${s.name}</option>`).join("")}
+                  <input id="newPresetAmount" type="number" step="0.01" placeholder="Importe €" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#34d399; font-family:monospace; font-weight:800; font-size:11px; width:92px; flex-shrink:0; padding:4px 6px;" />
+                  <select id="newPresetSubcat" style="background:#0f172a; border:1px solid #334155; border-radius:6px; color:#94a3b8; font-size:10px; flex:1; min-width:0; padding:4px;">
+                    ${state.subcategories.filter(s => !isIncomeSubcat(s)).map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join("")}
                   </select>
                 </div>
                 <button onclick="addNewPresetFromModal();" class="btn-press" style="background:#10b981; color:#020617; font-weight:800; font-size:11px; border:none; border-radius:8px; padding:6px; cursor:pointer; margin-top:2px;">
@@ -2179,7 +2922,7 @@
 
     function renderReceiptModal() {
       return `
-        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.92); backdrop-filter:blur(6px); display:flex; flex-direction:column; justify-content:center; align-items:center; padding:16px;">
+        <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.92); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); display:flex; flex-direction:column; justify-content:center; align-items:center; padding:16px;">
           <div style="position:relative; max-width:400px; width:100%; max-height:85vh; display:flex; flex-direction:column; background:#0F172A; border:1px solid rgba(255,255,255,0.12); border-radius:18px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.85);">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.08);">
               <span style="font-weight:800; font-size:13px; color:#f8fafc;">📷 Comprobante de Compra</span>
@@ -2200,29 +2943,67 @@
 
     // Inicialización y Registro de Service Worker para PWA Offline
     if ("serviceWorker" in navigator) {
+      const hadSwController = !!navigator.serviceWorker.controller;
+      let swRefreshing = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (hadSwController && !swRefreshing && !isInputFocused()) {
+          swRefreshing = true;
+          window.location.reload();
+        }
+      });
+
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/mobile/sw.js").catch((err) => {
-          console.log("Service Worker registro opcional:", err);
-        });
+        navigator.serviceWorker.register("/mobile/sw.js", { updateViaCache: "none" })
+          .then((reg) => {
+            swRegRef = reg;
+            reg.update().catch(() => {});
+          })
+          .catch((err) => {
+            console.log("Service Worker registro opcional:", err);
+          });
       });
     }
 
+    document.addEventListener("focusout", () => {
+      if (pendingBackgroundRender) {
+        setTimeout(() => {
+          if (!isInputFocused() && pendingBackgroundRender) {
+            pendingBackgroundRender = false;
+            render();
+          }
+        }, 120);
+      }
+    });
+
     window.addEventListener("online", () => {
       state.isOnline = true;
-      render();
+      renderFromBackground();
+      if (swRegRef) swRegRef.update().catch(() => {});
       checkServer();
     });
 
     window.addEventListener("offline", () => {
       state.isOnline = false;
-      render();
+      renderFromBackground();
     });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        if (swRegRef) swRegRef.update().catch(() => {});
         checkServer();
       }
     });
+
+    function syncVisualViewportHeight() {
+      if (typeof window !== "undefined" && window.visualViewport && typeof document !== "undefined" && document.documentElement) {
+        document.documentElement.style.setProperty("--vvh", `${window.visualViewport.height}px`);
+      }
+    }
+    if (typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.addEventListener("resize", syncVisualViewportHeight);
+      window.visualViewport.addEventListener("scroll", syncVisualViewportHeight);
+      syncVisualViewportHeight();
+    }
 
     loadLocalState();
     render();
@@ -2234,7 +3015,7 @@
         fetchHistoryCache();
       }
     }, 600);
-    setInterval(checkServer, 60000);
+    setInterval(checkServer, 15000);
   </script>
 </body>
 

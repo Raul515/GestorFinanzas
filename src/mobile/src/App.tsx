@@ -20,6 +20,7 @@ import {
   addSubcategoryToStoredCatalog,
   exportTransactionsToJsonFile,
   extractAndSavePairingTokenFromUrl,
+  isIOSDevice,
   getStoredPairingToken,
   saveStoredPairingToken,
   loadStoredPendingDeletes,
@@ -73,6 +74,24 @@ export function App() {
     extractAndSaveServerUrlFromUrl();
   }, []);
 
+  // Adaptar variable --vvh a visualViewport para que iOS Safari ajuste modales sobre el teclado virtual
+  useEffect(() => {
+    const syncVvh = () => {
+      if (typeof window !== "undefined" && window.visualViewport && typeof document !== "undefined") {
+        document.documentElement.style.setProperty("--vvh", `${window.visualViewport.height}px`);
+      }
+    };
+    if (typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.addEventListener("resize", syncVvh);
+      window.visualViewport.addEventListener("scroll", syncVvh);
+      syncVvh();
+      return () => {
+        window.visualViewport?.removeEventListener("resize", syncVvh);
+        window.visualViewport?.removeEventListener("scroll", syncVvh);
+      };
+    }
+  }, []);
+
   // Carga desacoplada de catálogo, resumen mensual e histórico (solo bajo demanda o arranque)
   const refreshHeavyData = useCallback(async (force = false) => {
     const now = Date.now();
@@ -112,23 +131,28 @@ export function App() {
     }
 
     try {
+      const wasOnline = isServerOnline;
       const status = await checkServerStatus();
       setIsServerOnline(status.isOnline);
       setIsPaired(status.isPaired);
 
       if (status.isOnline && status.isPaired) {
-        if (lastDataFetchRef.current === 0) {
-          refreshHeavyData();
+        if (!wasOnline || lastDataFetchRef.current === 0) {
+          refreshHeavyData(true);
         }
 
-        // Comprobar si hay una nueva versión de APK para auto-actualización OTA
-        const versionInfo = await fetchLatestVersion();
-        if (
-          versionInfo &&
-          versionInfo.version_code > CURRENT_APP_VERSION.code &&
-          versionInfo.apk_available
-        ) {
-          setAvailableUpdate(versionInfo);
+        // Comprobar si hay una nueva versión de APK para auto-actualización OTA (solo Android)
+        if (!isIOSDevice()) {
+          const versionInfo = await fetchLatestVersion();
+          if (
+            versionInfo &&
+            versionInfo.version_code > CURRENT_APP_VERSION.code &&
+            versionInfo.apk_available
+          ) {
+            setAvailableUpdate(versionInfo);
+          } else {
+            setAvailableUpdate(null);
+          }
         } else {
           setAvailableUpdate(null);
         }
@@ -136,7 +160,7 @@ export function App() {
     } catch {
       setIsServerOnline(false);
     }
-  }, [refreshHeavyData]);
+  }, [isServerOnline, refreshHeavyData]);
 
   // Función de sincronización con el backend
   const handleTriggerSync = useCallback(async () => {

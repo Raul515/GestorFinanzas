@@ -96,8 +96,13 @@ export const extractAndSaveServerUrlFromUrl = (): string | null => {
       return saved;
     }
 
-    // Si estamos en un navegador cargando la app desde una IP de red real (no localhost ni app empaquetada),
-    // sincronizar automáticamente con el origen activo desde el que se está sirviendo
+    // Si no había una URL configurada manualmente por el usuario y estamos en un navegador cargando
+    // la app desde una IP de red real (no localhost ni app empaquetada), inicializar con el origen activo
+    const existingStored = getStoredServerUrl();
+    if (existingStored && existingStored.trim()) {
+      return existingStored.trim();
+    }
+
     if (window.location.origin) {
       const orig = window.location.origin;
       if (
@@ -319,7 +324,15 @@ export const addSubcategoryToStoredCatalog = (subcat: SubcategoryItem): CatalogD
 };
 
 // Exportar transacciones pendientes a un archivo JSON para Syncthing
-export const exportTransactionsToJsonFile = (transactions: MobileTransaction[]): void => {
+export const isIOSDevice = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent || "") ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+};
+
+export const exportTransactionsToJsonFile = async (transactions: MobileTransaction[]): Promise<void> => {
   const pending = transactions.filter((t) => t.status === "PENDING_SYNC");
   const payload = {
     device_id: "mobile-pwa",
@@ -336,11 +349,33 @@ export const exportTransactionsToJsonFile = (transactions: MobileTransaction[]):
     })),
   };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const filename = `evt_mob_${Date.now()}.json`;
+
+  if (typeof navigator !== "undefined" && navigator.share && navigator.canShare) {
+    try {
+      const file = new File([jsonStr], filename, { type: "application/json" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Exportación Gestor Finanzas",
+          text: `Lote de ${pending.length} gastos pendientes exportados.`
+        });
+        return;
+      }
+    } catch (err: any) {
+      if (err && err.name === "AbortError") {
+        return;
+      }
+      console.warn("Fallo al compartir archivo con navigator.share, usando fallback de descarga:", err);
+    }
+  }
+
+  const blob = new Blob([jsonStr], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `evt_mob_${Date.now()}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -354,7 +389,7 @@ export const DEFAULT_QUICK_PRESETS: QuickPresetItem[] = [
     name: "Café",
     emoji: "☕",
     amount: 1.5,
-    subcategory_name: "Café y Desayunos",
+    subcategory_name: "Salir a comer fuera",
     concept: "Café",
   },
   {
@@ -362,7 +397,7 @@ export const DEFAULT_QUICK_PRESETS: QuickPresetItem[] = [
     name: "Cena",
     emoji: "🍽️",
     amount: 20.0,
-    subcategory_name: "Restaurante",
+    subcategory_name: "Salir a comer fuera",
     concept: "Cena",
   },
   {
@@ -370,7 +405,7 @@ export const DEFAULT_QUICK_PRESETS: QuickPresetItem[] = [
     name: "Cine",
     emoji: "🎬",
     amount: 5.5,
-    subcategory_name: "Ocio y Cultura",
+    subcategory_name: "Entretenimiento (Tomar algo...)",
     concept: "Cine",
   },
 ];
