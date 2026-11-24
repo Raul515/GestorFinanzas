@@ -93,7 +93,7 @@ export const QuickPresetChips = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-1 my-1">
+    <div className="w-full flex flex-col gap-1 my-0.5">
       {/* Fila de atajos y botón de ajustes */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5">
         <div className="flex items-center gap-1.5 shrink-0">
@@ -115,8 +115,8 @@ export const QuickPresetChips = ({
                 onMouseLeave={() => cancelPress(false)}
                 className={`relative overflow-hidden px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-sm shrink-0 active:scale-95 ${
                   isPressing
-                    ? "bg-emerald-950/70 border-emerald-500 text-emerald-200 scale-95"
-                    : "bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-700 hover:text-white"
+                    ? "bg-emerald-950/70 border-emerald-500 text-emerald-200 scale-95 ring-1 ring-emerald-500/50"
+                    : "bg-[#0F172A] border-white/[0.08] text-slate-200 hover:border-slate-700 hover:text-white"
                 }`}
                 title="Toca para rellenar · Mantén pulsado para guardar directo"
               >
@@ -141,7 +141,7 @@ export const QuickPresetChips = ({
         <button
           type="button"
           onClick={onOpenManageModal}
-          className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 active:scale-90 transition-all shrink-0 ml-auto"
+          className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-90 transition-all shrink-0 ml-auto"
           title="Gestionar atajos rápidos"
         >
           <Settings2 className="w-4 h-4" />

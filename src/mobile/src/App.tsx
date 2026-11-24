@@ -339,15 +339,15 @@ export function App() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 text-slate-100 select-none overflow-hidden font-sans">
-      {/* Barra superior de estado */}
-      <header className="px-4 py-2 border-b border-slate-900 flex items-center justify-between shrink-0 max-w-sm mx-auto w-full">
+    <div className="h-full flex flex-col bg-[#070B12] text-slate-100 select-none overflow-hidden font-sans">
+      {/* Barra superior de estado con soporte Safe-Area */}
+      <header className="pt-[max(env(safe-area-inset-top,0px),10px)] pb-2.5 px-4 border-b border-white/[0.06] bg-[#070B12]/85 backdrop-blur-md flex items-center justify-between shrink-0 max-w-sm mx-auto w-full z-20">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></div>
-          <span className="font-extrabold text-sm tracking-tight text-slate-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+          <span className="font-black text-[13.5px] tracking-tight text-slate-100">
             Gestor Finanzas
           </span>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 tracking-wider">
             MÓVIL
           </span>
         </div>
@@ -356,22 +356,22 @@ export function App() {
           <button
             type="button"
             onClick={() => setShowServerConfigModal(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 active:scale-95 transition-all text-slate-300"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/90 border border-white/[0.08] hover:border-slate-700 active:scale-95 transition-all text-slate-300 shadow-sm"
             title="Configurar servidor y token de conexión"
           >
             <span
               className={`w-2 h-2 rounded-full ${
                 isServerOnline
                   ? isPaired
-                    ? "bg-emerald-400 shadow-sm shadow-emerald-400/50"
-                    : "bg-amber-400 shadow-sm shadow-amber-400/50"
+                    ? "bg-emerald-400 shadow-[0_0_6px_#34d399]"
+                    : "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
                   : "bg-slate-600"
               }`}
             />
-            <span className="text-[10px] font-semibold">
+            <span className="text-[10.5px] font-bold">
               {isServerOnline ? (isPaired ? "En línea" : "Sin enlazar") : "Offline"}
             </span>
-            <Settings className="w-3 h-3 text-slate-400 ml-0.5" />
+            <Settings className="w-3.5 h-3.5 text-slate-400 ml-0.5 transition-transform active:rotate-45" />
           </button>
         </div>
       </header>
@@ -393,8 +393,8 @@ export function App() {
         </div>
       )}
 
-      {/* Contenido principal según pestaña activa */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      {/* Contenido principal según pestaña activa con scroll elástico y min-h-0 */}
+      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
         {activeTab === "capture" ? (
           <QuickCaptureView
             subcategories={catalog.personal_subcategories}

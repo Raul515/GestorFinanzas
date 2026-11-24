@@ -7,6 +7,13 @@ export default {
   theme: {
     extend: {
       colors: {
+        surface: {
+          base: "#070B12",
+          card: "#0F172A",
+          elevated: "#172033",
+          border: "rgba(255, 255, 255, 0.07)",
+          highlight: "rgba(255, 255, 255, 0.12)",
+        },
         brand: {
           50: "#f0fdf4",
           100: "#dcfce7",

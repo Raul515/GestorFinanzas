@@ -87,7 +87,7 @@ export const CategoryChips = ({
   return (
     <div className="w-full">
       {/* Carrusel horizontal de chips frecuentes */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5">
         {activeSubcategories.map((subcat) => {
           const isSelected = selectedSubcategoryId === subcat.id;
           const emoji = getSubcategoryEmoji(subcat.name);
@@ -96,10 +96,10 @@ export const CategoryChips = ({
               key={subcat.id}
               type="button"
               onClick={() => onSelectSubcategory(subcat)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border shrink-0 active:scale-95 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border shrink-0 active:scale-95 ${
                 isSelected
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500 ring-1 ring-emerald-500/50 shadow-sm shadow-emerald-950"
-                  : "bg-slate-900 text-slate-300 border-slate-800 active:bg-slate-800"
+                  ? "bg-emerald-500/18 text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.25)] ring-1 ring-emerald-500/40"
+                  : "bg-[#0F172A] text-slate-300 border-white/[0.08] hover:border-slate-700 active:bg-[#172033]"
               }`}
             >
               <span className="text-sm">{emoji}</span>
@@ -115,22 +115,24 @@ export const CategoryChips = ({
             setIsCreating(false);
             setModalOpen(true);
           }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap border border-slate-800 bg-slate-900/60 text-slate-400 shrink-0 active:scale-95 active:bg-slate-800"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border border-white/[0.08] bg-[#0F172A] text-slate-400 hover:text-slate-200 shrink-0 active:scale-95 active:bg-[#172033]"
         >
-          <Search className="w-3.5 h-3.5" />
+          <Search className="w-3.5 h-3.5 text-slate-400" />
           <span>Ver todas</span>
         </button>
       </div>
 
       {/* Modal / Selector completo de subcategorías */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col w-full max-w-md mx-auto shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0B1324] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col w-full max-w-md mx-auto shadow-2xl overflow-hidden">
             {/* Cabecera del modal */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <Search className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-slate-100 text-base">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <Search className="w-4 h-4" />
+                </div>
+                <h3 className="font-extrabold text-slate-100 text-sm">
                   {isCreating ? "Nueva Subcategoría" : "Seleccionar Categoría"}
                 </h3>
               </div>
@@ -140,7 +142,7 @@ export const CategoryChips = ({
                   setModalOpen(false);
                   setIsCreating(false);
                 }}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-100 active:bg-slate-800"
+                className="p-1 rounded-full text-slate-400 hover:text-slate-200 active:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>

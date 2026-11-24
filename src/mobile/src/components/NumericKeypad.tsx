@@ -70,39 +70,40 @@ export const NumericKeypad = ({
   ];
 
   return (
-    <div className="flex flex-col gap-2 w-full max-w-sm mx-auto">
+    <div className="flex flex-col gap-1.5 w-full max-w-sm mx-auto">
       {/* Botones rápidos de incremento */}
-      <div className="grid grid-cols-5 gap-1.5 px-1">
+      <div className="grid grid-cols-5 gap-1.5 px-0.5">
         {[1, 2, 5, 10, 20].map((val) => (
           <button
             key={val}
             type="button"
             onClick={() => handleQuickAdd(val)}
-            className="py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-semibold text-emerald-400 active:scale-95 active:bg-emerald-950/60 active:border-emerald-600 transition-transform"
+            className="py-1 rounded-xl bg-[#0F172A] border border-white/[0.08] text-[11px] font-bold text-emerald-400 hover:text-emerald-300 active:scale-95 active:bg-emerald-950/60 active:border-emerald-500/40 transition-all shadow-sm"
           >
             +{val}€
           </button>
         ))}
       </div>
 
-      {/* Cuadrícula numérico 3x4 */}
-      <div className="grid grid-cols-3 gap-2 p-1">
+      {/* Cuadrícula numérico 3x4 con elevación táctil */}
+      <div className="grid grid-cols-3 gap-1.5 p-0.5">
         {keys.flat().map((k, idx) => {
           const isBackspace = k === "backspace";
+          const isComma = k === ",";
           return (
             <button
               key={idx}
               type="button"
               onClick={() => handleKeyPress(k)}
-              className={`h-14 sm:h-16 rounded-xl flex items-center justify-center font-bold text-2xl transition-all select-none shadow-sm ${
+              className={`h-12 sm:h-14 rounded-2xl flex items-center justify-center font-bold transition-all select-none shadow-[0_2px_6px_rgba(0,0,0,0.35)] ${
                 isBackspace
-                  ? "bg-slate-900/90 text-rose-400 border border-slate-800/80 active:bg-rose-950/50"
-                  : k === ","
-                  ? "bg-slate-900 text-slate-300 border border-slate-800 active:bg-slate-800 text-3xl pb-2"
-                  : "bg-slate-900 text-slate-100 border border-slate-800 active:bg-slate-800 active:scale-95 text-2xl"
+                  ? "bg-[#141E30] text-rose-400 border border-rose-500/20 active:bg-rose-950/40 active:scale-95 text-xl"
+                  : isComma
+                  ? "bg-[#10192A] text-slate-300 border border-white/[0.07] active:bg-[#1A263D] active:scale-95 text-3xl pb-1"
+                  : "bg-[#10192A] text-slate-100 border border-white/[0.07] active:bg-[#1A263D] active:border-emerald-500/30 active:scale-95 text-2xl"
               }`}
             >
-              {isBackspace ? <Delete className="w-6 h-6" /> : k}
+              {isBackspace ? <Delete className="w-5 h-5" /> : k}
             </button>
           );
         })}

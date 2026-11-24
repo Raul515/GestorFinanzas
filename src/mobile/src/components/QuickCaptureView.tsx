@@ -289,14 +289,43 @@ export const QuickCaptureView = ({
         </div>
       )}
 
-      {/* Cabecera compacta: Ámbito y Selector de Fecha */}
-      <div className="flex items-center justify-between pb-1 pt-0.5">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-semibold text-emerald-400">
+      {/* Cabecera compacta: Ámbito, Selector de Tipo y Fecha */}
+      <div className="flex items-center justify-between pb-1 pt-0.5 gap-1.5">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0F172A] border border-white/[0.08] text-[10.5px] font-semibold text-slate-300 shrink-0">
           <span>👤</span>
-          <span>Cuenta Personal</span>
+          <span>Personal</span>
         </div>
 
-        <label className="relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-medium text-slate-300 cursor-pointer active:bg-slate-850">
+        {/* Selector de Tipo: Gasto / Ingreso (Fase 13) */}
+        <div className="flex bg-[#0F172A] p-0.5 rounded-full border border-white/[0.08] gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleTypeSwitch("EXPENSE")}
+            className={`py-0.5 px-2.5 rounded-full text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+              txType === "EXPENSE"
+                ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+            <span>Gasto</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTypeSwitch("INCOME")}
+            className={`py-0.5 px-2.5 rounded-full text-[10.5px] font-bold transition-all flex items-center gap-1 ${
+              txType === "INCOME"
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span>Ingreso</span>
+          </button>
+        </div>
+
+        {/* Selector de Fecha */}
+        <label className="relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0F172A] border border-white/[0.08] text-[10.5px] font-medium text-slate-300 cursor-pointer active:bg-slate-800 shrink-0">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
           <span>{formatDateDisplay(selectedDate)}</span>
           <input
@@ -306,34 +335,6 @@ export const QuickCaptureView = ({
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           />
         </label>
-      </div>
-
-      {/* Selector de Tipo: Gasto / Ingreso (Fase 13) */}
-      <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800 gap-1 my-1">
-        <button
-          type="button"
-          onClick={() => handleTypeSwitch("EXPENSE")}
-          className={`flex-1 py-1 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            txType === "EXPENSE"
-              ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <span>🔴</span>
-          <span>Gasto</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTypeSwitch("INCOME")}
-          className={`flex-1 py-1 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            txType === "INCOME"
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
-          <span>🟢</span>
-          <span>Ingreso / Bizum</span>
-        </button>
       </div>
 
       {/* Atajos Rápidos de Importe y Presets Frecuentes 1-Tap (Fase 14) */}
@@ -346,14 +347,11 @@ export const QuickCaptureView = ({
         />
       )}
 
-      {/* Display del Importe en Pantalla */}
-      <div className="flex flex-col items-center justify-center my-1 py-1">
-        <div className="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-0.5">
-          {txType === "INCOME" ? "Importe del Ingreso" : "Importe del Gasto"}
-        </div>
+      {/* Display Hero del Importe */}
+      <div className="flex flex-col items-center justify-center my-0.5 py-1">
         <div className="flex items-baseline justify-center gap-1 text-slate-100 font-mono select-none">
           <span className="text-2xl font-light text-slate-500">€</span>
-          <span className={`text-4xl sm:text-5xl font-extrabold tracking-tight ${
+          <span className={`text-4xl sm:text-5xl font-black tracking-tight ${
             txType === "INCOME"
               ? "text-emerald-400"
               : wantsAlert?.level === "OVER_LIMIT"
@@ -365,38 +363,28 @@ export const QuickCaptureView = ({
             {txType === "INCOME" ? `+${amountStr}` : amountStr}
           </span>
         </div>
+
+        {/* Semáforo Predictivo de Techo de Deseos como Micro-Badge flotante (Fase 10) */}
+        {wantsAlert && (
+          <div
+            className={`mt-1 px-2.5 py-1 rounded-full border ${wantsAlert.borderColor} ${wantsAlert.bgColor} flex items-center gap-1.5 shadow-sm transition-all duration-200 animate-in fade-in max-w-xs`}
+          >
+            {wantsAlert.level === "OVER_LIMIT" ? (
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 animate-pulse" />
+            ) : wantsAlert.level === "WARNING" ? (
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            )}
+            <span className={`text-[10px] font-bold ${wantsAlert.textColor} truncate`}>
+              {wantsAlert.desc}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Semáforo Predictivo de Techo de Deseos (Fase 10) */}
-      {wantsAlert && (
-        <div
-          className={`mx-1 my-1 p-2.5 rounded-xl border ${wantsAlert.borderColor} ${wantsAlert.bgColor} flex items-center justify-between gap-2 shadow-sm transition-all duration-200 animate-in fade-in`}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            {wantsAlert.level === "OVER_LIMIT" ? (
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-pulse" />
-            ) : wantsAlert.level === "WARNING" ? (
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-            )}
-            <div className="min-w-0">
-              <div className={`text-[11px] font-bold ${wantsAlert.textColor} leading-tight truncate`}>
-                {wantsAlert.title}
-              </div>
-              <div className="text-[10px] text-slate-400 leading-tight truncate">
-                {wantsAlert.desc}
-              </div>
-            </div>
-          </div>
-          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase shrink-0 ${wantsAlert.badgeClass}`}>
-            {wantsAlert.badge}
-          </span>
-        </div>
-      )}
-
       {/* Selector de Chips de Categorías */}
-      <div className="my-1">
+      <div className="my-0.5">
         <CategoryChips
           subcategories={
             subcategories.filter((s) =>
@@ -417,17 +405,16 @@ export const QuickCaptureView = ({
         />
       </div>
 
-      {/* Campo de Concepto y Sugerencias */}
-      <div className="my-1">
-        <ConceptSuggestions
-          concept={concept}
-          onChangeConcept={(val) => setConcept(val)}
-          frequentConcepts={frequentConcepts}
-        />
-      </div>
+      {/* Fila integrada: Concepto y Adjunto de Foto del Ticket (Fase 12) */}
+      <div className="my-0.5 flex items-center gap-1.5">
+        <div className="flex-1 min-w-0">
+          <ConceptSuggestions
+            concept={concept}
+            onChangeConcept={(val) => setConcept(val)}
+            frequentConcepts={frequentConcepts}
+          />
+        </div>
 
-      {/* Botón / Adjunto de Foto del Ticket (Fase 12) */}
-      <div className="my-1 flex items-center justify-between">
         <input
           type="file"
           accept="image/*"
@@ -440,21 +427,18 @@ export const QuickCaptureView = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-emerald-400 active:scale-95 transition-all shadow-sm"
+            className="flex items-center justify-center p-2.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-300 hover:text-emerald-400 active:scale-95 transition-all shadow-sm shrink-0"
+            title="Adjuntar foto del ticket"
           >
-            <Camera className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Foto Ticket</span>
+            <Camera className="w-4 h-4 text-emerald-400" />
           </button>
         ) : (
-          <div className="flex-1 flex items-center justify-between px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 animate-in fade-in">
-            <div className="flex items-center gap-2 min-w-0">
-              <img
-                src={receiptBase64}
-                alt="Ticket adjunto"
-                className="w-6 h-6 object-cover rounded-md border border-emerald-500/40 shrink-0"
-              />
-              <span className="font-bold text-[11px] truncate">Ticket adjunto (&lt;200 KB)</span>
-            </div>
+          <div className="flex items-center gap-1.5 p-1 bg-emerald-500/10 border border-emerald-500/30 rounded-xl shrink-0">
+            <img
+              src={receiptBase64}
+              alt="Ticket adjunto"
+              className="w-7 h-7 object-cover rounded-lg border border-emerald-500/40"
+            />
             <button
               type="button"
               onClick={() => setReceiptBase64(null)}
@@ -467,8 +451,8 @@ export const QuickCaptureView = ({
         )}
       </div>
 
-      {/* Teclado Numérico */}
-      <div className="my-1">
+      {/* Teclado Numérico Ergonómico */}
+      <div className="my-0.5">
         <NumericKeypad
           amountString={amountStr}
           onChangeAmount={(val) => setAmountStr(val)}
@@ -476,20 +460,18 @@ export const QuickCaptureView = ({
       </div>
 
       {/* Botón Prominente de Guardado */}
-      <div className="pt-2 pb-1">
+      <div className="pt-1.5 pb-0.5">
         <button
           type="button"
           disabled={!canSave}
           onClick={handleSave}
-          className={`w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-base transition-all select-none shadow-md ${
+          className={`w-full py-3 rounded-2xl flex items-center justify-center gap-2 font-black text-sm tracking-wide transition-all select-none shadow-lg ${
             canSave
-              ? txType === "INCOME"
-                ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98] active:bg-emerald-600"
-                : "bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:scale-[0.98] active:bg-emerald-600"
-              : "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-60"
+              ? "bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-slate-950 shadow-emerald-500/25 active:scale-[0.98]"
+              : "bg-[#0F172A] border border-white/[0.06] text-slate-600 cursor-not-allowed opacity-50"
           }`}
         >
-          <Zap className="w-5 h-5 fill-current" />
+          <Zap className="w-4 h-4 fill-current" />
           <span>
             {canSave
               ? txType === "INCOME"

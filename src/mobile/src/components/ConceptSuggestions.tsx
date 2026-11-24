@@ -22,9 +22,9 @@ export const ConceptSuggestions = ({
           type="text"
           value={concept}
           onChange={(e: ChangeEvent<HTMLInputElement>) => onChangeConcept(e.target.value)}
-          placeholder="Concepto (ej. Café con tostada)..."
+          placeholder="Concepto (ej. Desayuno, Supermercado)..."
           maxLength={100}
-          className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+          className="w-full bg-[#0F172A] border border-white/[0.08] rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-sm"
         />
       </div>
 
@@ -35,7 +35,7 @@ export const ConceptSuggestions = ({
               key={idx}
               type="button"
               onClick={() => onChangeConcept(item)}
-              className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-850 active:bg-slate-800 border border-slate-800 text-slate-400 whitespace-nowrap shrink-0 active:scale-95 transition-all"
+              className="text-[10.5px] px-2.5 py-1 rounded-lg bg-[#0F172A] hover:bg-[#172033] active:bg-[#1A263D] border border-white/[0.06] text-slate-400 hover:text-slate-200 whitespace-nowrap shrink-0 active:scale-95 transition-all"
             >
               {item}
             </button>

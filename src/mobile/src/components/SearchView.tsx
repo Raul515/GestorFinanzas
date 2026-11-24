@@ -1,5 +1,5 @@
 import { useState, useMemo, ChangeEvent, KeyboardEvent } from "react";
-import { Search, X, Tag, Calendar, Camera } from "lucide-react";
+import { Search, X, Tag, Calendar, Camera, Sparkles } from "lucide-react";
 import { HistoricalTransactionItem, MobileTransaction } from "../types";
 import { getSubcategoryEmoji } from "./CategoryChips";
 import { getReceiptImageUrl } from "../services/api";
@@ -86,10 +86,10 @@ export const SearchView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar gap-3">
-      {/* Barra de Búsqueda Táctil */}
+    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2.5 overflow-y-auto no-scrollbar gap-3">
+      {/* Barra de Búsqueda Estilo Spotlight Táctil */}
       <div className="relative flex items-center">
-        <div className="absolute left-3 text-slate-400 pointer-events-none">
+        <div className="absolute left-3.5 text-slate-400 pointer-events-none">
           <Search className="w-4 h-4" />
         </div>
         <input
@@ -104,13 +104,13 @@ export const SearchView = ({
           }}
           placeholder="¿Cuánto me costó... (ej. itv, zara, taller)?"
           autoFocus
-          className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-9 pr-9 py-3 text-xs text-slate-100 placeholder-slate-500 font-medium focus:outline-none focus:border-emerald-500 shadow-sm"
+          className="w-full bg-[#0F172A] border border-white/[0.08] focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30 rounded-2xl pl-10 pr-10 py-3 text-xs text-slate-100 placeholder-slate-500 font-medium shadow-sm transition-all outline-none"
         />
         {query && (
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3 p-1 rounded-full text-slate-400 hover:text-slate-200 active:bg-slate-800"
+            className="absolute right-3 p-1.5 rounded-full text-slate-400 hover:text-slate-100 active:bg-white/[0.06] transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -119,9 +119,9 @@ export const SearchView = ({
 
       {/* Sugerencias Rápidas de Búsqueda si no hay texto */}
       {!query && (
-        <div className="flex flex-col gap-2 pt-1">
+        <div className="flex flex-col gap-3 pt-1">
           <div className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            <Tag className="w-3 h-3 text-emerald-400" />
+            <Tag className="w-3.5 h-3.5 text-emerald-400" />
             <span>Consultas Frecuentes</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -132,17 +132,22 @@ export const SearchView = ({
                   key={tag}
                   type="button"
                   onClick={() => setQuery(tag)}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-medium active:scale-95 transition-all shadow-sm"
+                  className="px-3 py-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] hover:border-emerald-500/30 text-slate-300 text-xs font-medium active:scale-95 transition-all shadow-sm"
                 >
                   {tag}
                 </button>
               ))}
           </div>
 
-          <div className="mt-4 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-center flex flex-col gap-1.5 text-xs text-slate-400">
-            <div className="text-sm font-bold text-slate-200">🔍 Memoria Instantánea en tu Bolsillo</div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Escribe cualquier concepto o comercio para ver cuánto pagaste la última vez, sin importar si estás en la tienda sin internet o en casa.
+          <div className="mt-2 p-4 rounded-2xl bg-[#0F172A] border border-white/[0.08] flex flex-col gap-2 shadow-sm">
+            <div className="flex items-center gap-2 text-slate-200">
+              <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="text-xs font-black">Memoria Instantánea en tu Bolsillo</div>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed pl-0.5">
+              Escribe cualquier concepto o comercio para ver cuánto pagaste la última vez, con latencia 0 ms tanto si estás en la tienda sin cobertura como en casa.
             </p>
           </div>
         </div>
@@ -150,28 +155,28 @@ export const SearchView = ({
 
       {/* Resultados de la Búsqueda */}
       {query && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between px-1 text-xs text-slate-400">
-            <span>
-              {displayResults.length} resultado{displayResults.length === 1 ? "" : "s"} para "{query}"
+            <span className="font-medium text-[11.5px]">
+              {displayResults.length} resultado{displayResults.length === 1 ? "" : "s"} para <span className="text-slate-200 font-semibold">"{query}"</span>
             </span>
             {isServerOnline && onSearchServer && serverResults === null && (
               <button
                 type="button"
                 disabled={isSearchingServer}
                 onClick={handleSearchOnline}
-                className="text-[11px] font-bold text-emerald-400 hover:underline active:opacity-70"
+                className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full hover:bg-emerald-500/20 active:scale-95 transition-all"
               >
-                {isSearchingServer ? "Buscando en servidor..." : "Buscar en todo el histórico"}
+                {isSearchingServer ? "Buscando..." : "Búsqueda profunda"}
               </button>
             )}
           </div>
 
           {displayResults.length === 0 ? (
-            <div className="p-5 rounded-2xl bg-slate-900/40 border border-slate-800 text-center flex flex-col gap-1 text-xs text-slate-500">
-              <span className="text-base">🔎</span>
-              <span className="font-semibold text-slate-400">No se encontraron gastos</span>
-              <span className="text-[11px] text-slate-500">
+            <div className="p-6 rounded-2xl bg-[#0F172A] border border-white/[0.08] text-center flex flex-col items-center gap-1.5 shadow-sm">
+              <span className="text-2xl">🔎</span>
+              <span className="font-bold text-slate-300 text-xs">No se encontraron movimientos</span>
+              <span className="text-[11px] text-slate-500 max-w-[220px]">
                 No hay coincidencias en los últimos 12 meses para "{query}".
               </span>
             </div>
@@ -184,27 +189,30 @@ export const SearchView = ({
                 return (
                   <div
                     key={`${item.id}-${index}`}
-                    className={`p-3 rounded-2xl bg-slate-900 border flex items-center justify-between gap-3 shadow-sm transition-all ${
-                      isLatest ? "border-emerald-500/40 bg-slate-900/90" : "border-slate-800/80"
-                    }`}
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-3 shadow-sm transition-all ${isLatest
+                      ? "bg-[#0F172A] border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.08)]"
+                      : "bg-[#0F172A] border-white/[0.08]"
+                      }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xl shrink-0">{emoji}</span>
+                      <div className="w-9 h-9 rounded-xl bg-[#172033] border border-white/[0.06] flex items-center justify-center text-lg shrink-0">
+                        {emoji}
+                      </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-slate-100 truncate">
+                          <span className="text-xs font-bold text-slate-100 truncate">
                             {item.description}
                           </span>
                           {isLatest && (
-                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-extrabold uppercase shrink-0">
+                            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[9px] font-extrabold uppercase shrink-0 border border-emerald-500/25">
                               Último
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                        <div className="text-[10.5px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                           <span className="truncate">{item.subcategory_name}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1 shrink-0 font-medium">
+                          <span className="text-slate-600">•</span>
+                          <span className="flex items-center gap-1 shrink-0 font-medium text-slate-400">
                             <Calendar className="w-3 h-3 text-slate-500" />
                             {formatDateDisplay(item.date)}
                           </span>
@@ -217,14 +225,14 @@ export const SearchView = ({
                         <button
                           type="button"
                           onClick={() => setViewingReceipt(getReceiptImageUrl(item.receipt_filename || item.receipt_url) ?? null)}
-                          className="p-1 rounded-lg text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 transition-all"
+                          className="p-1.5 rounded-xl text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 active:scale-95 transition-all"
                           title="Ver foto del ticket"
                         >
                           <Camera className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <div className="text-right shrink-0">
-                        <div className={`font-mono font-black text-sm ${item.type === "INCOME" ? "text-emerald-400" : "text-slate-100"}`}>
+                        <div className={`font-mono font-black text-sm tracking-tight ${item.type === "INCOME" ? "text-emerald-400" : "text-slate-100"}`}>
                           {item.type === "INCOME" ? "+" : "-"}{item.amount.toFixed(2)} €
                         </div>
                       </div>
@@ -236,11 +244,12 @@ export const SearchView = ({
           )}
         </div>
       )}
+
       {/* Modal Visor de Comprobante / Ticket */}
       {viewingReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/90 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-800 p-3 shadow-2xl flex flex-col gap-3 max-h-[90vh]">
-            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl bg-[#0F172A] border border-white/[0.12] p-3.5 shadow-2xl flex flex-col gap-3 max-h-[90vh]">
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
               <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                 <Camera className="w-4 h-4 text-emerald-400" />
                 <span>Comprobante de Ticket</span>
@@ -248,22 +257,22 @@ export const SearchView = ({
               <button
                 type="button"
                 onClick={() => setViewingReceipt(null)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-100 active:bg-slate-800"
+                className="p-1 rounded-full text-slate-400 hover:text-slate-100 active:bg-white/[0.06]"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto rounded-xl bg-slate-950 flex items-center justify-center p-1 border border-slate-800">
+            <div className="flex-1 overflow-auto rounded-xl bg-[#070B12] flex items-center justify-center p-1 border border-white/[0.06]">
               <img
                 src={viewingReceipt}
                 alt="Ticket completo"
-                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
+                className="max-h-[65vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
               />
             </div>
             <button
               type="button"
               onClick={() => setViewingReceipt(null)}
-              className="w-full py-2 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold active:scale-95"
+              className="w-full py-2.5 rounded-xl bg-[#172033] hover:bg-[#202b44] text-slate-200 text-xs font-bold active:scale-95 transition-all border border-white/[0.08]"
             >
               Cerrar
             </button>

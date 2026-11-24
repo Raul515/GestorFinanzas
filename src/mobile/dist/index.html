@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<html lang="es" class="h-full bg-[#070B12] text-slate-100">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Gestor Finanzas • Móvil</title>
-  <meta name="theme-color" content="#020617" />
+  <meta name="theme-color" content="#070B12" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -22,7 +22,7 @@
 
     html, body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #020617;
+      background-color: #070B12;
       color: #f8fafc;
       height: 100%;
       height: 100dvh;
@@ -30,6 +30,9 @@
       padding: 0;
       overflow: hidden;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      overscroll-behavior-y: contain;
     }
 
     .no-scrollbar::-webkit-scrollbar {
@@ -67,8 +70,8 @@
   </style>
 </head>
 
-<body style="height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;">
-  <div id="app" style="height: 100%; height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; max-width: 440px; margin: 0 auto; width: 100%; position: relative; overflow: hidden;"></div>
+<body style="height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background-color: #070B12;">
+  <div id="app" style="height: 100%; height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; max-width: 440px; margin: 0 auto; width: 100%; position: relative; overflow: hidden; background-color: #070B12;"></div>
 
   <script>
     // ==========================================
@@ -1282,25 +1285,25 @@
           ` : ""}
 
           <!-- Header -->
-          <header style="padding:10px 14px; border-bottom:1px solid #0f172a; display:flex; align-items:center; justify-content:space-between; shrink:0;">
+          <header style="padding:calc(8px + env(safe-area-inset-top, 0px)) 14px 8px 14px; border-bottom:1px solid rgba(255,255,255,0.06); background:#070B12; display:flex; align-items:center; justify-content:space-between; shrink:0;">
             <div style="display:flex; align-items:center; gap:8px;">
-              <span style="width:10px; height:10px; border-radius:50%; background:#10b981; box-shadow:0 0 8px #10b981;"></span>
+              <span style="width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 10px rgba(16,185,129,0.7);"></span>
               <span style="font-weight:900; font-size:14px; letter-spacing:-0.3px; color:#f1f5f9;">Gestor Finanzas</span>
-              <span style="font-size:9px; font-weight:800; padding:2px 6px; border-radius:4px; background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.25);">MÓVIL</span>
+              <span style="font-size:9px; font-weight:800; padding:2px 6px; border-radius:6px; background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.25);">MÓVIL</span>
             </div>
             
             <div style="display:flex; align-items:center; gap:6px;">
-              <button onclick="state.showServerModal = true; state.testServerResult = null; render();" class="btn-press" style="display:flex; align-items:center; gap:5px; background:${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.15)' : 'rgba(15,23,42,0.6)'}; border:1px solid ${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.4)' : '#1e293b'}; color:${!state.isPaired && state.isOnline ? '#fbbf24' : state.isOnline ? '#34d399' : '#94a3b8'}; font-size:10.5px; font-weight:700; padding:3px 8px; border-radius:9999px; cursor:pointer;" title="Configurar conexión de servidor">
+              <button onclick="state.showServerModal = true; state.testServerResult = null; render();" class="btn-press" style="display:flex; align-items:center; gap:5px; background:${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.12)' : '#0F172A'}; border:1px solid ${!state.isPaired && state.isOnline ? 'rgba(245,158,11,0.35)' : 'rgba(255,255,255,0.08)'}; color:${!state.isPaired && state.isOnline ? '#fbbf24' : state.isOnline ? '#34d399' : '#94a3b8'}; font-size:10.5px; font-weight:700; padding:4px 9px; border-radius:9999px; cursor:pointer;" title="Configurar conexión de servidor">
                 <span style="width:6px; height:6px; border-radius:50%; background:${!state.isPaired && state.isOnline ? '#fbbf24' : state.isOnline ? '#34d399' : '#64748b'};"></span>
                 <span>${!state.isPaired && state.isOnline ? "Sin enlazar" : state.isOnline ? "En línea" : "Offline"}</span>
-                <span style="font-size:11px; margin-left:1px;">⚙️</span>
+                <span style="font-size:10px; opacity:0.8;">⚙️</span>
               </button>
             </div>
           </header>
 
           <!-- Banner de Actualización OTA disponible -->
           ${state.availableUpdate ? `
-            <div style="background:rgba(16,185,129,0.2); border-bottom:1px solid rgba(16,185,129,0.3); padding:6px 14px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#6ee7b7; shrink:0;">
+            <div style="background:rgba(16,185,129,0.15); border-bottom:1px solid rgba(16,185,129,0.25); padding:6px 14px; display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#6ee7b7; shrink:0;">
               <div style="display:flex; align-items:center; gap:6px;">
                 <span>🚀</span>
                 <span>Nueva versión v${escapeHtml(state.availableUpdate.version_name)}</span>
@@ -1312,7 +1315,7 @@
           ` : ""}
 
           <!-- Vista Principal Scrolleable con min-height:0 para Flexbox móvil -->
-          <main style="flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column;">
+          <main style="flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; background:#070B12;">
             ${state.activeTab === "capture"
           ? renderCaptureView(canSave, dateFormatted, activeSubs)
           : state.activeTab === "search"
@@ -1322,25 +1325,25 @@
               : renderSummaryView()}
           </main>
 
-          <!-- Barra de Navegación Inferior Fija (4 Pestañas con Safe Area) -->
-          <nav style="flex-shrink:0; background:rgba(15,23,42,0.98); backdrop-filter:blur(12px); border-top:1px solid #1e293b; padding:8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px; display:flex; align-items:center; justify-content:space-around; z-index:30;">
-            <button onclick="state.activeTab='capture'; render();" class="btn-press" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; color:${state.activeTab === 'capture' ? '#34d399' : '#64748b'}; font-size:11px; font-weight:${state.activeTab === 'capture' ? '800' : '500'}; cursor:pointer;">
-              <span style="font-size:18px;">⚡</span>
+          <!-- Barra de Navegación Inferior Fija (Dock Vidrio con Safe Area) -->
+          <nav style="flex-shrink:0; background:rgba(15,23,42,0.92); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border-top:1px solid rgba(255,255,255,0.08); padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px; display:flex; align-items:center; justify-content:space-around; z-index:30;">
+            <button onclick="state.activeTab='capture'; render();" class="btn-press" style="background:${state.activeTab === 'capture' ? 'rgba(16,185,129,0.12)' : 'transparent'}; border:${state.activeTab === 'capture' ? '1px solid rgba(16,185,129,0.25)' : '1px solid transparent'}; border-radius:9999px; padding:4px 10px; display:flex; flex-direction:column; align-items:center; gap:1px; color:${state.activeTab === 'capture' ? '#34d399' : '#64748b'}; font-size:10.5px; font-weight:${state.activeTab === 'capture' ? '800' : '500'}; cursor:pointer; min-width:64px;">
+              <span style="font-size:16px;">⚡</span>
               <span>Captura</span>
             </button>
-            <button onclick="state.activeTab='search'; render();" class="btn-press" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; color:${state.activeTab === 'search' ? '#34d399' : '#64748b'}; font-size:11px; font-weight:${state.activeTab === 'search' ? '800' : '500'}; cursor:pointer;">
-              <span style="font-size:18px;">🔍</span>
+            <button onclick="state.activeTab='search'; render();" class="btn-press" style="background:${state.activeTab === 'search' ? 'rgba(16,185,129,0.12)' : 'transparent'}; border:${state.activeTab === 'search' ? '1px solid rgba(16,185,129,0.25)' : '1px solid transparent'}; border-radius:9999px; padding:4px 10px; display:flex; flex-direction:column; align-items:center; gap:1px; color:${state.activeTab === 'search' ? '#34d399' : '#64748b'}; font-size:10.5px; font-weight:${state.activeTab === 'search' ? '800' : '500'}; cursor:pointer; min-width:64px;">
+              <span style="font-size:16px;">🔍</span>
               <span>Buscar</span>
             </button>
-            <button onclick="state.activeTab='history'; render();" class="btn-press" style="background:none; border:none; position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; color:${state.activeTab === 'history' ? '#34d399' : '#64748b'}; font-size:11px; font-weight:${state.activeTab === 'history' ? '800' : '500'}; cursor:pointer;">
-              <span style="font-size:18px;">📋</span>
+            <button onclick="state.activeTab='history'; render();" class="btn-press" style="background:${state.activeTab === 'history' ? 'rgba(16,185,129,0.12)' : 'transparent'}; border:${state.activeTab === 'history' ? '1px solid rgba(16,185,129,0.25)' : '1px solid transparent'}; border-radius:9999px; padding:4px 10px; position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; color:${state.activeTab === 'history' ? '#34d399' : '#64748b'}; font-size:10.5px; font-weight:${state.activeTab === 'history' ? '800' : '500'}; cursor:pointer; min-width:64px;">
+              <span style="font-size:16px;">📋</span>
               ${pendingCount > 0 ? `
-                <span style="position:absolute; top:-2px; right:6px; background:#fbbf24; color:#020617; font-weight:900; font-size:9px; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${pendingCount}</span>
+                <span style="position:absolute; top:1px; right:12px; background:#fbbf24; color:#020617; font-weight:900; font-size:9px; width:15px; height:15px; border-radius:50%; display:flex; align-items:center; justify-content:center;">${pendingCount}</span>
               ` : ""}
               <span>Historial</span>
             </button>
-            <button onclick="state.activeTab='summary'; if(!state.monthlySummary) fetchMonthlySummary(); render();" class="btn-press" style="background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; color:${state.activeTab === 'summary' ? '#34d399' : '#64748b'}; font-size:11px; font-weight:${state.activeTab === 'summary' ? '800' : '500'}; cursor:pointer;">
-              <span style="font-size:18px;">📊</span>
+            <button onclick="state.activeTab='summary'; if(!state.monthlySummary) fetchMonthlySummary(); render();" class="btn-press" style="background:${state.activeTab === 'summary' ? 'rgba(16,185,129,0.12)' : 'transparent'}; border:${state.activeTab === 'summary' ? '1px solid rgba(16,185,129,0.25)' : '1px solid transparent'}; border-radius:9999px; padding:4px 10px; display:flex; flex-direction:column; align-items:center; gap:1px; color:${state.activeTab === 'summary' ? '#34d399' : '#64748b'}; font-size:10.5px; font-weight:${state.activeTab === 'summary' ? '800' : '500'}; cursor:pointer; min-width:64px;">
+              <span style="font-size:16px;">📊</span>
               <span>Mi Mes</span>
             </button>
           </nav>
@@ -1397,25 +1400,25 @@
       }
 
       return `
-          <div style="display:flex; flex-direction:column; gap:6px; padding:10px 14px 24px 14px;">
+          <div style="display:flex; flex-direction:column; gap:6px; padding:10px 14px 20px 14px;">
             <!-- Barra de Ámbito y Fecha -->
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:2px;">
-              <div style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; background:#0f172a; border:1px solid #1e293b; font-size:11px; font-weight:700; color:#34d399;">
+              <div style="display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:9999px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); font-size:11px; font-weight:700; color:#34d399;">
                 <span>👤</span>
                 <span>Cuenta Personal</span>
               </div>
-              <label style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:9999px; background:#0f172a; border:1px solid #1e293b; font-size:11px; font-weight:600; color:#94a3b8; cursor:pointer;">
+              <label style="position:relative; display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:9999px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); font-size:11px; font-weight:600; color:#94a3b8; cursor:pointer;">
                 <span>📅 ${dateFormatted}</span>
                 <input type="date" value="${state.selectedDate}" onchange="state.selectedDate = this.value; render();" style="position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer;" />
               </label>
             </div>
 
-            <!-- Selector Gasto / Ingreso (Fase 13) -->
-            <div style="display:flex; background:#0f172a; padding:3px; border-radius:12px; border:1px solid #1e293b; gap:4px; margin:2px 0;">
-              <button onclick="handleTypeSwitch('EXPENSE');" class="btn-press" style="flex:1; padding:5px; border-radius:8px; border:${state.txType === 'EXPENSE' ? '1px solid rgba(244,63,94,0.5)' : 'none'}; background:${state.txType === 'EXPENSE' ? 'rgba(244,63,94,0.15)' : 'transparent'}; color:${state.txType === 'EXPENSE' ? '#fb7185' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
+            <!-- Selector Gasto / Ingreso -->
+            <div style="display:flex; background:#0F172A; padding:3px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); gap:4px; margin:1px 0;">
+              <button onclick="handleTypeSwitch('EXPENSE');" class="btn-press" style="flex:1; padding:6px; border-radius:9px; border:${state.txType === 'EXPENSE' ? '1px solid rgba(244,63,94,0.4)' : 'none'}; background:${state.txType === 'EXPENSE' ? 'rgba(244,63,94,0.15)' : 'transparent'}; color:${state.txType === 'EXPENSE' ? '#fb7185' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
                 🔴 Gasto
               </button>
-              <button onclick="handleTypeSwitch('INCOME');" class="btn-press" style="flex:1; padding:5px; border-radius:8px; border:${state.txType === 'INCOME' ? '1px solid rgba(16,185,129,0.5)' : 'none'}; background:${state.txType === 'INCOME' ? 'rgba(16,185,129,0.15)' : 'transparent'}; color:${state.txType === 'INCOME' ? '#34d399' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
+              <button onclick="handleTypeSwitch('INCOME');" class="btn-press" style="flex:1; padding:6px; border-radius:9px; border:${state.txType === 'INCOME' ? '1px solid rgba(16,185,129,0.4)' : 'none'}; background:${state.txType === 'INCOME' ? 'rgba(16,185,129,0.15)' : 'transparent'}; color:${state.txType === 'INCOME' ? '#34d399' : '#94a3b8'}; font-weight:800; font-size:11px; cursor:pointer;">
                 🟢 Ingreso / Bizum
               </button>
             </div>
@@ -1428,7 +1431,7 @@
               <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; font-weight:700; color:#64748b; margin-bottom:1px;">
                 ${state.txType === 'INCOME' ? 'Importe del Ingreso' : 'Importe del Gasto'}
               </div>
-              <div style="display:flex; align-items:baseline; justify-content:center; gap:4px; font-family:monospace;">
+              <div style="display:flex; align-items:baseline; justify-content:center; gap:4px; font-family:ui-monospace, monospace;">
                 <span style="font-size:22px; color:#64748b; font-weight:300;">€</span>
                 <span style="font-size:38px; font-weight:900; color:#34d399; letter-spacing:-1px;">${state.txType === 'INCOME' ? '+' : ''}${escapeHtml(state.amountStr)}</span>
               </div>
@@ -1442,23 +1445,23 @@
               ${activeSubs.map(s => {
         const isSel = state.selectedSubcat && state.selectedSubcat.id === s.id;
         return `
-                  <button onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); render();" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0f172a'}; border:1px solid ${isSel ? '#10b981' : '#1e293b'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:6px 10px; border-radius:10px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
+                  <button onclick="state.selectedSubcat = state.subcategories.find(x => x.id === ${s.id}); render();" class="btn-press" style="background:${isSel ? 'rgba(16,185,129,0.15)' : '#0F172A'}; border:1px solid ${isSel ? 'rgba(16,185,129,0.5)' : 'rgba(255,255,255,0.08)'}; color:${isSel ? '#6ee7b7' : '#cbd5e1'}; font-weight:${isSel ? '700' : '600'}; font-size:11px; padding:6px 11px; border-radius:11px; display:flex; align-items:center; gap:5px; white-space:nowrap; shrink:0; cursor:pointer;">
                     <span>${escapeHtml(s.emoji || "🏷️")}</span>
                     <span>${escapeHtml(s.name)}</span>
                   </button>
                 `;
       }).join("")}
-              <button onclick="state.modalOpen = true; state.isCreatingSubcat = false; render();" class="btn-press" style="background:rgba(15,23,42,0.6); border:1px solid #1e293b; color:#94a3b8; font-size:11px; font-weight:600; padding:6px 10px; border-radius:10px; white-space:nowrap; shrink:0; cursor:pointer;">
+              <button onclick="state.modalOpen = true; state.isCreatingSubcat = false; render();" class="btn-press" style="background:rgba(15,23,42,0.6); border:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; white-space:nowrap; shrink:0; cursor:pointer;">
                 🔍 Ver todas
               </button>
             </div>
 
             <!-- Campo de Concepto y Sugerencias -->
             <div style="margin:2px 0;">
-              <input type="text" placeholder="Concepto (ej. Café con leche)..." value="${escapeHtml(state.concept)}" oninput="state.concept = this.value;" style="width:100%; background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:7px 10px; color:#f8fafc; font-size:12.5px; outline:none;" />
+              <input type="text" placeholder="Concepto (ej. Café con leche)..." value="${escapeHtml(state.concept)}" oninput="state.concept = this.value;" style="width:100%; background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:8px 12px; color:#f8fafc; font-size:12.5px; outline:none;" />
               <div style="display:flex; gap:6px; overflow-x:auto; margin-top:4px;" class="no-scrollbar">
                 ${state.frequentConcepts.slice(0, 5).map((c, idx) => `
-                  <button onclick="selectFrequentConcept(${idx});" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#94a3b8; font-size:9.5px; padding:2px 7px; border-radius:6px; white-space:nowrap; shrink:0; cursor:pointer;">
+                  <button onclick="selectFrequentConcept(${idx});" class="btn-press" style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:9.5px; padding:3px 8px; border-radius:8px; white-space:nowrap; shrink:0; cursor:pointer;">
                     ${escapeHtml(c)}
                   </button>
                 `).join("")}
@@ -1469,15 +1472,15 @@
             <div style="margin: 1px 0;">
               <input type="file" id="ticketInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoCapture(event);" />
               ${state.receiptBase64 ? `
-                <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:10px; padding:5px 8px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:12px; padding:6px 10px;">
                   <div style="display:flex; align-items:center; gap:8px;">
-                    <img src="${state.receiptBase64}" style="width:28px; height:28px; object-fit:cover; border-radius:5px; border:1px solid #10b981;" />
-                    <span style="font-size:10.5px; font-weight:700; color:#34d399;">📷 Foto de Ticket adjunta</span>
+                    <img src="${state.receiptBase64}" style="width:28px; height:28px; object-fit:cover; border-radius:6px; border:1px solid #10b981;" />
+                    <span style="font-size:11px; font-weight:700; color:#34d399;">📷 Foto de Ticket adjunta</span>
                   </div>
                   <button onclick="state.receiptBase64 = null; render();" style="background:none; border:none; color:#f43f5e; font-size:11px; font-weight:800; cursor:pointer;">✕ Quitar</button>
                 </div>
               ` : `
-                <button onclick="document.getElementById('ticketInput').click();" class="btn-press" style="width:100%; background:#0f172a; border:1px dashed #334155; border-radius:10px; padding:6px; color:#94a3b8; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:5px; cursor:pointer;">
+                <button onclick="document.getElementById('ticketInput').click();" class="btn-press" style="width:100%; background:#0F172A; border:1px dashed rgba(255,255,255,0.15); border-radius:12px; padding:7px; color:#94a3b8; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:5px; cursor:pointer;">
                   <span>📷</span>
                   <span>Adjuntar Foto de Ticket (Opcional)</span>
                 </button>
@@ -1487,16 +1490,16 @@
             <!-- Botones de Incremento Rápido -->
             <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:5px; margin:1px 0;">
               ${[1, 2, 5, 10, 20].map(v => `
-                <button onclick="handleQuickAdd(${v});" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#34d399; font-weight:800; font-size:11.5px; padding:6px 0; border-radius:9px; cursor:pointer;">
+                <button onclick="handleQuickAdd(${v});" class="btn-press" style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); color:#34d399; font-weight:800; font-size:11.5px; padding:7px 0; border-radius:10px; cursor:pointer;">
                   +${v}€
                 </button>
               `).join("")}
             </div>
 
-            <!-- Teclado Numérico 3x4 Compacto -->
-            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; margin:1px 0;">
+            <!-- Teclado Numérico 3x4 Compacto y Ergonómico -->
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin:2px 0;">
               ${["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0", "DEL"].map(k => `
-                <button onclick="handleKey('${k}');" class="btn-press" style="height:44px; background:#0f172a; border:1px solid #1e293b; border-radius:10px; color:${k === 'DEL' ? '#f43f5e' : '#f8fafc'}; font-size:${k === ',' ? '24px' : '18px'}; font-weight:800; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                <button onclick="handleKey('${k}');" class="btn-press" style="height:50px; background:#10192A; border:1px solid rgba(255,255,255,0.08); border-radius:12px; color:${k === 'DEL' ? '#f43f5e' : '#f8fafc'}; font-size:${k === ',' ? '24px' : '18px'}; font-weight:800; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.3);">
                   ${k === "DEL" ? "⌫" : k}
                 </button>
               `).join("")}
@@ -1504,7 +1507,7 @@
 
             <!-- Botón de Guardar en 5 Segundos -->
             <div style="margin-top:4px;">
-              <button onclick="saveExpense();" ${!canSave ? "disabled" : ""} class="btn-press" style="width:100%; padding:12px; border-radius:14px; border:none; background:${canSave ? '#10b981' : '#0f172a'}; color:${canSave ? '#020617' : '#475569'}; font-weight:900; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:${canSave ? 'pointer' : 'not-allowed'}; box-shadow:${canSave ? '0 4px 16px rgba(16,185,129,0.25)' : 'none'};">
+              <button onclick="saveExpense();" ${!canSave ? "disabled" : ""} class="btn-press" style="width:100%; padding:13px; border-radius:14px; border:none; background:${canSave ? '#10b981' : '#0F172A'}; color:${canSave ? '#070B12' : '#475569'}; font-weight:900; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; cursor:${canSave ? 'pointer' : 'not-allowed'}; box-shadow:${canSave ? '0 0 16px rgba(16,185,129,0.3)' : 'none'};">
                 <span>⚡</span>
                 <span>${canSave ? (state.txType === 'INCOME' ? `Guardar Ingreso (+${state.amountStr} €)` : `Guardar Gasto (${state.amountStr} €)`) : "Introduce un importe"}</span>
               </button>
@@ -1558,7 +1561,7 @@
                 oninput="state.searchQueryHist = this.value; state.searchServerResults = null; render();"
                 onkeydown="if(event.key === 'Enter') searchServerHistory(this.value);"
                 autofocus
-                style="width:100%; background:#0f172a; border:1px solid #1e293b; border-radius:14px; padding:10px 36px; color:#f8fafc; font-size:12px; font-weight:600; outline:none;" />
+                style="width:100%; background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:10px 36px; color:#f8fafc; font-size:12px; font-weight:600; outline:none;" />
               ${state.searchQueryHist ? `
                 <button onclick="state.searchQueryHist = ''; state.searchServerResults = null; render();" style="position:absolute; right:10px; background:none; border:none; color:#94a3b8; font-size:14px; cursor:pointer; padding:4px;">✕</button>
               ` : ""}
@@ -1570,13 +1573,13 @@
                 <div style="font-size:10px; font-weight:800; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Consultas Frecuentes</div>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">
                   ${[...new Set([...state.frequentConcepts, "Gasolina", "Supermercado", "Restaurante", "Farmacia"])].slice(0, 8).map(tag => `
-                    <button onclick="state.searchQueryHist = '${tag}'; render();" class="btn-press" style="background:#0f172a; border:1px solid #1e293b; color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 10px; border-radius:10px; cursor:pointer;">
+                    <button onclick="state.searchQueryHist = '${tag}'; render();" class="btn-press" style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); color:#cbd5e1; font-size:11px; font-weight:600; padding:6px 11px; border-radius:11px; cursor:pointer;">
                       ${tag}
                     </button>
                   `).join("")}
                 </div>
 
-                <div style="margin-top:10px; padding:14px; border-radius:16px; background:rgba(15,23,42,0.6); border:1px solid #1e293b; text-align:center; font-size:11px; color:#64748b; line-height:1.5;">
+                <div style="margin-top:10px; padding:14px; border-radius:16px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); text-align:center; font-size:11px; color:#94a3b8; line-height:1.5;">
                   <div style="font-weight:800; color:#f1f5f9; font-size:13px; margin-bottom:4px;">🔍 Memoria Instantánea en tu Bolsillo</div>
                   Escribe cualquier concepto o comercio para ver cuánto pagaste la última vez, sin importar si estás en la tienda sin internet o en casa.
                 </div>
@@ -1587,14 +1590,14 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#94a3b8;">
                   <span>${displayResults.length} resultado${displayResults.length === 1 ? "" : "s"} para "${state.searchQueryHist}"</span>
                   ${state.isOnline && state.isPaired && state.searchServerResults === null ? `
-                    <button onclick="searchServerHistory(state.searchQueryHist);" class="btn-press" style="background:none; border:none; color:#34d399; font-weight:800; font-size:11px; cursor:pointer;">
+                    <button onclick="searchServerHistory(state.searchQueryHist);" class="btn-press" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:9999px; padding:3px 8px; color:#34d399; font-weight:800; font-size:11px; cursor:pointer;">
                       ${state.isSearchingServer ? "Buscando en servidor..." : "Buscar en todo el histórico"}
                     </button>
                   ` : ""}
                 </div>
 
                 ${displayResults.length === 0 ? `
-                  <div style="padding:20px; text-align:center; background:#0f172a; border-radius:16px; border:1px solid #1e293b; color:#64748b; font-size:12px;">
+                  <div style="padding:20px; text-align:center; background:#0F172A; border-radius:16px; border:1px solid rgba(255,255,255,0.08); color:#64748b; font-size:12px;">
                     🔎 No se encontraron gastos para "${state.searchQueryHist}".
                   </div>
                 ` : `
@@ -1603,9 +1606,9 @@
         const isLatest = idx === 0;
         const emoji = getEmojiForName(item.subcategory_name || "");
         return `
-                        <div style="padding:10px 12px; border-radius:14px; background:#0f172a; border:1px solid ${isLatest ? 'rgba(16,185,129,0.4)' : '#1e293b'}; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                        <div style="padding:10px 12px; border-radius:14px; background:#0F172A; border:1px solid ${isLatest ? 'rgba(16,185,129,0.35)' : 'rgba(255,255,255,0.08)'}; ${isLatest ? 'box-shadow:0 0 12px rgba(16,185,129,0.08);' : ''} display:flex; align-items:center; justify-content:space-between; gap:8px;">
                           <div style="display:flex; align-items:center; gap:8px; min-width:0;">
-                            <span style="font-size:18px;">${emoji}</span>
+                            <span style="font-size:18px; width:34px; height:34px; border-radius:10px; background:#172033; border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${emoji}</span>
                             <div style="min-width:0;">
                               <div style="display:flex; align-items:center; gap:6px;">
                                 <span style="font-weight:700; font-size:13px; color:#f8fafc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.description}</span>
@@ -1618,9 +1621,9 @@
                           </div>
                           <div style="display:flex; align-items:center; gap:6px;">
                             ${(item.receipt_filename || item.receipt_url) ? `
-                              <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                              <button onclick="state.viewingReceiptUrl = getReceiptUrl('${item.receipt_url || item.receipt_filename}'); render();" title="Ver Ticket" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; padding:4px 6px;">📷</button>
                             ` : ""}
-                            <div style="font-family:monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
+                            <div style="font-family:ui-monospace, monospace; font-weight:800; font-size:14px; color:${item.type === 'INCOME' ? '#34d399' : '#f8fafc'}; white-space:nowrap;">
                               ${item.type === 'INCOME' ? '+' : '-'}${item.amount.toFixed(2)} €
                             </div>
                           </div>
@@ -1642,7 +1645,7 @@
       return `
           <div style="display:flex; flex-direction:column; gap:12px; padding:12px 14px 40px 14px;">
             <!-- Tarjeta de Estado de Sincronización -->
-            <div style="padding:14px; border-radius:16px; background:#0f172a; border:1px solid #1e293b; display:flex; flex-direction:column; gap:10px;">
+            <div style="padding:14px; border-radius:16px; background:#0F172A; border:1px solid rgba(255,255,255,0.08); display:flex; flex-direction:column; gap:10px;">
               <div style="display:flex; align-items:center; justify-content:space-between;">
                 <div>
                   <div style="font-size:11px; color:#94a3b8; font-weight:600;">Estado de Sincronización</div>
@@ -1651,11 +1654,11 @@
                     <span>${pendingCount > 0 ? `${pendingCount} pendientes de enviar` : "Todo sincronizado"}</span>
                   </div>
                 </div>
-                <button onclick="syncTransactions();" ${state.isSyncing || pendingCount === 0 ? "disabled" : ""} class="btn-press" style="background:${pendingCount > 0 ? '#10b981' : '#1e293b'}; color:${pendingCount > 0 ? '#020617' : '#64748b'}; font-weight:800; font-size:11px; padding:8px 12px; border-radius:10px; border:none; cursor:${pendingCount > 0 ? 'pointer' : 'not-allowed'};">
+                <button onclick="syncTransactions();" ${state.isSyncing || pendingCount === 0 ? "disabled" : ""} class="btn-press" style="background:${pendingCount > 0 ? '#10b981' : '#172033'}; color:${pendingCount > 0 ? '#020617' : '#64748b'}; font-weight:900; font-size:11px; padding:8px 12px; border-radius:10px; border:none; cursor:${pendingCount > 0 ? 'pointer' : 'not-allowed'}; ${pendingCount > 0 ? 'box-shadow:0 0 12px rgba(16,185,129,0.3);' : ''}">
                   ${state.isSyncing ? "Enviando..." : "Sincronizar"}
                 </button>
               </div>
-              <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #1e293b; font-size:11px; color:#64748b; padding-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.06); font-size:11px; color:#64748b; padding-top:8px;">
                 <span>Copia manual en disco</span>
                 <button onclick="exportJson();" style="background:none; border:none; color:#34d399; font-weight:700; cursor:pointer;">
                   📥 Descargar JSON
@@ -1669,22 +1672,22 @@
                 Pendientes en Cola Local (${pending.length})
               </div>
               ${pending.length === 0 ? `
-                <div style="padding:14px; text-align:center; font-size:12px; color:#64748b; background:rgba(15,23,42,0.4); border-radius:12px; border:1px solid #1e293b;">
+                <div style="padding:14px; text-align:center; font-size:12px; color:#64748b; background:#0F172A; border-radius:12px; border:1px solid rgba(255,255,255,0.06);">
                   No hay gastos pendientes en el teléfono.
                 </div>
               ` : `
                 <div style="display:flex; flex-direction:column; gap:6px;">
                   ${pending.map(t => `
-                    <div style="padding:10px 12px; border-radius:12px; background:#0f172a; border:1px solid rgba(251,191,36,0.3); display:flex; align-items:center; justify-content:space-between;">
+                    <div style="padding:10px 12px; border-radius:14px; background:#0F172A; border:1px solid rgba(251,191,36,0.25); display:flex; align-items:center; justify-content:space-between;">
                       <div>
                         <div style="font-weight:700; font-size:13px; color:#f8fafc;">${t.description}</div>
                         <div style="font-size:10px; color:#94a3b8;">${t.subcategory_name} • ${t.date}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px;">
                         ${(t.receipt_base64 || t.receipt_filename) ? `
-                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; padding:4px 6px;">📷</button>
                         ` : ""}
-                        <span style="font-family:monospace; font-weight:800; color:${t.type === 'INCOME' ? '#34d399' : '#fcd34d'}; font-size:14px;">
+                        <span style="font-family:ui-monospace, monospace; font-weight:800; color:${t.type === 'INCOME' ? '#34d399' : '#fcd34d'}; font-size:14px;">
                           ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} €
                         </span>
                         <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#f43f5e; cursor:pointer; font-size:14px; padding:2px;">🗑️</button>
@@ -1701,22 +1704,22 @@
                 Confirmados en el Ordenador (${synced.length})
               </div>
               ${synced.length === 0 ? `
-                <div style="padding:14px; text-align:center; font-size:12px; color:#64748b; background:rgba(15,23,42,0.4); border-radius:12px; border:1px solid #1e293b;">
+                <div style="padding:14px; text-align:center; font-size:12px; color:#64748b; background:#0F172A; border-radius:12px; border:1px solid rgba(255,255,255,0.06);">
                   Los gastos confirmados por el PC aparecerán aquí.
                 </div>
               ` : `
                 <div style="display:flex; flex-direction:column; gap:6px;">
                   ${synced.map(t => `
-                    <div style="padding:8px 12px; border-radius:12px; background:rgba(15,23,42,0.6); border:1px solid #1e293b; display:flex; align-items:center; justify-content:space-between; font-size:12px;">
+                    <div style="padding:9px 12px; border-radius:14px; background:#0F172A; border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; font-size:12px;">
                       <div>
                         <div style="font-weight:600; color:#e2e8f0;">${t.description}</div>
                         <div style="font-size:10px; color:#64748b;">${t.subcategory_name} • ${t.date}</div>
                       </div>
                       <div style="display:flex; align-items:center; gap:8px;">
                         ${(t.receipt_filename || t.receipt_base64) ? `
-                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:13px; padding:2px;">📷</button>
+                          <button onclick="state.viewingReceiptUrl = getReceiptUrl('${t.receipt_base64 || t.receipt_filename}'); render();" title="Ver Ticket" style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; padding:4px 6px;">📷</button>
                         ` : ""}
-                        <span style="font-family:monospace; font-weight:700; color:${t.type === 'INCOME' ? '#34d399' : '#cbd5e1'};">
+                        <span style="font-family:ui-monospace, monospace; font-weight:700; color:${t.type === 'INCOME' ? '#34d399' : '#cbd5e1'};">
                           ${t.type === 'INCOME' ? '+' : '-'}${t.amount.toFixed(2)} € ✓
                         </span>
                         <button onclick="deleteTransaction('${t.event_id}');" style="background:none; border:none; color:#64748b; hover:color:#f43f5e; cursor:pointer; font-size:12px; padding:2px;">🗑️</button>
@@ -1751,42 +1754,42 @@
                 ⏳ Calculando métricas del mes...
               </div>
             ` : !sum ? `
-              <div style="padding:20px; text-align:center; background:#0f172a; border-radius:16px; border:1px solid #1e293b; color:#94a3b8; font-size:12px;">
+              <div style="padding:20px; text-align:center; background:#0F172A; border-radius:16px; border:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:12px;">
                 Conecta con tu ordenador para consultar la ejecución del presupuesto.
               </div>
             ` : `
               <!-- Métricas Principales: Gastado y Disponible -->
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                <div style="background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:12px;">
+                <div style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:12px;">
                   <div style="font-size:10px; color:#94a3b8; font-weight:700; text-transform:uppercase;">Total Gastado</div>
-                  <div style="font-size:18px; font-weight:900; color:#f43f5e; margin-top:2px;">${formatEuro(sum.total_spent)}</div>
-                  <div style="font-size:9px; color:#64748b; margin-top:2px;">Ingresos: ${formatEuro(sum.total_income)}</div>
+                  <div style="font-size:18px; font-weight:900; color:#f43f5e; font-family:ui-monospace, monospace; margin-top:2px;">${formatEuro(sum.total_spent)}</div>
+                  <div style="font-size:9.5px; color:#64748b; margin-top:2px;">Ingresos: ${formatEuro(sum.total_income)}</div>
                 </div>
 
-                <div style="background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:12px;">
+                <div style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:12px;">
                   <div style="font-size:10px; color:#94a3b8; font-weight:700; text-transform:uppercase;">Disponible</div>
-                  <div style="font-size:18px; font-weight:900; color:${sum.remaining_budget >= 0 ? '#34d399' : '#fbbf24'}; margin-top:2px;">${formatEuro(sum.remaining_budget)}</div>
-                  <div style="font-size:9px; color:#64748b; margin-top:2px;">Restante del mes</div>
+                  <div style="font-size:18px; font-weight:900; color:${sum.remaining_budget >= 0 ? '#34d399' : '#fbbf24'}; font-family:ui-monospace, monospace; margin-top:2px;">${formatEuro(sum.remaining_budget)}</div>
+                  <div style="font-size:9.5px; color:#64748b; margin-top:2px;">Restante del mes</div>
                 </div>
               </div>
 
               <!-- Bloque 50/30/20 -->
-              <div style="background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:6px;">
+              <div style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
                   <span style="font-size:12px; font-weight:800; color:#f1f5f9;">Regla 50 / 30 / 20</span>
-                  <span style="font-size:10px; color:#94a3b8;">Presupuesto</span>
+                  <span style="font-size:10px; color:#34d399; font-weight:700; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); padding:1px 6px; border-radius:9999px;">Objetivo</span>
                 </div>
 
                 <!-- Necesidades 50% -->
                 <div>
                   <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">
                     <span style="font-weight:700; color:#cbd5e1;">🛒 Necesidades (50%)</span>
-                    <span style="font-family:monospace; color:#94a3b8;">${formatEuro(sum.needs.spent)} / ${formatEuro(sum.needs.budget)}</span>
+                    <span style="font-family:ui-monospace, monospace; color:#94a3b8; font-size:11px;">${formatEuro(sum.needs.spent)} / ${formatEuro(sum.needs.budget)}</span>
                   </div>
-                  <div style="background:#020617; border:1px solid #1e293b; height:7px; border-radius:9999px; overflow:hidden;">
-                    <div style="background:${sum.needs.progress_percentage > 100 ? '#f43f5e' : '#10b981'}; height:100%; width:${Math.min(sum.needs.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
+                  <div style="background:#070B12; border:1px solid rgba(255,255,255,0.06); height:7px; border-radius:9999px; overflow:hidden;">
+                    <div style="background:${sum.needs.progress_percentage > 100 ? '#f43f5e' : '#38bdf8'}; box-shadow:${sum.needs.progress_percentage > 100 ? 'none' : '0 0 8px rgba(56,189,248,0.4)'}; height:100%; width:${Math.min(sum.needs.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b; margin-top:2px;">
+                  <div style="display:flex; justify-content:space-between; font-size:9.5px; color:#64748b; margin-top:2px;">
                     <span>${sum.needs.progress_percentage.toFixed(0)}% consumido</span>
                     <span>Restante: ${formatEuro(sum.needs.remaining)}</span>
                   </div>
@@ -1796,12 +1799,12 @@
                 <div>
                   <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">
                     <span style="font-weight:700; color:#cbd5e1;">☕ Deseos (30%)</span>
-                    <span style="font-family:monospace; color:#94a3b8;">${formatEuro(sum.wants.spent)} / ${formatEuro(sum.wants.budget)}</span>
+                    <span style="font-family:ui-monospace, monospace; color:#94a3b8; font-size:11px;">${formatEuro(sum.wants.spent)} / ${formatEuro(sum.wants.budget)}</span>
                   </div>
-                  <div style="background:#020617; border:1px solid #1e293b; height:7px; border-radius:9999px; overflow:hidden;">
-                    <div style="background:${sum.wants.progress_percentage > 100 ? '#fbbf24' : '#a855f7'}; height:100%; width:${Math.min(sum.wants.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
+                  <div style="background:#070B12; border:1px solid rgba(255,255,255,0.06); height:7px; border-radius:9999px; overflow:hidden;">
+                    <div style="background:${sum.wants.progress_percentage > 100 ? '#f43f5e' : sum.wants.progress_percentage >= 80 ? '#fbbf24' : '#a78bfa'}; box-shadow:${sum.wants.progress_percentage > 100 ? '0 0 8px rgba(244,63,94,0.4)' : sum.wants.progress_percentage >= 80 ? '0 0 8px rgba(251,191,36,0.4)' : '0 0 8px rgba(167,139,250,0.4)'}; height:100%; width:${Math.min(sum.wants.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b; margin-top:2px;">
+                  <div style="display:flex; justify-content:space-between; font-size:9.5px; color:#64748b; margin-top:2px;">
                     <span>${sum.wants.progress_percentage.toFixed(0)}% consumido</span>
                     <span>Restante: ${formatEuro(sum.wants.remaining)}</span>
                   </div>
@@ -1811,12 +1814,12 @@
                 <div>
                   <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">
                     <span style="font-weight:700; color:#cbd5e1;">📈 Ahorro e Inversión (20%)</span>
-                    <span style="font-family:monospace; color:#94a3b8;">${formatEuro(sum.savings.spent)} / ${formatEuro(sum.savings.budget)}</span>
+                    <span style="font-family:ui-monospace, monospace; color:#94a3b8; font-size:11px;">${formatEuro(sum.savings.spent)} / ${formatEuro(sum.savings.budget)}</span>
                   </div>
-                  <div style="background:#020617; border:1px solid #1e293b; height:7px; border-radius:9999px; overflow:hidden;">
-                    <div style="background:#38bdf8; height:100%; width:${Math.min(sum.savings.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
+                  <div style="background:#070B12; border:1px solid rgba(255,255,255,0.06); height:7px; border-radius:9999px; overflow:hidden;">
+                    <div style="background:#34d399; box-shadow:0 0 8px rgba(52,211,153,0.4); height:100%; width:${Math.min(sum.savings.progress_percentage, 100)}%;" class="progress-bar-fill"></div>
                   </div>
-                  <div style="display:flex; justify-content:space-between; font-size:9px; color:#64748b; margin-top:2px;">
+                  <div style="display:flex; justify-content:space-between; font-size:9.5px; color:#64748b; margin-top:2px;">
                     <span>${sum.savings.progress_percentage.toFixed(0)}% alcanzado</span>
                     <span>Meta: ${formatEuro(sum.savings.budget)}</span>
                   </div>
@@ -1824,45 +1827,52 @@
               </div>
 
               <!-- Tarjeta de Fondo de Emergencia -->
-              <div style="background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:4px;">
+              <div style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:4px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                   <span style="font-size:11px; font-weight:800; color:#38bdf8;">🛡️ Fondo de Seguridad</span>
-                  <span style="font-size:9px; font-weight:800; padding:2px 8px; border-radius:9999px; background:${sum.emergency_fund.is_funded ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sum.emergency_fund.is_funded ? '#34d399' : '#fbbf24'}; border:1px solid ${sum.emergency_fund.is_funded ? '#10b981' : '#f59e0b'};">
+                  <span style="font-size:9px; font-weight:800; padding:2px 8px; border-radius:9999px; background:${sum.emergency_fund.is_funded ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sum.emergency_fund.is_funded ? '#34d399' : '#fbbf24'}; border:1px solid ${sum.emergency_fund.is_funded ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'};">
                     ${sum.emergency_fund.months_covered.toFixed(1)} meses
                   </span>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px;">
-                  <span style="font-size:15px; font-weight:900; color:#f8fafc; font-family:monospace;">${formatEuro(sum.emergency_fund.current_amount)}</span>
+                  <span style="font-size:15px; font-weight:900; color:#f8fafc; font-family:ui-monospace, monospace;">${formatEuro(sum.emergency_fund.current_amount)}</span>
                   <span style="font-size:10px; color:#64748b;">Objetivo: ${formatEuro(sum.emergency_fund.target_amount)} (3 meses)</span>
+                </div>
+                <div style="background:#070B12; border:1px solid rgba(255,255,255,0.06); height:5px; border-radius:9999px; overflow:hidden; margin-top:2px;">
+                  <div style="background:${sum.emergency_fund.is_funded ? '#34d399' : '#fbbf24'}; height:100%; width:${Math.min(sum.emergency_fund.target_amount > 0 ? (sum.emergency_fund.current_amount / sum.emergency_fund.target_amount) * 100 : 0, 100)}%;" class="progress-bar-fill"></div>
                 </div>
               </div>
 
               <!-- Presupuestos por Categoría con Edición -->
-              <div style="background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:6px;">
+              <div style="background:#0F172A; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px;">
                   <span style="font-size:11px; font-weight:800; color:#f1f5f9;">Ajuste de Presupuesto</span>
-                  <span style="font-size:9px; color:#64748b;">✏️ Pulsa para editar</span>
+                  <span style="font-size:9.5px; color:#64748b;">✏️ Pulsa para editar</span>
                 </div>
 
                 <div style="display:flex; flex-direction:column; gap:6px;">
                   ${sum.subcategories.map(sub => {
         const isEd = state.editingBudgetSubcatId === sub.subcategory_id;
+        const subEmoji = getEmojiForName(sub.subcategory_name || "");
         return `
-                      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #020617;">
-                        <div>
-                          <div style="font-size:12px; font-weight:700; color:#f8fafc;">${sub.subcategory_name}</div>
-                          <div style="font-size:9px; color:#64748b;">Gastado: ${formatEuro(sub.spent)}</div>
+                      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                          <span style="font-size:14px;">${subEmoji}</span>
+                          <div>
+                            <div style="font-size:12px; font-weight:700; color:#f8fafc;">${sub.subcategory_name}</div>
+                            <div style="font-size:9px; color:#64748b;">Gastado: ${formatEuro(sub.spent)}</div>
+                          </div>
                         </div>
 
                         ${isEd ? `
                           <div style="display:flex; align-items:center; gap:4px;">
-                            <input type="number" value="${state.editBudgetAmount}" oninput="state.editBudgetAmount = this.value;" style="width:65px; background:#020617; border:1px solid #10b981; border-radius:6px; color:#f8fafc; font-size:11px; padding:3px 6px; text-align:right;" autofocus />
+                            <input type="number" value="${state.editBudgetAmount}" oninput="state.editBudgetAmount = this.value;" style="width:65px; background:#070B12; border:1px solid #10b981; border-radius:6px; color:#f8fafc; font-size:11px; padding:3px 6px; text-align:right;" autofocus />
                             <button onclick="updateSubcatBudget(${sub.subcategory_id});" class="btn-press" style="background:#10b981; color:#020617; border:none; border-radius:6px; font-weight:900; font-size:11px; padding:4px 6px; cursor:pointer;">✓</button>
                             <button onclick="state.editingBudgetSubcatId = null; render();" class="btn-press" style="background:#334155; color:#f8fafc; border:none; border-radius:6px; font-size:11px; padding:4px 6px; cursor:pointer;">✕</button>
                           </div>
                         ` : `
                           <div style="display:flex; align-items:center; gap:6px;">
-                            <span style="font-family:monospace; font-weight:800; font-size:12px; color:#cbd5e1;">${formatEuro(sub.budget)}</span>
+                            <span style="font-family:ui-monospace, monospace; font-weight:800; font-size:12px; color:#cbd5e1;">${formatEuro(sub.budget)}</span>
                             <button onclick="state.editingBudgetSubcatId = ${sub.subcategory_id}; state.editBudgetAmount = '${sub.budget || 0}'; render();" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:12px;">✏️</button>
                           </div>
                         `}
@@ -2170,16 +2180,16 @@
     function renderReceiptModal() {
       return `
         <div style="position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.92); backdrop-filter:blur(6px); display:flex; flex-direction:column; justify-content:center; align-items:center; padding:16px;">
-          <div style="position:relative; max-width:400px; width:100%; max-height:85vh; display:flex; flex-direction:column; background:#0f172a; border:1px solid #1e293b; border-radius:18px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #1e293b;">
+          <div style="position:relative; max-width:400px; width:100%; max-height:85vh; display:flex; flex-direction:column; background:#0F172A; border:1px solid rgba(255,255,255,0.12); border-radius:18px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.85);">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.08);">
               <span style="font-weight:800; font-size:13px; color:#f8fafc;">📷 Comprobante de Compra</span>
               <button onclick="state.viewingReceiptUrl = null; render();" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
             </div>
-            <div style="flex:1; overflow:auto; padding:12px; display:flex; justify-content:center; align-items:center;">
+            <div style="flex:1; overflow:auto; padding:12px; display:flex; justify-content:center; align-items:center; background:#070B12;">
               <img src="${state.viewingReceiptUrl}" style="max-width:100%; max-height:65vh; object-fit:contain; border-radius:8px;" alt="Ticket" />
             </div>
-            <div style="padding:10px 16px; border-top:1px solid #1e293b; text-align:center;">
-              <button onclick="state.viewingReceiptUrl = null; render();" class="btn-press" style="width:100%; padding:10px; background:#1e293b; color:#cbd5e1; border:none; border-radius:10px; font-weight:700; font-size:12px; cursor:pointer;">
+            <div style="padding:10px 16px; border-top:1px solid rgba(255,255,255,0.08); text-align:center;">
+              <button onclick="state.viewingReceiptUrl = null; render();" class="btn-press" style="width:100%; padding:10px; background:#172033; color:#cbd5e1; border:1px solid rgba(255,255,255,0.08); border-radius:10px; font-weight:700; font-size:12px; cursor:pointer;">
                 Cerrar
               </button>
             </div>

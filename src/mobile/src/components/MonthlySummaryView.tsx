@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { RefreshCw, ShieldCheck, AlertTriangle, Edit3, Check, X, TrendingUp, PieChart } from "lucide-react";
 import { MobileMonthlySummary, MobileSubcategorySummary } from "../types";
 import { fetchMonthlySummary, updateMonthlyBudget } from "../services/api";
+import { getSubcategoryEmoji } from "./CategoryChips";
 
 interface MonthlySummaryViewProps {
   isServerOnline: boolean;
@@ -78,165 +79,195 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
   };
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar gap-3 text-slate-100">
+    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar gap-2.5 text-slate-100">
       {/* Cabecera con selector de mes y botón de refresco */}
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center justify-between pt-0.5">
         <div className="flex items-center gap-2">
-          <PieChart className="w-5 h-5 text-emerald-400" />
-          <h2 className="font-extrabold text-base text-slate-100">Mi Mes</h2>
+          <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <PieChart className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="font-black text-sm tracking-tight text-slate-100">Mi Mes</h2>
+            <p className="text-[10px] text-slate-400 font-medium">Ejecución y presupuestos</p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <input
             type="month"
             value={currentMonth}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentMonth(e.target.value)}
-            className="bg-slate-900 border border-slate-800 text-xs font-semibold rounded-xl px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500"
+            className="bg-[#0F172A] border border-white/[0.08] text-xs font-bold rounded-xl px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500/60"
           />
           <button
             type="button"
             onClick={() => loadData(currentMonth)}
             disabled={loading || !isServerOnline}
-            className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 active:scale-95 disabled:opacity-50"
-            title={isServerOnline ? "Recargar" : "Servidor desconectado"}
+            className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+            title={isServerOnline ? "Recargar métricas" : "Servidor desconectado"}
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-emerald-400" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
           </button>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center gap-2">
+        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-2xl text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
-          <span>{errorMessage}</span>
+          <span className="leading-tight">{errorMessage}</span>
         </div>
       )}
 
       {loading && !summary && (
-        <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-500 text-sm">
+        <div className="py-14 flex flex-col items-center justify-center gap-2 text-slate-500 text-xs">
           <RefreshCw className="w-6 h-6 animate-spin text-emerald-400" />
-          <span>Calculando métricas del mes...</span>
+          <span className="font-medium">Calculando métricas del mes...</span>
         </div>
       )}
 
       {summary && (
         <>
-          {/* Tarjeta de Resumen Global */}
+          {/* Tarjetas Gemelas de Balance Financiero */}
           <div className="grid grid-cols-2 gap-2">
-            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Gastado</span>
-              <span className="text-xl font-black text-rose-400 mt-1">
+            <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-3 flex flex-col justify-between shadow-sm">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gastado Total</span>
+              <span className="text-xl font-black text-rose-400 mt-1 font-mono tracking-tight">
                 {formatEuro(summary.total_spent)}
               </span>
-              <span className="text-[10px] text-slate-500 mt-0.5">
+              <span className="text-[10px] text-slate-500 font-medium mt-1 truncate">
                 Ingresos: {formatEuro(summary.total_income)}
               </span>
             </div>
 
-            <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Disponible</span>
+            <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-3 flex flex-col justify-between shadow-sm">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Disponible</span>
               <span
-                className={`text-xl font-black mt-1 ${
+                className={`text-xl font-black mt-1 font-mono tracking-tight ${
                   summary.remaining_budget >= 0 ? "text-emerald-400" : "text-amber-400"
                 }`}
               >
                 {formatEuro(summary.remaining_budget)}
               </span>
-              <span className="text-[10px] text-slate-500 mt-0.5">Restante global</span>
+              <span className="text-[10px] text-slate-500 font-medium mt-1">
+                {summary.remaining_budget >= 0 ? "✓ Margen positivo" : "⚠️ Presupuesto excedido"}
+              </span>
             </div>
           </div>
 
           {/* Bloque Regla 50/30/20 */}
-          <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-3">
-            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+          <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-3.5 flex flex-col gap-3 shadow-sm">
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
               <div className="flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-slate-200">Ejecución 50 / 30 / 20</span>
+                <span className="text-xs font-black text-slate-200">Presupuesto 50 / 30 / 20</span>
               </div>
-              <span className="text-[10px] text-slate-400">Objetivo Saludable</span>
+              <span className="text-[10px] font-semibold text-emerald-400/90 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                Objetivo Saludable
+              </span>
             </div>
 
             {/* Necesidades 50% */}
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-300">🛒 Necesidades (50%)</span>
-                <span className="text-slate-400 font-mono text-[11px]">
-                  {formatEuro(summary.needs.spent)} / {formatEuro(summary.needs.budget)}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">🛒</span>
+                  <span className="font-bold text-slate-200 text-[11.5px]">Necesidades (50%)</span>
+                </div>
+                <span className="text-slate-300 font-mono text-[11px] font-semibold">
+                  {formatEuro(summary.needs.spent)} <span className="text-slate-600 font-normal">/</span> {formatEuro(summary.needs.budget)}
                 </span>
               </div>
-              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div className="w-full bg-[#070B12] h-2 rounded-full overflow-hidden border border-white/[0.06]">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    summary.needs.progress_percentage > 100 ? "bg-rose-500" : "bg-emerald-500"
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    summary.needs.progress_percentage > 100
+                      ? "bg-rose-500"
+                      : "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]"
                   }`}
                   style={{ width: `${Math.min(summary.needs.progress_percentage, 100)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
                 <span>{summary.needs.progress_percentage.toFixed(0)}% consumido</span>
                 <span>Restante: {formatEuro(summary.needs.remaining)}</span>
               </div>
             </div>
 
             {/* Deseos 30% */}
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-300">☕ Deseos (30%)</span>
-                <span className="text-slate-400 font-mono text-[11px]">
-                  {formatEuro(summary.wants.spent)} / {formatEuro(summary.wants.budget)}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">☕</span>
+                  <span className="font-bold text-slate-200 text-[11.5px]">Deseos (30%)</span>
+                </div>
+                <span className="text-slate-300 font-mono text-[11px] font-semibold">
+                  {formatEuro(summary.wants.spent)} <span className="text-slate-600 font-normal">/</span> {formatEuro(summary.wants.budget)}
                 </span>
               </div>
-              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div className="w-full bg-[#070B12] h-2 rounded-full overflow-hidden border border-white/[0.06]">
                 <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    summary.wants.progress_percentage > 100 ? "bg-amber-500" : "bg-violet-400"
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    summary.wants.progress_percentage >= 100
+                      ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"
+                      : summary.wants.progress_percentage >= 80
+                      ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]"
+                      : "bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.4)]"
                   }`}
                   style={{ width: `${Math.min(summary.wants.progress_percentage, 100)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
                 <span>{summary.wants.progress_percentage.toFixed(0)}% consumido</span>
                 <span>Restante: {formatEuro(summary.wants.remaining)}</span>
               </div>
             </div>
 
             {/* Ahorro 20% */}
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-300">📈 Ahorro e Inversión (20%)</span>
-                <span className="text-slate-400 font-mono text-[11px]">
-                  {formatEuro(summary.savings.spent)} / {formatEuro(summary.savings.budget)}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">📈</span>
+                  <span className="font-bold text-slate-200 text-[11.5px]">Ahorro e Inversión (20%)</span>
+                </div>
+                <span className="text-slate-300 font-mono text-[11px] font-semibold">
+                  {formatEuro(summary.savings.spent)} <span className="text-slate-600 font-normal">/</span> {formatEuro(summary.savings.budget)}
                 </span>
               </div>
-              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div className="w-full bg-[#070B12] h-2 rounded-full overflow-hidden border border-white/[0.06]">
                 <div
-                  className="h-full bg-cyan-400 rounded-full transition-all duration-300"
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
                   style={{ width: `${Math.min(summary.savings.progress_percentage, 100)}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500">
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
                 <span>{summary.savings.progress_percentage.toFixed(0)}% alcanzado</span>
                 <span>Meta mensual: {formatEuro(summary.savings.budget)}</span>
               </div>
             </div>
           </div>
 
-          {/* Tarjeta del Fondo de Emergencia */}
-          <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-2">
+          {/* Tarjeta Acorazada del Fondo de Emergencia (Salvaguarda Constitucional) */}
+          <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldCheck
-                  className={`w-5 h-5 ${
-                    summary.emergency_fund.is_funded ? "text-emerald-400" : "text-amber-400"
-                  }`}
-                />
-                <span className="text-xs font-bold text-slate-200">Fondo de Seguridad</span>
-              </div>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                <div className={`p-1.5 rounded-xl border ${
                   summary.emergency_fund.is_funded
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                     : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                }`}>
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-100">Fondo de Seguridad</div>
+                  <div className="text-[10px] text-slate-400 font-medium">Reserva patrimonial blindada</div>
+                </div>
+              </div>
+
+              <span
+                className={`text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-full border ${
+                  summary.emergency_fund.is_funded
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-400 border-amber-500/30"
                 }`}
               >
                 {summary.emergency_fund.months_covered.toFixed(1)} meses
@@ -244,78 +275,124 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
             </div>
 
             <div className="flex items-baseline justify-between pt-1">
-              <span className="text-sm font-extrabold text-slate-100 font-mono">
+              <span className="text-base font-black text-slate-100 font-mono tracking-tight">
                 {formatEuro(summary.emergency_fund.current_amount)}
               </span>
-              <span className="text-xs text-slate-500">
-                Objetivo: {formatEuro(summary.emergency_fund.target_amount)} (3 meses)
+              <span className="text-[11px] text-slate-400 font-medium">
+                Meta (3 meses): {formatEuro(summary.emergency_fund.target_amount)}
               </span>
+            </div>
+
+            {/* Barra de progreso de la reserva */}
+            <div className="w-full bg-[#070B12] h-1.5 rounded-full overflow-hidden border border-white/[0.06]">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  summary.emergency_fund.is_funded
+                    ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]"
+                    : "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]"
+                }`}
+                style={{
+                  width: `${Math.min(
+                    summary.emergency_fund.target_amount > 0
+                      ? (summary.emergency_fund.current_amount / summary.emergency_fund.target_amount) * 100
+                      : 0,
+                    100
+                  )}%`,
+                }}
+              />
             </div>
           </div>
 
           {/* Ajuste de Presupuesto por Subcategoría */}
-          <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-2 mb-2">
-            <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-              <span className="text-xs font-bold text-slate-200">Presupuestos por Categoría</span>
-              <span className="text-[10px] text-slate-400">Pulsa ✏️ para editar</span>
+          <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-3.5 flex flex-col gap-2 shadow-sm mb-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-1.5">
+                <PieChart className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-black text-slate-200">Presupuestos por Categoría</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium">Toca ✏️ para editar</span>
             </div>
 
-            <div className="flex flex-col gap-1.5 divide-y divide-slate-850">
+            <div className="flex flex-col gap-1.5 divide-y divide-white/[0.04]">
               {summary.subcategories.map((subcat) => {
                 const isEditing = editingSubcatId === subcat.subcategory_id;
+                const emoji = getSubcategoryEmoji(subcat.subcategory_name);
+                const progressPct = subcat.budget > 0 ? (subcat.spent / subcat.budget) * 100 : 0;
+
                 return (
                   <div
                     key={subcat.subcategory_id}
-                    className="pt-2 flex items-center justify-between text-xs"
+                    className="pt-2 flex flex-col gap-1"
                   >
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-slate-200">{subcat.subcategory_name}</span>
-                      <span className="text-[10px] text-slate-500">
-                        Gastado: {formatEuro(subcat.spent)}
-                      </span>
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm shrink-0">{emoji}</span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-slate-200 text-xs truncate block">{subcat.subcategory_name}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            Gastado: {formatEuro(subcat.spent)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            step="1"
+                            value={editAmountStr}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => setEditAmountStr(e.target.value)}
+                            className="w-18 bg-[#070B12] border border-emerald-500 rounded-lg px-2 py-1 text-xs text-slate-100 font-mono text-right focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveBudget(subcat.subcategory_id)}
+                            disabled={savingBudget}
+                            className="p-1 rounded-lg bg-emerald-500 text-slate-950 font-bold active:scale-95 shadow-sm"
+                            title="Guardar"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingSubcatId(null)}
+                            className="p-1 rounded-lg bg-slate-800 text-slate-400 active:scale-95"
+                            title="Cancelar"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono text-slate-200 font-bold text-xs">
+                            {formatEuro(subcat.budget)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(subcat)}
+                            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-400 active:scale-95 transition-all"
+                            title="Modificar presupuesto"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    {isEditing ? (
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          step="1"
-                          value={editAmountStr}
-                          onChange={(e: ChangeEvent<HTMLInputElement>) => setEditAmountStr(e.target.value)}
-                          className="w-16 bg-slate-950 border border-emerald-500 rounded-lg px-1.5 py-1 text-xs text-slate-100 text-right focus:outline-none"
-                          autoFocus
+                    {/* Micro barra de avance por subcategoría */}
+                    {subcat.budget > 0 && (
+                      <div className="w-full bg-[#070B12] h-1 rounded-full overflow-hidden border border-white/[0.04]">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            progressPct >= 100
+                              ? "bg-rose-500"
+                              : progressPct >= 80
+                              ? "bg-amber-400"
+                              : "bg-emerald-400/80"
+                          }`}
+                          style={{ width: `${Math.min(progressPct, 100)}%` }}
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleSaveBudget(subcat.subcategory_id)}
-                          disabled={savingBudget}
-                          className="p-1 rounded-lg bg-emerald-500 text-slate-950 active:scale-95"
-                          title="Guardar"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingSubcatId(null)}
-                          className="p-1 rounded-lg bg-slate-800 text-slate-400 active:scale-95"
-                          title="Cancelar"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-slate-300 font-semibold">
-                          {formatEuro(subcat.budget)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleStartEdit(subcat)}
-                          className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 active:scale-95"
-                          title="Modificar presupuesto"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     )}
                   </div>
