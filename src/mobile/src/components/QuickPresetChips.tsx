@@ -118,9 +118,18 @@ export const QuickPresetChips = ({
                 onTouchEnd={() => cancelPress(true, p)}
                 onTouchMove={handleTouchMove}
                 onTouchCancel={() => cancelPress(false)}
-                onMouseDown={(e: MouseEvent) => startPress(p, e.clientX, e.clientY)}
-                onMouseUp={() => cancelPress(true, p)}
-                onMouseLeave={() => cancelPress(false)}
+                onMouseDown={(e: MouseEvent) => {
+                  if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return;
+                  startPress(p, e.clientX, e.clientY);
+                }}
+                onMouseUp={() => {
+                  if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return;
+                  cancelPress(true, p);
+                }}
+                onMouseLeave={() => {
+                  if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return;
+                  cancelPress(false);
+                }}
                 className={`relative overflow-hidden px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none touch-manipulation [-webkit-touch-callout:none] shadow-sm shrink-0 active:scale-95 whitespace-nowrap ${
                   isPressing
                     ? "bg-emerald-950/70 border-emerald-500 text-emerald-200 scale-95 ring-1 ring-emerald-500/50"

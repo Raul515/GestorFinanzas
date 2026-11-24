@@ -473,7 +473,7 @@ export function App() {
             Gestor Finanzas
           </span>
           <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 tracking-wider">
-            MÓVIL
+            MÓVIL v{CURRENT_APP_VERSION.name}
           </span>
         </div>
 
@@ -525,6 +525,7 @@ export function App() {
             subcategories={catalog.personal_subcategories}
             frequentConcepts={catalog.frequent_concepts}
             monthlySummary={monthlySummary}
+            monthlySummariesMap={monthlySummariesMap}
             onSaveExpense={handleSaveExpense}
             onDeleteExpense={(eventId) => handleDeleteTransaction({ event_id: eventId } as MobileTransaction)}
             onCreateSubcategory={handleCreateSubcategory}

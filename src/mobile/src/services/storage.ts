@@ -619,3 +619,88 @@ export const resetStoredQuickPresets = (): QuickPresetItem[] => {
   return DEFAULT_QUICK_PRESETS;
 };
 
+export const findMatchingSubcategory = (
+  preset: Pick<QuickPresetItem, "subcategory_id" | "subcategory_name" | "name"> | string,
+  subcats: SubcategoryItem[]
+): SubcategoryItem | null => {
+  if (!subcats || subcats.length === 0) return null;
+  const targetId = typeof preset === "object" ? preset.subcategory_id : undefined;
+  const rawName = typeof preset === "object" ? preset.subcategory_name || preset.name || "" : String(preset || "");
+  const targetName = rawName.toLowerCase().trim();
+
+  if (targetId) {
+    const byId = subcats.find((s) => s.id === targetId);
+    if (byId) return byId;
+  }
+  if (!targetName) return null;
+
+  let found = subcats.find((s) => s.name.toLowerCase() === targetName);
+  if (found) return found;
+
+  found = subcats.find((s) => s.name.toLowerCase().includes(targetName) || targetName.includes(s.name.toLowerCase()));
+  if (found) return found;
+
+  const isCoffee = targetName.includes("café") || targetName.includes("cafe") || targetName.includes("desayuno");
+  const isDining = targetName.includes("cena") || targetName.includes("comida") || targetName.includes("restaurante") || targetName.includes("comer") || targetName.includes("almuerzo");
+  const isLeisure = targetName.includes("cine") || targetName.includes("ocio") || targetName.includes("cultura") || targetName.includes("copa") || targetName.includes("tomar");
+  const isGrocery = targetName.includes("super") || targetName.includes("compra") || targetName.includes("aliment") || targetName.includes("mercado");
+  const isGym = targetName.includes("gym") || targetName.includes("gimnasio") || targetName.includes("deporte");
+  const isFuel = targetName.includes("gasolina") || targetName.includes("diesel") || targetName.includes("transporte") || targetName.includes("metro");
+
+  if (isCoffee) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("café") || sn.includes("cafe") || sn.includes("desayuno");
+      }) ||
+      subcats.find((s) => s.name.toLowerCase().includes("salir a comer") || s.name.toLowerCase().includes("restaurante")) ||
+      subcats.find((s) => s.name.toLowerCase().includes("tomar algo") || s.name.toLowerCase().includes("entretenimiento")) ||
+      null
+    );
+  }
+  if (isDining) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("restaurante") || sn.includes("cena") || sn.includes("comida") || sn.includes("almuerzo");
+      }) ||
+      subcats.find((s) => s.name.toLowerCase().includes("salir a comer")) ||
+      subcats.find((s) => s.name.toLowerCase().includes("alimentación")) ||
+      null
+    );
+  }
+  if (isLeisure) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("entretenimiento") || sn.includes("ocio") || sn.includes("hobbies") || sn.includes("cine");
+      }) || null
+    );
+  }
+  if (isGrocery) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("alimentación") || sn.includes("supermercado") || sn.includes("compra");
+      }) || null
+    );
+  }
+  if (isGym) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("gimnasio") || sn.includes("gym") || sn.includes("deporte");
+      }) || null
+    );
+  }
+  if (isFuel) {
+    return (
+      subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("gasolina") || sn.includes("transporte") || sn.includes("combustible");
+      }) || null
+    );
+  }
+  return null;
+};
+

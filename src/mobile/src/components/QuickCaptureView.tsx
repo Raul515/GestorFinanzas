@@ -1,17 +1,24 @@
-import { useState, useRef, ChangeEvent } from "react";
+import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { Zap, Calendar, CheckCircle2, AlertTriangle, Sparkles, Camera, X } from "lucide-react";
 import { NumericKeypad } from "./NumericKeypad";
-import { CategoryChips } from "./CategoryChips";
+import { CategoryChips, getSubcategoryEmoji } from "./CategoryChips";
 import { ConceptSuggestions } from "./ConceptSuggestions";
 import { QuickPresetChips } from "./QuickPresetChips";
 import { ManagePresetsModal } from "./ManagePresetsModal";
 import { SubcategoryItem, MobileTransaction, MobileMonthlySummary, QuickPresetItem } from "../types";
-import { loadStoredQuickPresets, saveStoredQuickPresets } from "../services/storage";
+import {
+  loadStoredQuickPresets,
+  saveStoredQuickPresets,
+  getLocalDateString,
+  isIncomeSubcategory,
+  findMatchingSubcategory,
+} from "../services/storage";
 
 interface QuickCaptureViewProps {
   subcategories: SubcategoryItem[];
   frequentConcepts: string[];
   monthlySummary?: MobileMonthlySummary | null;
+  monthlySummariesMap?: Record<string, MobileMonthlySummary>;
   onSaveExpense: (tx: MobileTransaction) => void;
   onDeleteExpense?: (eventId: string) => void;
   onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
@@ -21,6 +28,7 @@ export const QuickCaptureView = ({
   subcategories,
   frequentConcepts,
   monthlySummary,
+  monthlySummariesMap,
   onSaveExpense,
   onDeleteExpense,
   onCreateSubcategory,
@@ -28,28 +36,54 @@ export const QuickCaptureView = ({
   const [txType, setTxType] = useState<"EXPENSE" | "INCOME">("EXPENSE");
   const [amountStr, setAmountStr] = useState("0");
   const [selectedSubcat, setSelectedSubcat] = useState<SubcategoryItem | null>(() => {
-    return subcategories.find((s) => s.is_frequent) || subcategories[0] || null;
+    const expSubs = subcategories.filter((s) => !isIncomeSubcategory(s));
+    return expSubs.find((s) => s.is_frequent) || expSubs[0] || null;
   });
   const [concept, setConcept] = useState("");
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateString());
   const [receiptBase64, setReceiptBase64] = useState<string | null>(null);
   const [toastInfo, setToastInfo] = useState<{ message: string; eventId?: string } | null>(null);
   const [presets, setPresets] = useState<QuickPresetItem[]>(loadStoredQuickPresets);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Sincronizar subcategoría seleccionada y presets cuando llega el catálogo real desde el PC
+  useEffect(() => {
+    const relevant = subcategories.filter((s) =>
+      txType === "INCOME" ? isIncomeSubcategory(s) : !isIncomeSubcategory(s)
+    );
+    setSelectedSubcat((prev) => {
+      if (prev) {
+        const refreshed = relevant.find((s) => s.id === prev.id) || relevant.find((s) => s.name === prev.name);
+        if (refreshed) return refreshed;
+      }
+      return relevant.find((s) => s.is_frequent) || relevant[0] || null;
+    });
+
+    if (subcategories.length > 0) {
+      setPresets((prevPresets) => {
+        let changed = false;
+        const nextPresets = prevPresets.map((p) => {
+          const matched = findMatchingSubcategory(p, subcategories);
+          if (matched && (!p.subcategory_id || p.subcategory_id !== matched.id || p.subcategory_name !== matched.name)) {
+            changed = true;
+            return { ...p, subcategory_id: matched.id, subcategory_name: matched.name };
+          }
+          return p;
+        });
+        if (changed) {
+          saveStoredQuickPresets(nextPresets);
+          return nextPresets;
+        }
+        return prevPresets;
+      });
+    }
+  }, [subcategories, txType]);
+
   const handleTypeSwitch = (type: "EXPENSE" | "INCOME") => {
     setTxType(type);
     const relevantSubcats = subcategories.filter((s) =>
-      type === "INCOME"
-        ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
-        : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+      type === "INCOME" ? isIncomeSubcategory(s) : !isIncomeSubcategory(s)
     );
     setSelectedSubcat(relevantSubcats.find((s) => s.is_frequent) || relevantSubcats[0] || null);
   };
@@ -102,8 +136,12 @@ export const QuickCaptureView = ({
     selectedSubcat !== null &&
     (selectedSubcat.category_name.toLowerCase().includes("deseo") || selectedSubcat.category_id === 3);
 
-  const wantsBudget = monthlySummary?.wants?.budget || 0;
-  const currentWantsSpent = monthlySummary?.wants?.spent || 0;
+  const txMonth = (selectedDate || getLocalDateString()).substring(0, 7);
+  const activeCaptureSummary =
+    monthlySummariesMap?.[txMonth] ||
+    (monthlySummary?.month === txMonth ? monthlySummary : null);
+  const wantsBudget = activeCaptureSummary?.wants?.budget || 0;
+  const currentWantsSpent = activeCaptureSummary?.wants?.spent || 0;
 
   let wantsAlert = null;
   if (isWants && wantsBudget > 0) {
@@ -181,99 +219,6 @@ export const QuickCaptureView = ({
     setTimeout(() => setToastInfo(null), 3000);
   };
 
-  // Mapeo inteligente y semántico de subcategorías para atajos rápidos
-  const findMatchingSubcategory = (
-    preset: QuickPresetItem,
-    subcats: SubcategoryItem[]
-  ): SubcategoryItem | null => {
-    if (!subcats || subcats.length === 0) return null;
-    const targetId = preset.subcategory_id;
-    const rawName = preset.subcategory_name || preset.name || "";
-    const targetName = rawName.toLowerCase().trim();
-
-    // 1. Coincidencia directa por ID
-    if (targetId) {
-      const byId = subcats.find((s) => s.id === targetId);
-      if (byId) return byId;
-    }
-
-    if (!targetName) return null;
-
-    // 2. Coincidencia exacta por nombre
-    let found = subcats.find((s) => s.name.toLowerCase() === targetName);
-    if (found) return found;
-
-    // 3. Coincidencia por contención (substring)
-    found = subcats.find((s) => s.name.toLowerCase().includes(targetName) || targetName.includes(s.name.toLowerCase()));
-    if (found) return found;
-
-    // 4. Mapeo semántico inteligente según palabras clave frecuentes
-    const isCoffee = targetName.includes("café") || targetName.includes("cafe") || targetName.includes("desayuno");
-    const isDining = targetName.includes("cena") || targetName.includes("comida") || targetName.includes("restaurante") || targetName.includes("comer") || targetName.includes("almuerzo");
-    const isLeisure = targetName.includes("cine") || targetName.includes("ocio") || targetName.includes("cultura") || targetName.includes("copa") || targetName.includes("tomar");
-    const isGrocery = targetName.includes("super") || targetName.includes("compra") || targetName.includes("aliment") || targetName.includes("mercado");
-    const isGym = targetName.includes("gym") || targetName.includes("gimnasio") || targetName.includes("deporte");
-    const isFuel = targetName.includes("gasolina") || targetName.includes("diesel") || targetName.includes("transporte") || targetName.includes("metro");
-
-    if (isCoffee) {
-      const specific = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("café") || sn.includes("cafe") || sn.includes("desayuno");
-      });
-      if (specific) return specific;
-      const dining = subcats.find((s) => s.name.toLowerCase().includes("salir a comer") || s.name.toLowerCase().includes("restaurante"));
-      if (dining) return dining;
-      const leisure = subcats.find((s) => s.name.toLowerCase().includes("tomar algo") || s.name.toLowerCase().includes("entretenimiento"));
-      if (leisure) return leisure;
-    }
-
-    if (isDining) {
-      const specific = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("restaurante") || sn.includes("cena") || sn.includes("comida") || sn.includes("almuerzo");
-      });
-      if (specific) return specific;
-      const dining = subcats.find((s) => s.name.toLowerCase().includes("salir a comer"));
-      if (dining) return dining;
-      const food = subcats.find((s) => s.name.toLowerCase().includes("alimentación"));
-      if (food) return food;
-    }
-
-    if (isLeisure) {
-      const leisure = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("entretenimiento") || sn.includes("ocio") || sn.includes("hobbies") || sn.includes("cine");
-      });
-      if (leisure) return leisure;
-    }
-
-    if (isGrocery) {
-      const groc = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("alimentación") || sn.includes("supermercado") || sn.includes("compra");
-      });
-      if (groc) return groc;
-    }
-
-    if (isGym) {
-      const gym = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("gimnasio") || sn.includes("gym") || sn.includes("deporte");
-      });
-      if (gym) return gym;
-    }
-
-    if (isFuel) {
-      const fuel = subcats.find((s) => {
-        const sn = s.name.toLowerCase();
-        return sn.includes("gasolina") || sn.includes("transporte") || sn.includes("combustible");
-      });
-      if (fuel) return fuel;
-    }
-
-    return null;
-  };
-
   // Atajos Rápidos: Tap corto (precarga de formulario)
   const handleSelectPreset = (preset: QuickPresetItem) => {
     setTxType("EXPENSE");
@@ -298,8 +243,6 @@ export const QuickCaptureView = ({
     const isWants =
       targetSubcat.category_name.toLowerCase().includes("deseo") ||
       targetSubcat.category_id === 3;
-    const wantsBudget = monthlySummary?.wants?.budget || 0;
-    const currentWantsSpent = monthlySummary?.wants?.spent || 0;
 
     if (isWants && wantsBudget > 0) {
       const projectedSpent = currentWantsSpent + preset.amount;
@@ -353,10 +296,10 @@ export const QuickCaptureView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col justify-between max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar">
+    <div className="flex-1 flex flex-col gap-1.5 max-w-sm mx-auto w-full px-3 py-2 pb-4 overflow-y-auto no-scrollbar">
       {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) y Safe-Area iOS */}
       {toastInfo && (
-        <div className="fixed top-[calc(12px+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-4 duration-150">
+        <div className="fixed top-[calc(12px+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-fade-in">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span className="truncate">{toastInfo.message}</span>
           {toastInfo.eventId && onDeleteExpense && (
@@ -452,7 +395,7 @@ export const QuickCaptureView = ({
         {/* Semáforo Predictivo de Techo de Deseos como Micro-Badge flotante (Fase 10) */}
         {wantsAlert && (
           <div
-            className={`mt-1 px-2.5 py-1 rounded-full border ${wantsAlert.borderColor} ${wantsAlert.bgColor} flex items-center gap-1.5 shadow-sm transition-all duration-200 animate-in fade-in max-w-xs`}
+            className={`mt-1 px-2.5 py-1 rounded-full border ${wantsAlert.borderColor} ${wantsAlert.bgColor} flex items-center gap-1.5 shadow-sm transition-all duration-200 animate-fade-in max-w-xs`}
           >
             {wantsAlert.level === "OVER_LIMIT" ? (
               <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 animate-pulse" />
@@ -468,13 +411,17 @@ export const QuickCaptureView = ({
         )}
       </div>
 
-      {/* Selector de Chips de Categorías */}
-      <div className="my-0.5">
+      {/* Indicador de Categoría Activa + Selector de Chips */}
+      <div className="my-0.5 flex flex-col gap-1">
+        <div className="flex items-center justify-between text-[10.5px] text-slate-400 px-0.5">
+          <span className="font-bold uppercase tracking-wider">Categoría activa:</span>
+          <span className="font-extrabold text-emerald-400 bg-emerald-500/[0.12] border border-emerald-500/30 rounded-lg px-2 py-0.5 truncate max-w-[200px]">
+            {selectedSubcat ? `${getSubcategoryEmoji(selectedSubcat.name)} ${selectedSubcat.name}` : "Ninguna"}
+          </span>
+        </div>
         <CategoryChips
           subcategories={subcategories.filter((s) =>
-            txType === "INCOME"
-              ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
-              : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+            txType === "INCOME" ? isIncomeSubcategory(s) : !isIncomeSubcategory(s)
           )}
           selectedSubcategoryId={selectedSubcat?.id || null}
           onSelectSubcategory={(subcat) => setSelectedSubcat(subcat)}

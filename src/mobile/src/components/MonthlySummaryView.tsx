@@ -443,7 +443,7 @@ export const MonthlySummaryView = ({
                             step="1"
                             value={editAmountStr}
                             onChange={(e: ChangeEvent<HTMLInputElement>) => setEditAmountStr(e.target.value)}
-                            className="w-18 bg-[#070B12] border border-emerald-500 rounded-lg px-2 py-1 text-xs text-slate-100 font-mono text-right focus:outline-none"
+                            className="w-[72px] bg-[#070B12] border border-emerald-500 rounded-lg px-2 py-1 text-xs text-slate-100 font-mono text-right focus:outline-none"
                             autoFocus
                           />
                           <button

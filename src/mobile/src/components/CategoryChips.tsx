@@ -81,8 +81,9 @@ export const CategoryChips = ({
       const tempSubcat: SubcategoryItem = {
         id: -Date.now(),
         name: newSubcatName.trim(),
-        category_id: newCategoryName.includes("50%") ? 2 : 3,
+        category_id: isIncome ? 1 : newCategoryName.includes("50%") ? 2 : newCategoryName.includes("20%") ? 4 : 3,
         category_name: newCategoryName,
+        category_type: isIncome ? "income" : "expense",
         is_frequent: true,
       };
       onSelectSubcategory(tempSubcat);
@@ -96,7 +97,10 @@ export const CategoryChips = ({
   return (
     <div className="w-full">
       {/* Carrusel horizontal de chips frecuentes */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5">
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x", overscrollBehaviorX: "contain" }}
+      >
         {activeSubcategories.map((subcat) => {
           const isSelected = selectedSubcategoryId === subcat.id;
           const emoji = getSubcategoryEmoji(subcat.name);
@@ -107,7 +111,7 @@ export const CategoryChips = ({
               onClick={() => onSelectSubcategory(subcat)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border shrink-0 active:scale-95 ${
                 isSelected
-                  ? "bg-emerald-500/18 text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.25)] ring-1 ring-emerald-500/40"
+                  ? "bg-emerald-500/[0.18] text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.25)] ring-1 ring-emerald-500/40"
                   : "bg-[#0F172A] text-slate-300 border-white/[0.08] hover:border-slate-700 active:bg-[#172033]"
               }`}
             >
@@ -133,7 +137,7 @@ export const CategoryChips = ({
 
       {/* Modal / Selector completo de subcategorías */}
       {modalOpen && (
-        <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 bg-black/85 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+        <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 bg-black/85 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-fade-in">
           <div className="bg-[#0B1324] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl h-[min(78dvh,calc(var(--vvh,100dvh)*0.88))] max-h-[calc(var(--vvh,100dvh)*0.90)] flex flex-col w-full max-w-md mx-auto shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
             {/* Cabecera del modal */}
             <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
@@ -267,7 +271,7 @@ export const CategoryChips = ({
                 </div>
 
                 {/* Lista con scroll */}
-                <div className="overflow-y-auto p-3 flex flex-col gap-1.5 divide-y divide-slate-850">
+                <div className="overflow-y-auto p-3 flex flex-col gap-1.5 divide-y divide-white/[0.06]">
                   {filteredModalList.length === 0 ? (
                     <div className="py-6 flex flex-col items-center justify-center gap-3 text-center">
                       <span className="text-slate-500 text-sm">

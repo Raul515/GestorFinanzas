@@ -53,7 +53,7 @@ export const NavigationBar = ({
             onClick={() => onChangeTab(tab.id)}
             className={`relative flex flex-col items-center justify-center gap-1 min-h-[46px] py-1 px-3 rounded-2xl transition-all duration-200 active:scale-95 ${
               isActive
-                ? "bg-emerald-500/12 text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                ? "bg-emerald-500/[0.12] text-emerald-400 border border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
                 : "text-slate-400 hover:text-slate-200 border border-transparent"
             }`}
           >

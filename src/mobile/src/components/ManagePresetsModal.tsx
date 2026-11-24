@@ -1,7 +1,7 @@
-import { useState, ChangeEvent, KeyboardEvent } from "react";
+import { useState, useEffect, ChangeEvent, KeyboardEvent } from "react";
 import { X, Plus, Trash2, RotateCcw, Check, Sparkles } from "lucide-react";
 import { QuickPresetItem, SubcategoryItem } from "../types";
-import { resetStoredQuickPresets } from "../services/storage";
+import { resetStoredQuickPresets, isIncomeSubcategory, findMatchingSubcategory } from "../services/storage";
 
 interface ManagePresetsModalProps {
   isOpen: boolean;
@@ -18,6 +18,8 @@ export const ManagePresetsModal = ({
   onClose,
   onSavePresets,
 }: ManagePresetsModalProps) => {
+  const expenseSubcategories = subcategories.filter((s) => !isIncomeSubcategory(s));
+
   const [localPresets, setLocalPresets] = useState<QuickPresetItem[]>(presets);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -27,9 +29,19 @@ export const ManagePresetsModal = ({
   const [newEmoji, setNewEmoji] = useState("⚡");
   const [newAmount, setNewAmount] = useState("");
   const [newSubcatName, setNewSubcatName] = useState(
-    subcategories[0]?.name || "Café y Desayunos"
+    expenseSubcategories[0]?.name || "Café y Desayunos"
   );
   const [newConcept, setNewConcept] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocalPresets(presets);
+      setEditingId(null);
+      if (expenseSubcategories.length > 0 && !expenseSubcategories.some((s) => s.name === newSubcatName)) {
+        setNewSubcatName(expenseSubcategories[0].name);
+      }
+    }
+  }, [isOpen, presets]);
 
   if (!isOpen) return null;
 
@@ -90,7 +102,7 @@ export const ManagePresetsModal = ({
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm flex flex-col max-h-[calc(var(--vvh,100dvh)*0.85)] shadow-2xl overflow-hidden">
         {/* Cabecera del modal */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
@@ -170,20 +182,33 @@ export const ManagePresetsModal = ({
 
                 {/* Subcategoría asignada */}
                 <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-900">
-                  <span className="truncate max-w-[150px]">
-                    📂 {preset.subcategory_name}
-                  </span>
-                  <select
-                    value={preset.subcategory_name}
-                    onChange={(e: ChangeEvent<HTMLSelectElement>) => handleUpdateSubcategory(preset.id, e.target.value)}
-                    className="bg-slate-900 text-[10px] text-slate-300 border border-slate-800 rounded px-1.5 py-0.5"
-                  >
-                    {subcategories.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const matchedSub = findMatchingSubcategory(preset, expenseSubcategories);
+                    const activeSubName =
+                      preset.subcategory_id && expenseSubcategories.some((s) => s.id === preset.subcategory_id)
+                        ? expenseSubcategories.find((s) => s.id === preset.subcategory_id)?.name || preset.subcategory_name
+                        : preset.subcategory_name && expenseSubcategories.some((s) => s.name === preset.subcategory_name)
+                        ? preset.subcategory_name
+                        : matchedSub?.name || expenseSubcategories[0]?.name || preset.subcategory_name;
+                    return (
+                      <>
+                        <span className="truncate max-w-[150px]">
+                          📂 {activeSubName}
+                        </span>
+                        <select
+                          value={activeSubName}
+                          onChange={(e: ChangeEvent<HTMLSelectElement>) => handleUpdateSubcategory(preset.id, e.target.value)}
+                          className="bg-slate-900 text-[10px] text-slate-300 border border-slate-800 rounded px-1.5 py-0.5 max-w-[165px]"
+                        >
+                          {expenseSubcategories.map((s) => (
+                            <option key={s.id} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -191,7 +216,7 @@ export const ManagePresetsModal = ({
 
           {/* Formulario para añadir nuevo atajo */}
           {showAddForm ? (
-            <div className="bg-slate-950 border border-emerald-500/40 rounded-xl p-3 flex flex-col gap-2 animate-in fade-in">
+            <div className="bg-slate-950 border border-emerald-500/40 rounded-xl p-3 flex flex-col gap-2 animate-fade-in">
               <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Nuevo Atajo 1-Tap</span>
@@ -231,7 +256,7 @@ export const ManagePresetsModal = ({
                   onChange={(e: ChangeEvent<HTMLSelectElement>) => setNewSubcatName(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300 truncate"
                 >
-                  {subcategories.map((s) => (
+                  {expenseSubcategories.map((s) => (
                     <option key={s.id} value={s.name}>
                       {s.name}
                     </option>

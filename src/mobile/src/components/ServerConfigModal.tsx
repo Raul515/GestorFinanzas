@@ -1,4 +1,5 @@
-import { useState, ChangeEvent } from "react";
+import { useState, useEffect, ChangeEvent } from "react";
+import { Capacitor } from "@capacitor/core";
 import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck, Zap } from "lucide-react";
 import { testServerConnection, TestConnectionResult, pairWithPin } from "../services/api";
 import { isIOSDevice } from "../services/storage";
@@ -29,6 +30,23 @@ export const ServerConfigModal = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setServerUrl(currentServerUrl || "");
+      setPairingToken(currentPairingToken || "");
+      setPin("");
+      setTestResult(null);
+    }
+  }, [isOpen, currentServerUrl, currentPairingToken]);
+
+  const isNativeOrLocalOrigin =
+    Capacitor.isNativePlatform() ||
+    (typeof window !== "undefined" &&
+      (window.location.origin.includes("localhost") ||
+        window.location.origin.includes("127.0.0.1") ||
+        window.location.protocol === "capacitor:" ||
+        window.location.protocol === "file:"));
+
   if (!isOpen) return null;
 
   const handlePairPin = async () => {
@@ -52,6 +70,9 @@ export const ServerConfigModal = ({
           message: res.message,
         });
         onSave(serverUrl.trim(), res.pairingToken.trim());
+        setTimeout(() => {
+          onClose();
+        }, 1200);
       } else {
         setTestResult({
           success: false,
@@ -139,13 +160,15 @@ export const ServerConfigModal = ({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-bold text-slate-300">Dirección URL / IP del PC</label>
-            <button
-              type="button"
-              onClick={handleResetToOrigin}
-              className="text-[10px] text-emerald-400 hover:underline"
-            >
-              Usar origen actual
-            </button>
+            {!isNativeOrLocalOrigin && (
+              <button
+                type="button"
+                onClick={handleResetToOrigin}
+                className="text-[10px] text-emerald-400 hover:underline"
+              >
+                Usar origen actual
+              </button>
+            )}
           </div>
           <div className="relative flex items-center">
             <Server className="w-4 h-4 text-slate-500 absolute left-3 pointer-events-none" />
@@ -281,15 +304,24 @@ export const ServerConfigModal = ({
 
         {/* Guía rápida de cambio de IP */}
         <div className="bg-slate-950/60 border border-slate-700/70 rounded-xl p-2.5 flex flex-col gap-1 text-[10px] leading-snug text-slate-400">
-          <div className="font-extrabold text-slate-300 text-[10.5px]">💡 ¿Qué opción usar si cambia tu IP?</div>
-          <div>
-            <span className="text-emerald-400 font-bold">• Cambio temporal</span> (ej. Wi-Fi un rato y vuelves al cable) ➔{" "}
-            <strong className="text-slate-200">Guardar y Aplicar</strong>
-          </div>
-          <div>
-            <span className="text-sky-400 font-bold">• Cambio de IP definitivo</span> (mudar web, token y actualizaciones) ➔{" "}
-            <strong className="text-slate-200">Migrar PWA</strong>
-          </div>
+          <div className="font-extrabold text-slate-300 text-[10.5px]">💡 ¿Cambia la IP de tu PC?</div>
+          {isNativeOrLocalOrigin ? (
+            <div>
+              Si tu PC cambia entre Wi-Fi y cable Ethernet o cambia de IP, actualiza la dirección arriba y pulsa{" "}
+              <strong className="text-emerald-400">Guardar y Aplicar</strong>. Tus gastos locales y tu token se conservan.
+            </div>
+          ) : (
+            <>
+              <div>
+                <span className="text-emerald-400 font-bold">• Cambio temporal</span> (ej. Wi-Fi un rato y vuelves al cable) ➔{" "}
+                <strong className="text-slate-200">Guardar y Aplicar</strong>
+              </div>
+              <div>
+                <span className="text-sky-400 font-bold">• Cambio de IP definitivo</span> (mudar web, token y actualizaciones) ➔{" "}
+                <strong className="text-slate-200">Migrar PWA</strong>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
