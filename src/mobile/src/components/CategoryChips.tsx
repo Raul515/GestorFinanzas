@@ -7,6 +7,7 @@ interface CategoryChipsProps {
   selectedSubcategoryId: number | null;
   onSelectSubcategory: (subcat: SubcategoryItem) => void;
   onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
+  txType?: "EXPENSE" | "INCOME";
 }
 
 export const getSubcategoryEmoji = (name: string): string => {
@@ -38,15 +39,22 @@ export const CategoryChips = ({
   selectedSubcategoryId,
   onSelectSubcategory,
   onCreateSubcategory,
+  txType = "EXPENSE",
 }: CategoryChipsProps) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [newSubcatName, setNewSubcatName] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("Deseos (30%)");
+  const isIncome = txType === "INCOME";
+  const [newCategoryName, setNewCategoryName] = useState(() => (isIncome ? "Ingresos Netos" : "Deseos (30%)"));
 
   const frequentSubcategories = subcategories.filter((s) => s.is_frequent);
-  const activeSubcategories = frequentSubcategories.length > 0 ? frequentSubcategories : subcategories.slice(0, 6);
+  const baseActive = frequentSubcategories.length > 0 ? frequentSubcategories : subcategories.slice(0, 6);
+  const activeSubcategories = [...baseActive];
+  if (selectedSubcategoryId && !activeSubcategories.some((s) => s.id === selectedSubcategoryId)) {
+    const selectedObj = subcategories.find((s) => s.id === selectedSubcategoryId);
+    if (selectedObj) activeSubcategories.unshift(selectedObj);
+  }
 
   const filteredModalList = subcategories.filter((s) => {
     if (!searchQuery.trim()) return true;
@@ -56,6 +64,7 @@ export const CategoryChips = ({
 
   const handleOpenCreateForm = () => {
     setNewSubcatName(searchQuery.trim());
+    setNewCategoryName(isIncome ? "Ingresos Netos" : "Deseos (30%)");
     setIsCreating(true);
   };
 
@@ -124,8 +133,8 @@ export const CategoryChips = ({
 
       {/* Modal / Selector completo de subcategorías */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-[#0B1324] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col w-full max-w-md mx-auto shadow-2xl overflow-hidden">
+        <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 bg-black/85 backdrop-blur-md flex flex-col justify-end sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-[#0B1324] border border-white/[0.08] rounded-t-3xl sm:rounded-2xl h-[min(78dvh,calc(var(--vvh,100dvh)*0.88))] max-h-[calc(var(--vvh,100dvh)*0.90)] flex flex-col w-full max-w-md mx-auto shadow-2xl overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
             {/* Cabecera del modal */}
             <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
@@ -164,42 +173,56 @@ export const CategoryChips = ({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-400">Tipo (Regla 50/30/20 o Ingreso)</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setNewCategoryName("Necesidades Básicas (50%)")}
-                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
-                        newCategoryName.includes("50%")
-                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold"
-                          : "bg-slate-950 border-slate-800 text-slate-400"
-                      }`}
-                    >
-                      🛒 Necesidad
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewCategoryName("Deseos (30%)")}
-                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
-                        newCategoryName.includes("30%")
-                          ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
-                          : "bg-slate-950 border-slate-800 text-slate-400"
-                      }`}
-                    >
-                      ☕ Deseo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewCategoryName("Ingresos Netos")}
-                      className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
-                        newCategoryName.includes("Ingreso")
-                          ? "bg-sky-500/20 border-sky-500 text-sky-300 font-bold"
-                          : "bg-slate-950 border-slate-800 text-slate-400"
-                      }`}
-                    >
-                      💰 Ingreso
-                    </button>
-                  </div>
+                  <label className="text-xs font-medium text-slate-400">
+                    Tipo ({isIncome ? "Categoría de Ingreso" : "Regla 50/30/20"})
+                  </label>
+                  {isIncome ? (
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName("Ingresos Netos")}
+                        className="p-2 rounded-xl text-xs font-bold border text-center transition-all bg-sky-500/20 border-sky-500 text-sky-300"
+                      >
+                        💰 Ingresos Netos
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName("Necesidades Básicas (50%)")}
+                        className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                          newCategoryName.includes("50%")
+                            ? "bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold"
+                            : "bg-slate-950 border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        🛒 Necesidad
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName("Deseos (30%)")}
+                        className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                          newCategoryName.includes("30%")
+                            ? "bg-amber-500/20 border-amber-500 text-amber-300 font-bold"
+                            : "bg-slate-950 border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        ☕ Deseo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName("Ahorro e Inversión (20%)")}
+                        className={`p-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                          newCategoryName.includes("20%") || newCategoryName.includes("Ahorro")
+                            ? "bg-indigo-500/20 border-indigo-500 text-indigo-300 font-bold"
+                            : "bg-slate-950 border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        📈 Ahorro
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 pt-2">

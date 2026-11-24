@@ -47,9 +47,10 @@ export const ManagePresetsModal = ({
   };
 
   const handleUpdateSubcategory = (id: string, subcatName: string) => {
+    const foundSub = subcategories.find((s) => s.name === subcatName);
     setLocalPresets((prev) =>
       prev.map((p) =>
-        p.id === id ? { ...p, subcategory_name: subcatName } : p
+        p.id === id ? { ...p, subcategory_name: subcatName, subcategory_id: foundSub?.id } : p
       )
     );
   };
@@ -89,8 +90,8 @@ export const ManagePresetsModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm flex flex-col max-h-[85vh] shadow-2xl overflow-hidden">
+    <div className="fixed top-0 left-0 right-0 h-[var(--vvh,100dvh)] z-50 flex items-center justify-center p-3 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm flex flex-col max-h-[calc(var(--vvh,100dvh)*0.85)] shadow-2xl overflow-hidden">
         {/* Cabecera del modal */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -118,8 +119,8 @@ export const ManagePresetsModal = ({
                 className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-2.5 flex flex-col gap-2"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-lg">{preset.emoji}</span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg shrink-0">{preset.emoji}</span>
                     {isEditing ? (
                       <input
                         type="text"
@@ -130,7 +131,7 @@ export const ManagePresetsModal = ({
                           if (e.key === "Enter") setEditingId(null);
                         }}
                         autoFocus
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs text-white font-bold w-24"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs text-white font-bold flex-1 min-w-0 w-full"
                       />
                     ) : (
                       <div

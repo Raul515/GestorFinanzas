@@ -181,15 +181,104 @@ export const QuickCaptureView = ({
     setTimeout(() => setToastInfo(null), 3000);
   };
 
+  // Mapeo inteligente y semántico de subcategorías para atajos rápidos
+  const findMatchingSubcategory = (
+    preset: QuickPresetItem,
+    subcats: SubcategoryItem[]
+  ): SubcategoryItem | null => {
+    if (!subcats || subcats.length === 0) return null;
+    const targetId = preset.subcategory_id;
+    const rawName = preset.subcategory_name || preset.name || "";
+    const targetName = rawName.toLowerCase().trim();
+
+    // 1. Coincidencia directa por ID
+    if (targetId) {
+      const byId = subcats.find((s) => s.id === targetId);
+      if (byId) return byId;
+    }
+
+    if (!targetName) return null;
+
+    // 2. Coincidencia exacta por nombre
+    let found = subcats.find((s) => s.name.toLowerCase() === targetName);
+    if (found) return found;
+
+    // 3. Coincidencia por contención (substring)
+    found = subcats.find((s) => s.name.toLowerCase().includes(targetName) || targetName.includes(s.name.toLowerCase()));
+    if (found) return found;
+
+    // 4. Mapeo semántico inteligente según palabras clave frecuentes
+    const isCoffee = targetName.includes("café") || targetName.includes("cafe") || targetName.includes("desayuno");
+    const isDining = targetName.includes("cena") || targetName.includes("comida") || targetName.includes("restaurante") || targetName.includes("comer") || targetName.includes("almuerzo");
+    const isLeisure = targetName.includes("cine") || targetName.includes("ocio") || targetName.includes("cultura") || targetName.includes("copa") || targetName.includes("tomar");
+    const isGrocery = targetName.includes("super") || targetName.includes("compra") || targetName.includes("aliment") || targetName.includes("mercado");
+    const isGym = targetName.includes("gym") || targetName.includes("gimnasio") || targetName.includes("deporte");
+    const isFuel = targetName.includes("gasolina") || targetName.includes("diesel") || targetName.includes("transporte") || targetName.includes("metro");
+
+    if (isCoffee) {
+      const specific = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("café") || sn.includes("cafe") || sn.includes("desayuno");
+      });
+      if (specific) return specific;
+      const dining = subcats.find((s) => s.name.toLowerCase().includes("salir a comer") || s.name.toLowerCase().includes("restaurante"));
+      if (dining) return dining;
+      const leisure = subcats.find((s) => s.name.toLowerCase().includes("tomar algo") || s.name.toLowerCase().includes("entretenimiento"));
+      if (leisure) return leisure;
+    }
+
+    if (isDining) {
+      const specific = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("restaurante") || sn.includes("cena") || sn.includes("comida") || sn.includes("almuerzo");
+      });
+      if (specific) return specific;
+      const dining = subcats.find((s) => s.name.toLowerCase().includes("salir a comer"));
+      if (dining) return dining;
+      const food = subcats.find((s) => s.name.toLowerCase().includes("alimentación"));
+      if (food) return food;
+    }
+
+    if (isLeisure) {
+      const leisure = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("entretenimiento") || sn.includes("ocio") || sn.includes("hobbies") || sn.includes("cine");
+      });
+      if (leisure) return leisure;
+    }
+
+    if (isGrocery) {
+      const groc = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("alimentación") || sn.includes("supermercado") || sn.includes("compra");
+      });
+      if (groc) return groc;
+    }
+
+    if (isGym) {
+      const gym = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("gimnasio") || sn.includes("gym") || sn.includes("deporte");
+      });
+      if (gym) return gym;
+    }
+
+    if (isFuel) {
+      const fuel = subcats.find((s) => {
+        const sn = s.name.toLowerCase();
+        return sn.includes("gasolina") || sn.includes("transporte") || sn.includes("combustible");
+      });
+      if (fuel) return fuel;
+    }
+
+    return null;
+  };
+
   // Atajos Rápidos: Tap corto (precarga de formulario)
   const handleSelectPreset = (preset: QuickPresetItem) => {
     setTxType("EXPENSE");
     setAmountStr(preset.amount.toString().replace(".", ","));
-    const matched = subcategories.find(
-      (s) =>
-        (preset.subcategory_id && s.id === preset.subcategory_id) ||
-        s.name.toLowerCase() === preset.subcategory_name.toLowerCase()
-    );
+    const matched = findMatchingSubcategory(preset, subcategories);
     if (matched) {
       setSelectedSubcat(matched);
     }
@@ -199,11 +288,7 @@ export const QuickCaptureView = ({
   // Atajos Rápidos: Pulsación larga (1-Tap directo con salvaguarda)
   const handleDirectSavePreset = (preset: QuickPresetItem) => {
     const targetSubcat =
-      subcategories.find(
-        (s) =>
-          (preset.subcategory_id && s.id === preset.subcategory_id) ||
-          s.name.toLowerCase() === preset.subcategory_name.toLowerCase()
-      ) ||
+      findMatchingSubcategory(preset, subcategories) ||
       selectedSubcat ||
       subcategories[0];
 
@@ -269,9 +354,9 @@ export const QuickCaptureView = ({
 
   return (
     <div className="flex-1 flex flex-col justify-between max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar">
-      {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) */}
+      {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) y Safe-Area iOS */}
       {toastInfo && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-4 duration-150">
+        <div className="fixed top-[calc(12px+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-4 duration-150">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span className="truncate">{toastInfo.message}</span>
           {toastInfo.eventId && onDeleteExpense && (
@@ -386,22 +471,15 @@ export const QuickCaptureView = ({
       {/* Selector de Chips de Categorías */}
       <div className="my-0.5">
         <CategoryChips
-          subcategories={
-            subcategories.filter((s) =>
-              txType === "INCOME"
-                ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
-                : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
-            ).length > 0
-              ? subcategories.filter((s) =>
-                  txType === "INCOME"
-                    ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
-                    : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
-                )
-              : subcategories
-          }
+          subcategories={subcategories.filter((s) =>
+            txType === "INCOME"
+              ? s.category_type === "income" || s.category_name.toLowerCase().includes("ingreso")
+              : s.category_type !== "income" && !s.category_name.toLowerCase().includes("ingreso")
+          )}
           selectedSubcategoryId={selectedSubcat?.id || null}
           onSelectSubcategory={(subcat) => setSelectedSubcat(subcat)}
           onCreateSubcategory={onCreateSubcategory}
+          txType={txType}
         />
       </div>
 

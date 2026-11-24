@@ -78,11 +78,49 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
     }) + " €";
   };
 
+  const MONTH_NAMES_ES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+  ];
+
+  const formatMonthLabelEs = (monthStr: string) => {
+    const parts = (monthStr || "").split("-");
+    if (parts.length !== 2) return monthStr;
+    const idx = parseInt(parts[1], 10) - 1;
+    return `${MONTH_NAMES_ES[idx] || parts[1]} ${parts[0]}`;
+  };
+
+  const getMonthOptions = (activeMonth: string) => {
+    const now = new Date();
+    const opts: string[] = [];
+    const seen = new Set<string>();
+    for (let offset = 3; offset >= -24; offset--) {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!seen.has(val)) {
+        seen.add(val);
+        opts.push(val);
+      }
+    }
+    if (activeMonth && !seen.has(activeMonth)) {
+      opts.push(activeMonth);
+      opts.sort((a, b) => b.localeCompare(a));
+    }
+    return opts;
+  };
+
+  const shiftMonth = (delta: number) => {
+    const [y, m] = currentMonth.split("-").map(Number);
+    if (Number.isNaN(y) || Number.isNaN(m)) return;
+    const d = new Date(y, m - 1 + delta, 1);
+    setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
   return (
     <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar gap-2.5 text-slate-100">
-      {/* Cabecera con selector de mes y botón de refresco */}
-      <div className="flex items-center justify-between pt-0.5">
-        <div className="flex items-center gap-2">
+      {/* Cabecera con selector de mes universal (compatible iOS/Android) y botón de refresco */}
+      <div className="flex items-center justify-between pt-0.5 gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <PieChart className="w-4 h-4" />
           </div>
@@ -92,13 +130,34 @@ export const MonthlySummaryView = ({ isServerOnline }: MonthlySummaryViewProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <input
-            type="month"
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => shiftMonth(-1)}
+            className="px-2 py-1 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95"
+            title="Mes anterior"
+          >
+            ◀
+          </button>
+          <select
             value={currentMonth}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentMonth(e.target.value)}
-            className="bg-[#0F172A] border border-white/[0.08] text-xs font-bold rounded-xl px-2.5 py-1 text-slate-200 focus:outline-none focus:border-emerald-500/60"
-          />
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setCurrentMonth(e.target.value)}
+            className="bg-[#0F172A] border border-white/[0.08] text-xs font-bold rounded-xl px-2 py-1 text-slate-200 focus:outline-none focus:border-emerald-500/60"
+          >
+            {getMonthOptions(currentMonth).map((mVal) => (
+              <option key={mVal} value={mVal}>
+                {formatMonthLabelEs(mVal)}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => shiftMonth(1)}
+            className="px-2 py-1 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95"
+            title="Mes siguiente"
+          >
+            ▶
+          </button>
           <button
             type="button"
             onClick={() => loadData(currentMonth)}
