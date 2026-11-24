@@ -443,6 +443,7 @@ sync/processed/*
 sync/error/*
 !sync/error/.gitkeep
 !sync/mobile/
+sync/mobile/*
 !sync/mobile/.gitkeep
 !sync/mobile/catalog/
 sync/mobile/catalog/*

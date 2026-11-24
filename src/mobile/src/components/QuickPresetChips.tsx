@@ -22,6 +22,7 @@ export const QuickPresetChips = ({
   const animFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const didTriggerLongPressRef = useRef<boolean>(false);
+  const isDraggingRef = useRef<boolean>(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const LONG_PRESS_DURATION_MS = 500;
@@ -33,6 +34,7 @@ export const QuickPresetChips = ({
   };
 
   const startPress = (preset: QuickPresetItem, clientX: number, clientY: number) => {
+    isDraggingRef.current = false;
     didTriggerLongPressRef.current = false;
     touchStartPosRef.current = { x: clientX, y: clientY };
     setActiveLongPressId(preset.id);
@@ -51,9 +53,11 @@ export const QuickPresetChips = ({
     animFrameRef.current = requestAnimationFrame(updateProgress);
 
     timerRef.current = setTimeout(() => {
-      didTriggerLongPressRef.current = true;
-      triggerHaptic(50);
-      onDirectSave(preset);
+      if (!isDraggingRef.current) {
+        didTriggerLongPressRef.current = true;
+        triggerHaptic(50);
+        onDirectSave(preset);
+      }
       cancelPress(false);
     }, LONG_PRESS_DURATION_MS);
   };
@@ -71,7 +75,7 @@ export const QuickPresetChips = ({
     setActiveLongPressId(null);
     setPressProgress(0);
 
-    if (triggerTapIfShort && !didTriggerLongPressRef.current && preset) {
+    if (triggerTapIfShort && !didTriggerLongPressRef.current && !isDraggingRef.current && preset) {
       triggerHaptic(15);
       onSelectPreset(preset);
     }
@@ -86,8 +90,8 @@ export const QuickPresetChips = ({
     if (!touch) return;
     const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
     const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
-    // Si el usuario se desplaza más de 10px, asume scroll horizontal y cancela
-    if (dx > 10 || dy > 10) {
+    if (dx > 6 || dy > 6) {
+      isDraggingRef.current = true;
       cancelPress(false);
     }
   };
@@ -95,8 +99,12 @@ export const QuickPresetChips = ({
   return (
     <div className="w-full flex flex-col gap-1 my-0.5">
       {/* Fila de atajos y botón de ajustes */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 px-0.5">
-        <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 w-full py-0.5 px-0.5">
+        <div
+          id="quickPresetsScrollContainer"
+          className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar"
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
+        >
           {presets.map((p) => {
             const isPressing = activeLongPressId === p.id;
             return (
@@ -113,7 +121,7 @@ export const QuickPresetChips = ({
                 onMouseDown={(e: MouseEvent) => startPress(p, e.clientX, e.clientY)}
                 onMouseUp={() => cancelPress(true, p)}
                 onMouseLeave={() => cancelPress(false)}
-                className={`relative overflow-hidden px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-sm shrink-0 active:scale-95 ${
+                className={`relative overflow-hidden px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none touch-manipulation [-webkit-touch-callout:none] shadow-sm shrink-0 active:scale-95 whitespace-nowrap ${
                   isPressing
                     ? "bg-emerald-950/70 border-emerald-500 text-emerald-200 scale-95 ring-1 ring-emerald-500/50"
                     : "bg-[#0F172A] border-white/[0.08] text-slate-200 hover:border-slate-700 hover:text-white"
@@ -137,11 +145,11 @@ export const QuickPresetChips = ({
           })}
         </div>
 
-        {/* Botón de configuración/gestión de atajos */}
+        {/* Botón de configuración/gestión de atajos fijo a la derecha */}
         <button
           type="button"
           onClick={onOpenManageModal}
-          className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-90 transition-all shrink-0 ml-auto"
+          className="p-1.5 h-8 w-8 flex items-center justify-center rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-90 transition-all shrink-0"
           title="Gestionar atajos rápidos"
         >
           <Settings2 className="w-4 h-4" />

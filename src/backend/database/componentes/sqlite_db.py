@@ -24,8 +24,21 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     if isinstance(dbapi_connection, SQLite3Connection):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
+        journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
+        try:
+            cursor.execute(f"PRAGMA journal_mode={journal_mode}")
+            if journal_mode == "WAL":
+                cursor.execute("PRAGMA synchronous=NORMAL")
+        except Exception as e:
+            logger.warning(
+                "No se pudo establecer PRAGMA journal_mode=%s (%s). Fallback automático seguro a DELETE.",
+                journal_mode,
+                e,
+            )
+            try:
+                cursor.execute("PRAGMA journal_mode=DELETE")
+            except Exception:
+                pass
         cursor.execute("PRAGMA cache_size=-64000")
         cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.close()

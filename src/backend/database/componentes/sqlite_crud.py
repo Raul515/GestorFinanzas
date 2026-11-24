@@ -277,6 +277,13 @@ class SQLiteRepository(IRepository):
                             sync_svc.delete_receipt_file(sib_receipt)
                         except Exception:
                             pass
+                    sib_mob_evt = getattr(sib, "mobile_event_id", None)
+                    if sib_mob_evt:
+                        try:
+                            from backend.services.mobile_sync_service import MobileSyncService
+                            MobileSyncService().record_deleted_event_id(sib_mob_evt)
+                        except Exception:
+                            pass
                     sub = (
                         self.db.query(cat_model.Subcategory)
                         .filter(cat_model.Subcategory.id == sib.subcategory_id)
@@ -296,6 +303,15 @@ class SQLiteRepository(IRepository):
                     transaction_id,
                 )
                 return True
+
+            # Registrar lápida (tombstone) si la transacción proviene de móvil para evitar resurrección en sync
+            mob_evt = getattr(db_item, "mobile_event_id", None)
+            if mob_evt:
+                try:
+                    from backend.services.mobile_sync_service import MobileSyncService
+                    MobileSyncService().record_deleted_event_id(mob_evt)
+                except Exception as tomb_exc:
+                    logger.warning("No se pudo registrar tombstone para mobile_event_id %s: %s", mob_evt, tomb_exc)
 
             subcat = (
                 self.db.query(cat_model.Subcategory)

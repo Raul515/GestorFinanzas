@@ -396,13 +396,56 @@ def test_get_mobile_monthly_summary_and_budget_update(populated_db: Session):
     summary = service.get_mobile_monthly_summary(populated_db, month="2026-11")
     assert summary.month == "2026-11"
     assert summary.total_income == 2000.0
-    assert summary.total_spent == 15.0
+    assert summary.total_spent == 65.0  # 50.0 sub_cafe presupuestado + 15.0 tx
     assert summary.wants is not None
-    assert summary.wants.spent == 15.0
-    assert summary.wants.budget == 50.0
+    assert summary.wants.spent == 65.0
+    assert summary.wants.budget == 600.0  # 30% regla 50/30/20 sobre 2000.0 €
+    assert summary.needs is not None
+    assert summary.needs.budget == 1000.0  # 50% regla 50/30/20 sobre 2000.0 €
+    assert summary.savings is not None
+    assert summary.savings.budget == 400.0  # 20% regla 50/30/20 sobre 2000.0 €
     assert summary.emergency_fund is not None
     assert summary.emergency_fund.target_amount > 0
     assert len(summary.subcategories) >= 1
+
+
+def test_mobile_monthly_summary_zero_income_503020_and_month_switch(populated_db: Session):
+    """Verifica que sin ingresos los topes 50/30/20 sean 0.0 y que cambiar de mes calcule métricas independientes."""
+    service = MobileSyncService()
+    sub_cafe = populated_db.query(Subcategory).filter(Subcategory.name == "Café y Desayunos").first()
+    assert sub_cafe is not None
+
+    # Mes 2026-10: Sin ingresos, con presupuesto de 5.0 y transacción de 10.0
+    service.update_mobile_budget(populated_db, sub_cafe.id, 5.0, month="2026-10")
+    tx_oct = Transaction(
+        date=date(2026, 10, 15),
+        subcategory_id=sub_cafe.id,
+        amount=10.0,
+        description="Gasto Octubre",
+    )
+    populated_db.add(tx_oct)
+    populated_db.commit()
+
+    sum_oct = service.get_mobile_monthly_summary(populated_db, month="2026-10")
+    assert sum_oct.month == "2026-10"
+    assert sum_oct.total_income == 0.0
+    assert sum_oct.total_spent == 15.0  # 5.0 presupuesto + 10.0 transacción
+    assert sum_oct.remaining_budget == -15.0  # Balance negativo idéntico al PC
+    assert sum_oct.wants is not None
+    assert sum_oct.needs is not None
+    assert sum_oct.savings is not None
+    assert sum_oct.wants.budget == 0.0  # 30% de 0 ingresos = 0.0 €
+    assert sum_oct.needs.budget == 0.0  # 50% de 0 ingresos = 0.0 €
+    assert sum_oct.savings.budget == 0.0  # 20% de 0 ingresos = 0.0 €
+    assert sum_oct.wants.spent == 15.0
+    assert sum_oct.wants.remaining == -15.0
+
+    # Mes 2026-09: Completamente vacío
+    sum_sep = service.get_mobile_monthly_summary(populated_db, month="2026-09")
+    assert sum_sep.month == "2026-09"
+    assert sum_sep.total_income == 0.0
+    assert sum_sep.total_spent == 0.0
+    assert sum_sep.remaining_budget == 0.0
 
 
 def test_mobile_apk_ota_version_and_publish(tmp_path: Path):
@@ -485,6 +528,46 @@ def test_delete_mobile_transaction_by_id_and_by_event_id(populated_db, tmp_path:
 
     # 4. Intentar eliminar identificador inexistente
     assert service.delete_mobile_transaction(populated_db, "inexistente_123") is None
+
+    # 5. Comprobar que los event_ids eliminados fueron registrados como tombstones
+    deleted_ids = service.get_deleted_event_ids()
+    assert "evt_del_test_001" in deleted_ids
+    assert "evt_del_test_002" in deleted_ids
+
+
+def test_tombstone_prevents_mobile_sync_resurrection(populated_db, tmp_path: Path):
+    """Valida que un evento eliminado (tombstone) no pueda resucitar ni ser reinsertado por sync posterior."""
+    service = MobileSyncService(base_sync_dir=str(tmp_path))
+    subcat = populated_db.query(Subcategory).first()
+
+    # 1. Registrar una lápida explícita
+    service.record_deleted_event_id("evt_tombstone_999")
+    assert "evt_tombstone_999" in service.get_deleted_event_ids()
+
+    # 2. Intentar sincronizar esa transacción desde el cliente móvil
+    req = MobileSyncRequest(
+        device_id="mobile-phone-test",
+        transactions=[
+            MobileTransactionPayload(
+                event_id="evt_tombstone_999",
+                amount=15.0,
+                description="Intento de resurrección de gasto borrado",
+                date=date(2026, 11, 24),
+                subcategory_id=subcat.id,
+            )
+        ],
+    )
+    res = service.process_mobile_sync(populated_db, req)
+    assert res.processed_count == 0
+    assert res.ignored_duplicates_count == 1
+
+    # 3. Comprobar que no existe en base de datos
+    assert (
+        populated_db.query(Transaction)
+        .filter(Transaction.mobile_event_id == "evt_tombstone_999")
+        .first()
+        is None
+    )
 
 
 def test_wants_traffic_light_prediction_and_thresholds():

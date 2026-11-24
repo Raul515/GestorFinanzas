@@ -4,6 +4,7 @@ services:
     environment:
       - PYTHONPATH=/app/src:/app
       - DEVICE_ID=${DEVICE_ID:-}
+      - SQLITE_JOURNAL_MODE=${SQLITE_JOURNAL_MODE:-DELETE}
     volumes:
       - ../:/app
       - /app/.venv

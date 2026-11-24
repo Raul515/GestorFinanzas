@@ -136,6 +136,13 @@ async def log_requests_middleware(request: Request, call_next):
 
     try:
         response = await call_next(request)
+        if request.url.path.startswith("/mobile") and (
+            request.url.path in ("/mobile", "/mobile/")
+            or request.url.path.endswith((".html", ".js", "manifest.json"))
+        ):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         duration_ms = (time.perf_counter() - start_time) * 1000.0
         logger.info(
             "HTTP %s %s completed with status %d in %.2f ms",

@@ -179,6 +179,7 @@ class MobileHistoricalTransactionItem(BaseModel):
     category_name: str
     receipt_filename: Optional[str] = None
     receipt_url: Optional[str] = None
+    mobile_event_id: Optional[str] = None
 
 
 class MobileSearchResponse(BaseModel):

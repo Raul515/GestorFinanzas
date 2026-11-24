@@ -14,7 +14,7 @@ import logging
 import os
 from pathlib import Path
 import secrets
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -66,8 +66,41 @@ class MobileSyncService:
         self.receipts_dir = self.mobile_dir / "receipts"
         self.pairing_file = self.mobile_dir / "pairing_secret.txt"
         self.pin_file = self.mobile_dir / "active_pin.json"
+        self.deleted_events_file = self.mobile_dir / "deleted_event_ids.json"
 
         self._ensure_directories()
+
+    def get_deleted_event_ids(self) -> Set[str]:
+        """Retorna el conjunto de UUIDs de eventos móviles eliminados (tombstones)."""
+        if not self.deleted_events_file.exists():
+            return set()
+        try:
+            with open(self.deleted_events_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return set(data)
+                return set()
+        except Exception as e:
+            logger.warning("Error leyendo deleted_event_ids.json: %s", e)
+            return set()
+
+    def record_deleted_event_id(self, event_id: str) -> None:
+        """Registra un UUID de evento móvil en el archivo persistente de eliminados (tombstones)."""
+        if not event_id or not event_id.strip():
+            return
+        cleaned = event_id.strip()
+        deleted_set = self.get_deleted_event_ids()
+        if cleaned in deleted_set:
+            return
+        deleted_set.add(cleaned)
+        try:
+            tmp_file = self.mobile_dir / "deleted_event_ids.json.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(sorted(list(deleted_set)), f, indent=2)
+            os.replace(tmp_file, self.deleted_events_file)
+            logger.info("UUID móvil registrado como eliminado (tombstone): %s", cleaned)
+        except Exception as e:
+            logger.error("Error registrando tombstone en deleted_event_ids.json: %s", e)
 
     def get_or_create_pairing_token(self) -> str:
         """Obtiene o genera de forma persistente el token secreto de emparejamiento."""
@@ -348,6 +381,7 @@ class MobileSyncService:
 
         processed_count = 0
         ignored_duplicates_count = 0
+        deleted_ids = self.get_deleted_event_ids()
 
         # Mapeo rápido de subcategorías existentes por id y por nombre en minúsculas
         all_subcats = db.query(Subcategory).all()
@@ -356,6 +390,12 @@ class MobileSyncService:
 
         try:
             for item in request.transactions:
+                # 0. Comprobación de tombstone (si fue eliminada por el usuario, no reinsertar)
+                if item.event_id and item.event_id in deleted_ids:
+                    logger.info("Ignorando transacción móvil %s porque fue eliminada previamente (tombstone)", item.event_id)
+                    ignored_duplicates_count += 1
+                    continue
+
                 # 1. Comprobación idempotente primaria por UUID (mobile_event_id)
                 if item.event_id:
                     existing = (
@@ -603,22 +643,38 @@ class MobileSyncService:
                 "budget": 0.0,
             })
 
+        income_budgeted = 0.0
         for s in subcats:
             cat = subcat_to_cat.get(s.id)
-            if self.is_income_category(cat):
-                continue
-            cat_id = s.category_id
             amt_budgeted = float(month_map.get(s.id, base_map.get(s.id, 0.0)))
             amt_spent = float(spent_by_subcat.get(s.id, 0.0))
+            if self.is_income_category(cat):
+                income_budgeted += amt_budgeted
+                continue
+            cat_id = s.category_id
+            subcat_real = amt_budgeted + amt_spent
             cat_budgeted[cat_id] += amt_budgeted
-            cat_spent[cat_id] += amt_spent
+            cat_spent[cat_id] += subcat_real
             subcat_summary_list.append({
                 "subcategory_id": s.id,
                 "subcategory_name": s.name,
                 "category_name": cat.name if cat else "General",
-                "spent": round(amt_spent, 2),
+                "spent": round(subcat_real, 2),
                 "budget": round(amt_budgeted, 2),
             })
+
+        total_income_real = round(income_budgeted + income_total, 2)
+        income_base = income_budgeted if income_budgeted > 0.0 else total_income_real
+
+        has_income_category = any(self.is_income_category(c) for c in categories)
+        if has_income_category:
+            rule_target_needs = round(income_base * 0.50, 2)
+            rule_target_wants = round(income_base * 0.30, 2)
+            rule_target_savings = round(income_base * 0.20, 2)
+        else:
+            rule_target_needs = None
+            rule_target_wants = None
+            rule_target_savings = None
 
         categories_summary: List[MobileCategorySummary] = []
         total_b = 0.0
@@ -633,8 +689,25 @@ class MobileSyncService:
                 continue
             b_amt = round(float(cat_budgeted[cat.id]), 2)
             s_amt = round(float(cat_spent[cat.id]), 2)
-            r_amt = round(b_amt - s_amt, 2)
-            prog = round((s_amt / b_amt * 100) if b_amt > 0 else (100.0 if s_amt > 0 else 0.0), 1)
+            c_low = cat.name.lower()
+
+            rule_pct = 0.0
+            rule_budget = b_amt
+            if "necesidad" in c_low or "50%" in c_low:
+                rule_pct = 50.0
+                if rule_target_needs is not None:
+                    rule_budget = rule_target_needs
+            elif "deseo" in c_low or "30%" in c_low:
+                rule_pct = 30.0
+                if rule_target_wants is not None:
+                    rule_budget = rule_target_wants
+            elif "ahorro" in c_low or "20%" in c_low or "invers" in c_low:
+                rule_pct = 20.0
+                if rule_target_savings is not None:
+                    rule_budget = rule_target_savings
+
+            r_amt = round(rule_budget - s_amt, 2)
+            prog = round((s_amt / rule_budget * 100) if rule_budget > 0 else (100.0 if s_amt > 0 else 0.0), 1)
 
             cat_sum = MobileCategorySummary(
                 category_id=cat.id,
@@ -642,8 +715,9 @@ class MobileSyncService:
                 budgeted_amount=b_amt,
                 spent_amount=s_amt,
                 remaining_amount=r_amt,
+                rule_percentage=rule_pct,
                 spent=s_amt,
-                budget=b_amt,
+                budget=rule_budget,
                 remaining=r_amt,
                 progress_percentage=prog,
             )
@@ -651,32 +725,58 @@ class MobileSyncService:
             total_s += s_amt
             categories_summary.append(cat_sum)
 
-            c_low = cat.name.lower()
-            if "necesidad" in c_low or "50%" in c_low:
-                cat_sum.rule_percentage = 50.0
+            if rule_pct == 50.0:
                 needs_summary = cat_sum
-            elif "deseo" in c_low or "30%" in c_low:
-                cat_sum.rule_percentage = 30.0
+            elif rule_pct == 30.0:
                 wants_summary = cat_sum
-            elif "ahorro" in c_low or "20%" in c_low or "invers" in c_low:
-                cat_sum.rule_percentage = 20.0
+            elif rule_pct == 20.0:
                 savings_summary = cat_sum
 
         # Fallbacks si no existen categorías específicas
         if not needs_summary:
-            needs_summary = MobileCategorySummary(category_id=0, category_name="Necesidades Básicas (50%)", budgeted_amount=0, spent_amount=0, remaining_amount=0, rule_percentage=50.0)
+            needs_summary = MobileCategorySummary(
+                category_id=0,
+                category_name="Necesidades Básicas (50%)",
+                budgeted_amount=0,
+                spent_amount=0,
+                remaining_amount=0,
+                rule_percentage=50.0,
+                budget=round(income_base * 0.50, 2) if has_income_category else 0.0,
+            )
         if not wants_summary:
-            wants_summary = MobileCategorySummary(category_id=0, category_name="Deseos (30%)", budgeted_amount=0, spent_amount=0, remaining_amount=0, rule_percentage=30.0)
+            wants_summary = MobileCategorySummary(
+                category_id=0,
+                category_name="Deseos (30%)",
+                budgeted_amount=0,
+                spent_amount=0,
+                remaining_amount=0,
+                rule_percentage=30.0,
+                budget=round(income_base * 0.30, 2) if has_income_category else 0.0,
+            )
         if not savings_summary:
-            savings_summary = MobileCategorySummary(category_id=0, category_name="Ahorro e Inversión (20%)", budgeted_amount=0, spent_amount=0, remaining_amount=0, rule_percentage=20.0)
+            savings_summary = MobileCategorySummary(
+                category_id=0,
+                category_name="Ahorro e Inversión (20%)",
+                budgeted_amount=0,
+                spent_amount=0,
+                remaining_amount=0,
+                rule_percentage=20.0,
+                budget=round(income_base * 0.20, 2) if has_income_category else 0.0,
+            )
 
         if unassigned_spent > 0:
             total_s += unassigned_spent
             if wants_summary:
                 wants_summary.spent_amount = round(wants_summary.spent_amount + unassigned_spent, 2)
                 wants_summary.spent = wants_summary.spent_amount
-                wants_summary.remaining_amount = round(wants_summary.budgeted_amount - wants_summary.spent_amount, 2)
+                wants_summary.remaining_amount = round(wants_summary.budget - wants_summary.spent_amount, 2)
                 wants_summary.remaining = wants_summary.remaining_amount
+                wants_summary.progress_percentage = round(
+                    (wants_summary.spent / wants_summary.budget * 100) if wants_summary.budget > 0 else (100.0 if wants_summary.spent > 0 else 0.0), 1
+                )
+
+        total_remaining = round(total_income_real - total_s, 2)
+        remaining_budget = total_remaining
 
         ef = db.query(EmergencyFund).first()
         ef_balance = float(ef.current_balance) if ef else 0.0
@@ -701,9 +801,9 @@ class MobileSyncService:
             month=current_m,
             total_budgeted=round(total_b, 2),
             total_spent=round(total_s, 2),
-            total_remaining=round(total_b - total_s, 2),
-            total_income=round(income_total, 2),
-            remaining_budget=round(income_total - total_s if income_total > 0 else (total_b - total_s), 2),
+            total_remaining=total_remaining,
+            total_income=total_income_real,
+            remaining_budget=remaining_budget,
             categories=categories_summary,
             emergency_fund_balance=round(ef_balance, 2),
             emergency_fund_target_months=ef_target_months,
@@ -858,11 +958,14 @@ class MobileSyncService:
             return None
 
         tx_id = tx.id
+        tx_mob_id = getattr(tx, "mobile_event_id", None)
         receipt_to_delete = getattr(tx, "receipt_filename", None)
         from backend.database.componentes.sqlite_crud import SQLiteRepository
         repo = SQLiteRepository(db)
         success = repo.delete_transaction(tx_id)
         if success:
+            if tx_mob_id:
+                self.record_deleted_event_id(tx_mob_id)
             if receipt_to_delete:
                 self.delete_receipt_file(receipt_to_delete)
             logger.info("Transacción móvil eliminada con éxito (ID: %s, event_id: %s)", tx_id, tx.mobile_event_id)
@@ -913,6 +1016,7 @@ class MobileSyncService:
                     category_name=cat_name,
                     receipt_filename=r_fn,
                     receipt_url=f"/api/mobile/receipts/{r_fn}" if r_fn else None,
+                    mobile_event_id=getattr(tx, "mobile_event_id", None),
                 )
             )
 
@@ -958,6 +1062,7 @@ class MobileSyncService:
                     category_name=cat_name,
                     receipt_filename=r_fn,
                     receipt_url=f"/api/mobile/receipts/{r_fn}" if r_fn else None,
+                    mobile_event_id=getattr(tx, "mobile_event_id", None),
                 )
             )
         return items
