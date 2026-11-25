@@ -54,10 +54,8 @@ def get_financial_profile(
             for s in subcategories
         ]
 
-        # 2. Recuperar presupuestos del mes (o plantilla BASE como respaldo)
+        # 2. Recuperar presupuestos efectivos del mes (fusión sobre plantilla BASE)
         budgets_raw = repo.get_budgets(target_month)
-        if not budgets_raw and target_month != "BASE":
-            budgets_raw = repo.get_budgets("BASE")
 
         budget_dicts = [
             {"subcategoria_id": b.subcategory_id, "cantidad": b.amount}
@@ -76,10 +74,23 @@ def get_financial_profile(
         ]
 
         # 4. Calcular totales contables por bloque 50/30/20
-        ingresos_name = "Ingresos Netos"
-        necesidades_name = "Necesidades Básicas"
-        deseos_name = "Deseos"
-        ahorro_name = "Ahorro e Inversión"
+        from backend.domain.constants import CANONICAL_CATEGORY_NAMES, CategoryBlock, classify_category_block
+        from backend.services.safety_guard import resolve_monthly_needs
+
+        ingresos_name = CANONICAL_CATEGORY_NAMES[CategoryBlock.INCOME]
+        necesidades_name = CANONICAL_CATEGORY_NAMES[CategoryBlock.NEEDS]
+        deseos_name = CANONICAL_CATEGORY_NAMES[CategoryBlock.WANTS]
+        ahorro_name = CANONICAL_CATEGORY_NAMES[CategoryBlock.SAVINGS]
+        for c in categories:
+            blk = classify_category_block(c)
+            if blk == CategoryBlock.INCOME:
+                ingresos_name = c.name
+            elif blk == CategoryBlock.NEEDS:
+                necesidades_name = c.name
+            elif blk == CategoryBlock.WANTS:
+                deseos_name = c.name
+            elif blk == CategoryBlock.SAVINGS:
+                ahorro_name = c.name
 
         totales_m = calculate_category_totals(
             categorias=cat_dicts,
@@ -96,6 +107,7 @@ def get_financial_profile(
         pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
         real_nec = totales_m.get(necesidades_name, {}).get("real", 0.0)
         pres_nec = totales_m.get(necesidades_name, {}).get("presupuesto", 0.0)
+        budgeted_nec = totales_m.get(necesidades_name, {}).get("presupuesto_subcategorias", 0.0)
         real_des = totales_m.get(deseos_name, {}).get("real", 0.0)
         pres_des = totales_m.get(deseos_name, {}).get("presupuesto", 0.0)
         real_aho = totales_m.get(ahorro_name, {}).get("real", 0.0)
@@ -110,19 +122,16 @@ def get_financial_profile(
         # 5. Evaluar Salvaguarda del Fondo de Emergencia
         fund = repo.get_or_create_emergency_fund()
 
-        # Determinar gasto mensual de referencia en necesidades básicas con fallback robusto
-        monthly_needs_ref = pres_nec if pres_nec > 0.0 else real_nec
+        # Determinar gasto mensual de referencia en necesidades esenciales presupuestadas (no tope 50%)
+        monthly_needs_ref = budgeted_nec
         if monthly_needs_ref <= 0.0:
-            if db is not None:
-                from backend.api.routers.safety_guard import _resolve_monthly_needs
-                monthly_needs_ref = _resolve_monthly_needs(db, target_month)
-            else:
-                repo_db = getattr(repo, "db", None)
-                if repo_db is not None:
-                    from backend.api.routers.safety_guard import _resolve_monthly_needs
-                    monthly_needs_ref = _resolve_monthly_needs(repo_db, target_month)
-                elif fund.target_amount and fund.target_amount > 0:
-                    monthly_needs_ref = round(fund.target_amount / max(3, fund.target_months), 2)
+            repo_db = db if db is not None else getattr(repo, "db", None)
+            if repo_db is not None:
+                monthly_needs_ref = resolve_monthly_needs(repo_db, target_month)
+            elif real_nec > 0.0:
+                monthly_needs_ref = real_nec
+            elif fund.target_amount and fund.target_amount > 0:
+                monthly_needs_ref = round(fund.target_amount / max(3, fund.target_months), 2)
 
         # Sincronizar estado
         fund = sync_fund_state(fund, monthly_needs_ref)
@@ -291,7 +300,8 @@ def get_cached_macro_overview(repo: IRepository) -> Dict[str, Any]:
     ya almacenados en la caché SQLite del Radar Macroeconómico.
     """
     logger.info("Ejecutando herramienta 'get_cached_macro_overview'")
-    cache_key = "macro_overview_indicators"
+    from backend.domain.constants import CACHE_KEY_MACRO_INDICATORS
+    cache_key = CACHE_KEY_MACRO_INDICATORS
 
     try:
         cached = repo.get_market_cache(cache_key)

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.database.componentes.sqlite_db import get_db
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.interfaz.db_interface import IRepository
+from backend.domain.constants import CACHE_KEY_MACRO_INDICATORS, CACHE_KEY_MACRO_NEWS
 from backend.domain.schemas.market import (
     MacroOverviewResponse,
     MarketNewsResponse,
@@ -18,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/market", tags=["market"])
 
-CACHE_KEY_INDICATORS = "macro_indicators"
-CACHE_KEY_NEWS = "macro_news"
 DEFAULT_TTL_HOURS = 24
 
 

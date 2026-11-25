@@ -38,8 +38,18 @@ from backend.domain.schemas.mobile import (
     MobileHistoricalTransactionItem,
     MobileSearchResponse,
 )
+from backend.domain.constants import (
+    CategoryBlock,
+    classify_category_block,
+    is_income_category as is_income_cat_canonical,
+)
 from backend.services.financial_calculator import calculate_503020_targets
 from backend.services.joint_sync_service import get_or_create_device_id
+from backend.services.safety_guard import (
+    evaluate_safety_status,
+    get_effective_monthly_budgets,
+    resolve_monthly_needs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -218,11 +228,7 @@ class MobileSyncService:
     @staticmethod
     def is_income_category(cat: Optional[Category]) -> bool:
         """Determina de forma uniforme si una categoría representa ingresos."""
-        if not cat:
-            return False
-        cat_type = getattr(cat, "type", "") or ""
-        cat_name = getattr(cat, "name", "") or ""
-        return cat_type.lower() in ("income", "ingreso") or "ingreso" in cat_name.lower()
+        return is_income_cat_canonical(cat)
 
     def create_or_get_subcategory(
         self,
@@ -249,10 +255,12 @@ class MobileSyncService:
             target_cat = db.query(Category).filter(Category.id == category_id).first()
 
         if not target_cat and category_name:
-            c_name_lower = category_name.strip().lower()
-            if "ingreso" in c_name_lower or "income" in c_name_lower:
-                target_cat = next((c for c in db.query(Category).all() if self.is_income_category(c)), None)
+            all_cats = db.query(Category).all()
+            block = classify_category_block(category_name)
+            if block is not None:
+                target_cat = next((c for c in all_cats if classify_category_block(c) == block), None)
             if not target_cat:
+                c_name_lower = category_name.strip().lower()
                 target_cat = (
                     db.query(Category)
                     .filter(func.lower(Category.name).like(f"%{c_name_lower}%"))
@@ -591,10 +599,8 @@ class MobileSyncService:
 
         categories = db.query(Category).order_by(Category.id).all()
 
-        budgets_month = db.query(MonthlyBudget).filter(MonthlyBudget.month == current_m).all()
-        base_budgets = db.query(MonthlyBudget).filter(MonthlyBudget.month == "BASE").all()
-        base_map = {b.subcategory_id: b.amount for b in base_budgets}
-        month_map = {b.subcategory_id: b.amount for b in budgets_month}
+        effective_budgets = get_effective_monthly_budgets(db, current_m)
+        effective_map = {b.subcategory_id: float(b.amount or 0.0) for b in effective_budgets}
 
         year_str, month_str = current_m.split("-")
         y = int(year_str)
@@ -647,7 +653,7 @@ class MobileSyncService:
         income_budgeted = 0.0
         for s in subcats:
             cat = subcat_to_cat.get(s.id)
-            amt_budgeted = float(month_map.get(s.id, base_map.get(s.id, 0.0)))
+            amt_budgeted = float(effective_map.get(s.id, 0.0))
             amt_spent = float(spent_by_subcat.get(s.id, 0.0))
             if self.is_income_category(cat):
                 income_budgeted += amt_budgeted
@@ -689,19 +695,19 @@ class MobileSyncService:
                 continue
             b_amt = round(float(cat_budgeted[cat.id]), 2)
             s_amt = round(float(cat_spent[cat.id]), 2)
-            c_low = cat.name.lower()
+            block = classify_category_block(cat)
 
             rule_pct = 0.0
             rule_budget = b_amt
-            if "necesidad" in c_low or "50%" in c_low:
+            if block == CategoryBlock.NEEDS:
                 rule_pct = 50.0
                 if rule_target_needs is not None:
                     rule_budget = rule_target_needs
-            elif "deseo" in c_low or "30%" in c_low:
+            elif block == CategoryBlock.WANTS:
                 rule_pct = 30.0
                 if rule_target_wants is not None:
                     rule_budget = rule_target_wants
-            elif "ahorro" in c_low or "20%" in c_low or "invers" in c_low:
+            elif block == CategoryBlock.SAVINGS:
                 rule_pct = 20.0
                 if rule_target_savings is not None:
                     rule_budget = rule_target_savings
@@ -779,22 +785,23 @@ class MobileSyncService:
         remaining_budget = total_remaining
 
         ef = db.query(EmergencyFund).first()
-        ef_balance = float(ef.current_balance) if ef else 0.0
-        ef_target_months = ef.target_months if ef else 3
+        ef_obj = ef if ef else EmergencyFund(current_balance=0.0, target_months=3, target_amount=0.0)
+        monthly_needs = resolve_monthly_needs(db, current_m)
+        if monthly_needs <= 0 and not (ef_obj.target_amount and ef_obj.target_amount > 0):
+            monthly_needs = 1000.0
+        safety = evaluate_safety_status(ef_obj, monthly_needs)
 
-        necesidades_cat = next((c for c in categories if "necesidad" in c.name.lower() or "50%" in c.name.lower()), None)
-        necesidades_mensual = float(cat_budgeted[necesidades_cat.id]) if necesidades_cat else 0.0
-        if necesidades_mensual <= 0:
-            necesidades_mensual = 1000.0
-        months_covered = round(ef_balance / necesidades_mensual, 1)
-        ef_target_amount = round(necesidades_mensual * ef_target_months, 2)
+        ef_balance = safety.current_balance
+        ef_target_months = safety.target_months
+        months_covered = safety.coverage_months
+        ef_target_amount = safety.target_amount
 
         from backend.domain.schemas.mobile import MobileEmergencyFundSummary
         emergency_fund_obj = MobileEmergencyFundSummary(
-            current_amount=round(ef_balance, 2),
+            current_amount=ef_balance,
             target_amount=ef_target_amount,
             months_covered=months_covered,
-            is_funded=(months_covered >= 3.0),
+            is_funded=safety.is_completed,
         )
 
         return MobileMonthlySummaryResponse(

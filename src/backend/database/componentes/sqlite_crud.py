@@ -20,6 +20,7 @@ from backend.domain.schemas import (
     joint as joint_schema,
 )
 from backend.domain.constants import (
+    DEFAULT_JOINT_SUBCATEGORIES,
     is_default_personal_subcategory,
     is_default_joint_subcategory,
 )
@@ -338,21 +339,12 @@ class SQLiteRepository(IRepository):
     # 3. Presupuestos Mensuales
     def get_budgets(self, month: str) -> List[pres_model.MonthlyBudget]:
         """
-        Obtiene los presupuestos del mes indicado.
-        Si no existen registros presupuestarios para dicho mes y no es 'BASE',
-        recurre automáticamente a la plantilla predeterminada 'BASE'.
+        Obtiene los presupuestos efectivos del mes indicado fusionando por subcategoría
+        las asignaciones del mes sobre la plantilla predeterminada 'BASE'.
         """
-        specific = self.db.query(pres_model.MonthlyBudget).filter(pres_model.MonthlyBudget.month == month).all()
-        if month == "BASE" or specific:
-            return specific
+        from backend.services.safety_guard import get_effective_monthly_budgets
 
-        # Contingencia: recurrir a la plantilla presupuestaria BASE
-        base_list = self.db.query(pres_model.MonthlyBudget).filter(pres_model.MonthlyBudget.month == "BASE").all()
-        result = []
-
-        for b in base_list:
-            result.append(pres_model.MonthlyBudget(id=0, month=month, subcategory_id=b.subcategory_id, amount=b.amount))
-        return result
+        return get_effective_monthly_budgets(self.db, month)
 
     def create_budget(self, budget: pres_schema.MonthlyBudgetCreate) -> pres_model.MonthlyBudget:
         """Crea o actualiza una asignación presupuestaria individual."""
@@ -694,13 +686,7 @@ class SQLiteRepository(IRepository):
         self.db.add(cat_needs)
         self.db.flush()
 
-        default_subcats = [
-            "Vivienda (Alquiler / Hipoteca)",
-            "Suministros (Luz, Agua, Gas, Internet)",
-            "Alimentación y Supermercado",
-            "Comunidad y Seguros del Hogar",
-        ]
-        for sub_name in default_subcats:
+        for sub_name in DEFAULT_JOINT_SUBCATEGORIES:
             self.db.add(
                 joint_model.JointSubcategory(
                     joint_category_id=cat_needs.id,

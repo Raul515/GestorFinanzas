@@ -42,6 +42,7 @@ def calculate_category_totals(
         ]
         t_pres = 0.0
         t_real = 0.0
+        subcats_detail: Dict[int, Dict[str, float]] = {}
 
         for s in cat_subcats:
             s_id = s.get("id")
@@ -64,15 +65,20 @@ def calculate_category_totals(
                 ]
                 tval = sum(r_match)
 
-            t_real += (pval + tval)
+            s_real = pval + tval
+            t_real += s_real
+            if s_id is not None:
+                subcats_detail[int(s_id)] = {"presupuesto": pval, "real": s_real}
 
         c_name = cat.get("nombre") or cat.get("name", "")
         c_type = cat.get("tipo") or cat.get("type", "")
         totales_m[c_name] = {
             "presupuesto": t_pres,
+            "presupuesto_subcategorias": t_pres,
             "real": t_real,
             "tipo": c_type,
             "subcategorias": cat_subcats,
+            "subcategorias_detalle": subcats_detail,
         }
 
     # Derivar los topes presupuestarios 50/30/20 a partir del ingreso neto real (presupuestado + real)

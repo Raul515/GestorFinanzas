@@ -45,20 +45,21 @@ export const isIncomeSubcategory = (
 };
 
 // Catálogo estándar de fallback si la app se abre por primera vez completamente sin red
+// Se usan IDs negativos (-1..-13) para no colisionar nunca con los IDs positivos de SQLite
 export const DEFAULT_FALLBACK_SUBCATEGORIES: SubcategoryItem[] = [
-  { id: 1, name: "Café y Desayunos", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
-  { id: 2, name: "Supermercado", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
-  { id: 3, name: "Restaurante", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
-  { id: 4, name: "Gasolina", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
-  { id: 5, name: "Farmacia", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
-  { id: 6, name: "Pádel / Ocio", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
-  { id: 7, name: "Alquiler / Hipoteca", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
-  { id: 8, name: "Suministros (Luz, Agua)", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
-  { id: 9, name: "Suscripciones", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: false },
-  { id: 10, name: "Fondo de Emergencia", category_id: 4, category_name: "Ahorro e Inversión (20%)", category_type: "expense", is_frequent: false },
-  { id: 11, name: "Salario NETO / Nómina", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
-  { id: 12, name: "Bizum / Ingreso extra", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
-  { id: 13, name: "Devoluciones y Reembolsos", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: false },
+  { id: -1, name: "Café y Desayunos", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: -2, name: "Supermercado", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: -3, name: "Restaurante", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: -4, name: "Gasolina", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: -5, name: "Farmacia", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: true },
+  { id: -6, name: "Pádel / Ocio", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: true },
+  { id: -7, name: "Alquiler / Hipoteca", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
+  { id: -8, name: "Suministros (Luz, Agua)", category_id: 2, category_name: "Necesidades Básicas (50%)", category_type: "expense", is_frequent: false },
+  { id: -9, name: "Suscripciones", category_id: 3, category_name: "Deseos (30%)", category_type: "expense", is_frequent: false },
+  { id: -10, name: "Fondo de Emergencia", category_id: 4, category_name: "Ahorro e Inversión (20%)", category_type: "expense", is_frequent: false },
+  { id: -11, name: "Salario NETO / Nómina", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
+  { id: -12, name: "Bizum / Ingreso extra", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: true },
+  { id: -13, name: "Devoluciones y Reembolsos", category_id: 1, category_name: "Ingresos Netos", category_type: "income", is_frequent: false },
 ];
 
 export const DEFAULT_FALLBACK_CONCEPTS: string[] = [

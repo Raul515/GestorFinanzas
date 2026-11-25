@@ -6,7 +6,7 @@ resumen anual consolidado del hogar (sin marcadores individuales) y preparación
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import uuid
 
 def _format_date_excel(d_val: Any) -> str:
@@ -33,6 +33,54 @@ from backend.domain.schemas.joint import (
     SyncEntityType,
     SyncEventPayload,
 )
+
+
+def calculate_member_ratios(
+    split_mode: Any,
+    member_a_income: float = 0.0,
+    member_b_income: float = 0.0,
+    member_a_pct: float = 50.0,
+    member_b_pct: float = 50.0,
+) -> Tuple[float, float]:
+    """Calcula la proporción de reparto (ratio_a, ratio_b) entre miembros según el modo pactado."""
+    mode_val = split_mode.value if hasattr(split_mode, "value") else str(split_mode or SplitMode.EQUAL_50_50.value)
+    if mode_val == SplitMode.EQUAL_50_50.value:
+        return 0.5, 0.5
+    if mode_val == SplitMode.INCOME_PROPORTIONAL.value:
+        total_inc = float(member_a_income or 0.0) + float(member_b_income or 0.0)
+        if total_inc > 0:
+            ratio_a = float(member_a_income or 0.0) / total_inc
+            return ratio_a, 1.0 - ratio_a
+        return 0.5, 0.5
+    if mode_val == SplitMode.CUSTOM_FIXED.value:
+        tot_pct = float(member_a_pct or 0.0) + float(member_b_pct or 0.0)
+        if tot_pct > 0:
+            ratio_a = float(member_a_pct or 0.0) / tot_pct
+            return ratio_a, 1.0 - ratio_a
+        pct_a = float(member_a_pct or 50.0) / 100.0
+        return pct_a, 1.0 - pct_a
+    return 0.5, 0.5
+
+
+def calculate_member_shares(
+    total_amount: float,
+    split_mode: Any,
+    member_a_income: float = 0.0,
+    member_b_income: float = 0.0,
+    member_a_pct: float = 50.0,
+    member_b_pct: float = 50.0,
+) -> Tuple[float, float]:
+    """Reparte un importe total en (share_a, share_b) redondeado al céntimo exacto."""
+    ratio_a, _ = calculate_member_ratios(
+        split_mode=split_mode,
+        member_a_income=member_a_income,
+        member_b_income=member_b_income,
+        member_a_pct=member_a_pct,
+        member_b_pct=member_b_pct,
+    )
+    share_a = round(total_amount * ratio_a, 2)
+    share_b = round(total_amount - share_a, 2)
+    return share_a, share_b
 
 
 def calculate_monthly_contributions(
@@ -75,31 +123,19 @@ def calculate_monthly_contributions(
         # Estrategia A: Bottom-Up (Suma de cuotas nominales)
         total_household_budget = round(effective_needs_budget + sinking_funds_target, 2)
 
-        # Reparto entre miembros
-        if split_mode == SplitMode.EQUAL_50_50:
-            member_a_contribution = round(total_household_budget * 0.5, 2)
-            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-        elif split_mode == SplitMode.INCOME_PROPORTIONAL:
-            total_income = member_a_income + member_b_income
-            if total_income > 0:
-                ratio_a = member_a_income / total_income
-                member_a_contribution = round(total_household_budget * ratio_a, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-            else:
-                member_a_contribution = round(total_household_budget * 0.5, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-        elif split_mode == SplitMode.CUSTOM_FIXED:
-            if custom_member_a_fixed is not None and custom_member_b_fixed is not None:
-                member_a_contribution = round(custom_member_a_fixed, 2)
-                member_b_contribution = round(custom_member_b_fixed, 2)
-                total_household_budget = round(member_a_contribution + member_b_contribution, 2)
-            else:
-                pct_a = member_a_contribution_pct / 100.0
-                member_a_contribution = round(total_household_budget * pct_a, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+        if split_mode == SplitMode.CUSTOM_FIXED and custom_member_a_fixed is not None and custom_member_b_fixed is not None:
+            member_a_contribution = round(custom_member_a_fixed, 2)
+            member_b_contribution = round(custom_member_b_fixed, 2)
+            total_household_budget = round(member_a_contribution + member_b_contribution, 2)
         else:
-            member_a_contribution = round(total_household_budget * 0.5, 2)
-            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+            member_a_contribution, member_b_contribution = calculate_member_shares(
+                total_household_budget,
+                split_mode=split_mode,
+                member_a_income=member_a_income,
+                member_b_income=member_b_income,
+                member_a_pct=member_a_contribution_pct,
+                member_b_pct=100.0 - member_a_contribution_pct,
+            )
 
         # Cada hucha nominal activa recibe su cuota fijada; las completadas reciben 0.00 €
         for f in sinking_funds:
@@ -115,31 +151,19 @@ def calculate_monthly_contributions(
         # Estrategia C: Presupuesto Fijo Global fijado directamente por el usuario (Manual)
         total_household_budget = round(max(0.0, float(custom_total_monthly_budget or 0.0)), 2)
 
-        # Reparto entre miembros según el split_mode seleccionado
-        if split_mode == SplitMode.EQUAL_50_50:
-            member_a_contribution = round(total_household_budget * 0.5, 2)
-            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-        elif split_mode == SplitMode.INCOME_PROPORTIONAL:
-            total_income = member_a_income + member_b_income
-            if total_income > 0:
-                ratio_a = member_a_income / total_income
-                member_a_contribution = round(total_household_budget * ratio_a, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-            else:
-                member_a_contribution = round(total_household_budget * 0.5, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
-        elif split_mode == SplitMode.CUSTOM_FIXED:
-            if custom_member_a_fixed is not None and custom_member_b_fixed is not None:
-                member_a_contribution = round(custom_member_a_fixed, 2)
-                member_b_contribution = round(custom_member_b_fixed, 2)
-                total_household_budget = round(member_a_contribution + member_b_contribution, 2)
-            else:
-                pct_a = member_a_contribution_pct / 100.0
-                member_a_contribution = round(total_household_budget * pct_a, 2)
-                member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+        if split_mode == SplitMode.CUSTOM_FIXED and custom_member_a_fixed is not None and custom_member_b_fixed is not None:
+            member_a_contribution = round(custom_member_a_fixed, 2)
+            member_b_contribution = round(custom_member_b_fixed, 2)
+            total_household_budget = round(member_a_contribution + member_b_contribution, 2)
         else:
-            member_a_contribution = round(total_household_budget * 0.5, 2)
-            member_b_contribution = round(total_household_budget - member_a_contribution, 2)
+            member_a_contribution, member_b_contribution = calculate_member_shares(
+                total_household_budget,
+                split_mode=split_mode,
+                member_a_income=member_a_income,
+                member_b_income=member_b_income,
+                member_a_pct=member_a_contribution_pct,
+                member_b_pct=100.0 - member_a_contribution_pct,
+            )
 
         # Asignación interna a necesidades y remanente para huchas de amortización
         if cohabitation_stage == CohabitationStage.COHABITATION:
@@ -588,25 +612,18 @@ def calculate_settlement_summary(
     - Reembolso desde la Cuenta Común (el fondo común adeuda el 100% al miembro pagador).
     - Liquidación directa entre miembros (Bizum/transferencia según ratio de reparto acordado).
     """
-    # Determinar ratios de contribución/reparto
+    # Determinar ratios de contribución/reparto (incluyendo INCOME_PROPORTIONAL)
     ratio_a = 0.5
     ratio_b = 0.5
     if account:
-        split_mode = str(getattr(account, "split_mode", "EQUAL_50_50"))
-        if split_mode == "PROPORTIONAL_INCOME":
-            inc_a = float(getattr(account, "member_a_reference_income", 0.0) or 0.0)
-            inc_b = float(getattr(account, "member_b_reference_income", 0.0) or 0.0)
-            tot_inc = inc_a + inc_b
-            if tot_inc > 0:
-                ratio_a = inc_a / tot_inc
-                ratio_b = inc_b / tot_inc
-        else:
-            pct_a = float(getattr(account, "member_a_contribution_pct", 50.0) or 50.0)
-            pct_b = float(getattr(account, "member_b_contribution_pct", 50.0) or 50.0)
-            tot_pct = pct_a + pct_b
-            if tot_pct > 0:
-                ratio_a = pct_a / tot_pct
-                ratio_b = pct_b / tot_pct
+        split_mode = getattr(account, "split_mode", SplitMode.EQUAL_50_50.value)
+        ratio_a, ratio_b = calculate_member_ratios(
+            split_mode=split_mode,
+            member_a_income=float(getattr(account, "member_a_reference_income", 0.0) or 0.0),
+            member_b_income=float(getattr(account, "member_b_reference_income", 0.0) or 0.0),
+            member_a_pct=float(getattr(account, "member_a_contribution_pct", 50.0) or 50.0),
+            member_b_pct=float(getattr(account, "member_b_contribution_pct", 50.0) or 50.0),
+        )
 
     owes_member_a = 0.0
     owes_member_b = 0.0

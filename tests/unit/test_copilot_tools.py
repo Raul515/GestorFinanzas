@@ -64,14 +64,14 @@ def test_get_financial_profile_emergency_fund_covered(
     db_session.add_all([b1, b_sal])
     db_session.commit()
 
-    # Fondo cubierto con 4,000 € frente a meta de 3,750 € (1,250 €/mes x 3 = 3,750 €)
+    # Fondo cubierto con 4,000 € frente a meta de 3,000 € (1,000 €/mes esenciales x 3 = 3,000 €)
     repo.update_emergency_fund(target_months=3, current_balance=4000.0)
 
     profile = get_financial_profile(repo=repo, db=db_session, month="BASE")
 
     assert profile["risk_investment_allowed"] is True
     assert profile["constitutional_warning"] is None
-    assert profile["emergency_fund"]["coverage_months"] == 3.2
+    assert profile["emergency_fund"]["coverage_months"] == 4.0
     assert profile["emergency_fund"]["is_completed"] is True
     assert profile["needs_50pct"]["target_cap"] == 1250.0  # 50% de 2,500 €
 
@@ -168,7 +168,8 @@ def test_get_cached_macro_overview_missing_and_found(db_session: Session):
             {"symbol": "RISK_PREMIUM_ES_DE", "name": "Prima de Riesgo", "price": 72.0, "change_pct": 0.0},
         ],
     }
-    repo.set_market_cache(key="macro_overview_indicators", data=mock_macro, ttl_hours=24)
+    from backend.domain.constants import CACHE_KEY_MACRO_INDICATORS
+    repo.set_market_cache(key=CACHE_KEY_MACRO_INDICATORS, data=mock_macro, ttl_hours=24)
 
     res_found = get_cached_macro_overview(repo=repo)
     assert res_found["found_in_cache"] is True
