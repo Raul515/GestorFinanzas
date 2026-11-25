@@ -320,4 +320,10 @@
        - *Cifrado Simétrico con Contraseña Maestra (AES-256-GCM / SQLCipher)*: Protección de bases exportadas o alojadas en nubes personales.
        - *Sincronización Externa de Respaldos (WebDAV / Nextcloud / S3 / Google Drive)*: Envío automático a nubes privadas del usuario.
        - *Alertas Proactivas de Integridad y Respaldo Vencido*: Notificaciones emergentes si transcurren más de 30 días sin backup o ante anomalías estructurales.
+   - **App Móvil Autónoma / Independiente del PC (Post-Spec 017)**:
+     - *Objetivo*: Explorar la viabilidad arquitectónica de convertir la app móvil (APK/PWA) en una aplicación **100% independiente**, usable de forma autónoma en el teléfono sin necesidad de tener el backend ni Docker encendidos en el PC.
+     - *Líneas a evaluar*:
+       - Persistencia local completa en el dispositivo (SQLite embebido en Capacitor o IndexedDB estructurado) para catálogo, presupuestos, histórico completo, Fondo de Emergencia y cálculo 50/30/20 autónomo sin depender del servidor PC.
+       - Copia de seguridad/exportación directa desde el móvil y sincronización opcional (con el PC o entre dispositivos vía P2P/nube privada/NAS) en lugar de obligatoria.
+       - Paridad progresiva de funcionalidades (gestión completa de categorías, presupuestos mensuales/anuales y opcionalmente finanzas conjuntas) manteniendo los principios constitucionales de privacidad local.
        - *Visor de Instantáneas en Modo Solo Lectura*: Inspección temporal de copias antiguas sin sobrescribir la base activa.
