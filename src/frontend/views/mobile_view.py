@@ -5,8 +5,6 @@ consultar el estado del motor de sincronización offline y auditar los gastos ca
 """
 
 from __future__ import annotations
-import base64
-from datetime import datetime
 import logging
 import os
 import socket
@@ -17,8 +15,6 @@ try:
     import api_client
 except ImportError:
     from frontend import api_client  # type: ignore
-
-from frontend.qrcodegen import QrCode
 
 logger = logging.getLogger(__name__)
 
@@ -51,28 +47,6 @@ except ImportError:
 def format_display_date(date_val: Any) -> str:
     """Convierte cualquier formato de fecha a DD/MM/AAAA según la Regla 12."""
     return _shared_format_date_es(date_val, fallback="N/A")
-
-
-def generate_qr_png_bytes(url: str, ecc: QrCode.Ecc = QrCode.Ecc.MEDIUM) -> bytes:
-    """Genera una imagen PNG nítida de alto contraste para lectura instantánea desde monitores."""
-    try:
-        qr = QrCode.encode_text(url, ecc)
-        return qr.to_png_bytes(border=4, scale=10, fg_color="#000000", bg_color="#ffffff")
-    except Exception as exc:
-        logger.warning("Fallo generando código QR PNG para %s: %s", url, exc)
-        return b""
-
-
-def generate_qr_svg_base64(url: str) -> str:
-    """Genera el código QR en SVG base64 como fallback (borde ISO 4)."""
-    try:
-        qr = QrCode.encode_text(url, QrCode.Ecc.MEDIUM)
-        svg_code = qr.to_svg_str(border=4, fg_color="#000000", bg_color="#ffffff")
-        b64 = base64.b64encode(svg_code.encode("utf-8")).decode("utf-8")
-        return f"data:image/svg+xml;base64,{b64}"
-    except Exception as exc:
-        logger.warning("Fallo generando código QR para %s: %s", url, exc)
-        return ""
 
 
 def render_mobile_view() -> None:
@@ -270,8 +244,6 @@ def render_mobile_view() -> None:
     # SECCIÓN 2: ESTADO DEL MOTOR DE SINCRONIZACIÓN Y ACCIONES
     # ==============================================
     st.subheader("⚙️ Estado del Motor de Sincronización")
-
-    status_data = api_client.get_mobile_status()
 
     if status_data:
         inbox_count = status_data.get("pending_inbox_files", 0)

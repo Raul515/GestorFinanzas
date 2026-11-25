@@ -96,9 +96,9 @@ def test_export_joint_excel_caching_and_invalidation():
 
 
 def test_app_py_deepdive_lazy_loading_code_structure():
-    """RF-11: Verifica que en app.py el análisis de Deep Dive requiere click explícito."""
-    app_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/app.py"))
-    with open(app_path, "r", encoding="utf-8") as f:
+    """RF-11: Verifica que en deepdive_view.py el análisis de Deep Dive requiere click explícito."""
+    deepdive_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/frontend/views/deepdive_view.py"))
+    with open(deepdive_path, "r", encoding="utf-8") as f:
         code = f.read()
 
     # No debe existir la auto-ejecución incondicional por ausencia en session_state
