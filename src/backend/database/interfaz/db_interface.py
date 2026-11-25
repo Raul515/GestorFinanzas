@@ -244,6 +244,16 @@ class IJointRepository(ABC):
         pass
 
     @abstractmethod
+    def get_joint_category(self, category_id: int) -> Optional[Any]:
+        """Obtiene una categoría de necesidades del hogar por su ID."""
+        pass
+
+    @abstractmethod
+    def create_joint_category(self, category: Any) -> Any:
+        """Crea una categoría de necesidades del hogar."""
+        pass
+
+    @abstractmethod
     def get_joint_subcategories(self, category_id: Optional[int] = None) -> List[Any]:
         """Obtiene las subcategorías de necesidades del hogar."""
         pass
@@ -251,6 +261,26 @@ class IJointRepository(ABC):
     @abstractmethod
     def get_joint_subcategory(self, subcategory_id: int) -> Optional[Any]:
         """Obtiene una subcategoría de necesidades por ID."""
+        pass
+
+    @abstractmethod
+    def create_joint_subcategory(self, subcategory: Any) -> Any:
+        """Crea una nueva subcategoría de necesidades comunes."""
+        pass
+
+    @abstractmethod
+    def update_joint_subcategory(self, subcategory_id: int, update_data: Any) -> Optional[Any]:
+        """Actualiza el nombre o presupuesto mensual de una subcategoría común."""
+        pass
+
+    @abstractmethod
+    def check_joint_subcategory_usage(self, subcategory_id: int) -> Dict[str, Any]:
+        """Comprueba el uso de una subcategoría conjunta antes de eliminarla."""
+        pass
+
+    @abstractmethod
+    def delete_joint_subcategory(self, subcategory_id: int) -> bool:
+        """Elimina una subcategoría de necesidades comunes."""
         pass
 
 
@@ -277,6 +307,16 @@ class IJointRepository(ABC):
     @abstractmethod
     def delete_joint_sinking_fund(self, fund_id: int, reallocate_to_fund_id: Optional[int] = None) -> bool:
         """Elimina una hucha de amortización reasignando su saldo si corresponde."""
+        pass
+
+    @abstractmethod
+    def transfer_sinking_fund_balance(self, transfer_data: Any) -> Any:
+        """Ejecuta un rebalanceo atómico de saldo entre dos huchas."""
+        pass
+
+    @abstractmethod
+    def get_joint_sinking_fund_transfers(self, limit: int = 100) -> List[Any]:
+        """Obtiene el historial cronológico de traspasos entre huchas."""
         pass
 
     @abstractmethod
@@ -311,6 +351,21 @@ class IJointRepository(ABC):
         pass
 
     @abstractmethod
+    def settle_joint_transaction(self, tx_id: int) -> Optional[Any]:
+        """Marca una transacción conjunta pendiente como liquidada."""
+        pass
+
+    @abstractmethod
+    def settle_all_joint_transactions(self) -> List[Any]:
+        """Marca todas las transacciones pendientes como liquidadas."""
+        pass
+
+    @abstractmethod
+    def get_unsettled_joint_transactions(self) -> List[Any]:
+        """Obtiene todas las transacciones con liquidación pendiente."""
+        pass
+
+    @abstractmethod
     def delete_joint_transaction(self, tx_id: int) -> Optional[str]:
         """Elimina una transacción conjunta retornando su UUID para el tombstone."""
         pass
@@ -321,8 +376,18 @@ class IJointRepository(ABC):
         pass
 
     @abstractmethod
+    def get_joint_contribution(self, contrib_id: int) -> Optional[Any]:
+        """Obtiene una aportación mensual por su ID."""
+        pass
+
+    @abstractmethod
     def create_joint_contribution(self, contrib: Any) -> Any:
         """Registra una aportación mensual a la cuenta común."""
+        pass
+
+    @abstractmethod
+    def delete_joint_contribution(self, contrib_id: int) -> Optional[Dict[str, Any]]:
+        """Elimina una aportación conjunta y revierte su impacto en huchas/personal."""
         pass
 
     @abstractmethod

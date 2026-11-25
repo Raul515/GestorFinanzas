@@ -35,17 +35,17 @@ def get_macro_indicators(
     Retorna el resumen de indicadores macroeconómicos y deuda soberana (IBEX 35, EuroStoxx, Bonos, Prima de Riesgo).
     Utiliza una política de caché persistente de 24 horas en SQLite.
     """
-    cached_data = repo.get_market_cache(CACHE_KEY_INDICATORS)
+    cached_data = repo.get_market_cache(CACHE_KEY_MACRO_INDICATORS)
     if cached_data:
         try:
             cached_data["is_cached"] = True
             return MacroOverviewResponse(**cached_data)
         except Exception as e:
-            logger.warning(f"Error deserializando caché de '{CACHE_KEY_INDICATORS}': {e}. Regenerando datos.")
+            logger.warning(f"Error deserializando caché de '{CACHE_KEY_MACRO_INDICATORS}': {e}. Regenerando datos.")
 
     fresh_overview = get_macro_overview_response(is_cached=False)
     repo.set_market_cache(
-        key=CACHE_KEY_INDICATORS,
+        key=CACHE_KEY_MACRO_INDICATORS,
         data=fresh_overview.model_dump(mode="json"),
         ttl_hours=DEFAULT_TTL_HOURS,
     )
@@ -61,7 +61,7 @@ def get_market_news(
     Retorna las noticias financieras más recientes con análisis de IA (impacto, temática contextual y síntesis).
     Aplica caché de 24 horas y degradación elegante si no hay conexión o cuota de IA disponible.
     """
-    cached_data = repo.get_market_cache(CACHE_KEY_NEWS)
+    cached_data = repo.get_market_cache(CACHE_KEY_MACRO_NEWS)
     if cached_data:
         # Solo servir desde caché si el análisis de IA fue exitoso.
         # Si la caché contiene una degradación temporal previa, reintentar consulta fresca.
@@ -70,14 +70,14 @@ def get_market_news(
                 cached_data["is_cached"] = True
                 return MarketNewsResponse(**cached_data)
             except Exception as e:
-                logger.warning(f"Error deserializando caché de '{CACHE_KEY_NEWS}': {e}. Regenerando datos.")
+                logger.warning(f"Error deserializando caché de '{CACHE_KEY_MACRO_NEWS}': {e}. Regenerando datos.")
         else:
             logger.info("Caché de noticias contenía degradación temporal sin IA. Reintentando consulta.")
 
     fresh_news = get_analyzed_market_news(limit=limit)
     if fresh_news.ai_analysis_available:
         repo.set_market_cache(
-            key=CACHE_KEY_NEWS,
+            key=CACHE_KEY_MACRO_NEWS,
             data=fresh_news.model_dump(mode="json"),
             ttl_hours=DEFAULT_TTL_HOURS,
         )
@@ -93,13 +93,13 @@ def refresh_market_radar(
     consulta nuevamente los proveedores externos e IA, y persiste una nueva instantánea de 24 horas.
     """
     # 1. Invalidar entradas en caché
-    repo.invalidate_market_cache(CACHE_KEY_INDICATORS)
-    repo.invalidate_market_cache(CACHE_KEY_NEWS)
+    repo.invalidate_market_cache(CACHE_KEY_MACRO_INDICATORS)
+    repo.invalidate_market_cache(CACHE_KEY_MACRO_NEWS)
 
     # 2. Obtener datos macroeconómicos frescos
     fresh_indicators = get_macro_overview_response(is_cached=False)
     repo.set_market_cache(
-        key=CACHE_KEY_INDICATORS,
+        key=CACHE_KEY_MACRO_INDICATORS,
         data=fresh_indicators.model_dump(mode="json"),
         ttl_hours=DEFAULT_TTL_HOURS,
     )
@@ -108,7 +108,7 @@ def refresh_market_radar(
     fresh_news = get_analyzed_market_news(limit=15)
     if fresh_news.ai_analysis_available:
         repo.set_market_cache(
-            key=CACHE_KEY_NEWS,
+            key=CACHE_KEY_MACRO_NEWS,
             data=fresh_news.model_dump(mode="json"),
             ttl_hours=DEFAULT_TTL_HOURS,
         )

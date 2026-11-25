@@ -5,6 +5,7 @@ from backend.domain.schemas import transactions as schemas
 from backend.database.componentes.sqlite_db import get_db
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.interfaz.db_interface import ITransactionRepository
+from backend.services.transaction_service import delete_personal_transaction
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -31,7 +32,7 @@ def delete_transaction(transaction_id: int, repo: ITransactionRepository = Depen
     Elimina físicamente una transacción contable por su identificador y revierte
     automáticamente su impacto en el fondo de emergencia si correspondía a dicha subcategoría.
     """
-    deleted = repo.delete_transaction(transaction_id)
+    deleted = delete_personal_transaction(repo, transaction_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

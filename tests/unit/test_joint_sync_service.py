@@ -602,7 +602,7 @@ def test_account_delete_remote_reset(temp_sync_dir: str, db_session: Session):
         "entity_type": "ACCOUNT",
         "action": "DELETE",
         "origin_device_id": "PARTNER_PC",
-        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "timestamp_utc": "2099-11-20T12:00:00Z",
         "payload": {"household_name": "Casa Test Reset Remoto"},
     }
     with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
@@ -651,7 +651,7 @@ def test_account_delete_rejected_preserves_local_data(temp_sync_dir: str, db_ses
         "entity_type": "ACCOUNT",
         "action": "DELETE",
         "origin_device_id": "PARTNER_PC",
-        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "timestamp_utc": "2099-11-20T12:00:00Z",
         "payload": {"household_name": "Casa Conservada"},
     }
     with open(Path(temp_sync_dir) / "inbox" / "evt_reset.json", "w", encoding="utf-8") as f:
@@ -780,7 +780,7 @@ def test_subcategory_sync_upsert_and_delete(temp_sync_dir: str, db_session: Sess
         "entity_type": "SUBCATEGORY",
         "action": "DELETE",
         "origin_device_id": "PARTNER_PC",
-        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "timestamp_utc": "2099-11-20T12:00:00Z",
         "payload": {"name": "Mascotas (Veterinario y Comida)"},
     }
     with open(Path(temp_sync_dir) / "inbox" / "evt_subcat_del.json", "w", encoding="utf-8") as f:

@@ -968,7 +968,7 @@ def test_remote_deletion_endpoints_and_clear_errors(client: TestClient, api_sync
         "entity_type": "ACCOUNT",
         "action": "DELETE",
         "origin_device_id": "REMOTE_MAC",
-        "timestamp_utc": "2026-11-20T12:00:00Z",
+        "timestamp_utc": "2099-11-20T12:00:00Z",
         "payload": {"household_name": "Hogar Borrado Remoto"},
     }
     with open(inbox_dir / "evt_delete.json", "w", encoding="utf-8") as f:
@@ -995,7 +995,7 @@ def test_remote_deletion_endpoints_and_clear_errors(client: TestClient, api_sync
         "entity_type": "ACCOUNT",
         "action": "DELETE",
         "origin_device_id": "REMOTE_MAC",
-        "timestamp_utc": "2026-11-20T13:00:00Z",
+        "timestamp_utc": "2099-11-20T13:00:00Z",
         "payload": {"household_name": "Hogar Borrado Remoto"},
     }
     with open(inbox_dir / "evt_delete2.json", "w", encoding="utf-8") as f:

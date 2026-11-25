@@ -46,7 +46,7 @@ def calculate_member_ratios(
     mode_val = split_mode.value if hasattr(split_mode, "value") else str(split_mode or SplitMode.EQUAL_50_50.value)
     if mode_val == SplitMode.EQUAL_50_50.value:
         return 0.5, 0.5
-    if mode_val == SplitMode.INCOME_PROPORTIONAL.value:
+    if mode_val in (SplitMode.INCOME_PROPORTIONAL.value, "PROPORTIONAL_INCOME"):
         total_inc = float(member_a_income or 0.0) + float(member_b_income or 0.0)
         if total_inc > 0:
             ratio_a = float(member_a_income or 0.0) / total_inc
