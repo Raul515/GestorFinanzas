@@ -6,11 +6,11 @@ import { ConceptSuggestions } from "./ConceptSuggestions";
 import { QuickPresetChips } from "./QuickPresetChips";
 import { ManagePresetsModal } from "./ManagePresetsModal";
 import { SubcategoryItem, MobileTransaction, MobileMonthlySummary, QuickPresetItem } from "../types";
+import { formatDateDisplay, getLocalDateString } from "../utils/formatters";
+import { isIncomeSubcategory } from "../utils/categories";
 import {
   loadStoredQuickPresets,
   saveStoredQuickPresets,
-  getLocalDateString,
-  isIncomeSubcategory,
   findMatchingSubcategory,
 } from "../services/storage";
 
@@ -289,12 +289,6 @@ export const QuickCaptureView = ({
     saveStoredQuickPresets(updated);
   };
 
-  // Formatear fecha para mostrar
-  const formatDateDisplay = (isoDate: string) => {
-    const [y, m, d] = isoDate.split("-");
-    return `${d}/${m}/${y}`;
-  };
-
   return (
     <div className="flex-1 flex flex-col gap-1.5 max-w-sm mx-auto w-full px-3 py-2 pb-4 overflow-y-auto no-scrollbar">
       {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) y Safe-Area iOS */}
@@ -359,7 +353,7 @@ export const QuickCaptureView = ({
           <input
             type="date"
             value={selectedDate}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedDate(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSelectedDate(e.target.value || getLocalDateString())}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           />
         </label>

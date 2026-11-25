@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { QuickCaptureView } from "./components/QuickCaptureView";
@@ -29,7 +29,6 @@ import {
   loadStoredPendingDeletes,
   addPendingDelete,
   removePendingDelete,
-  loadStoredMonthlySummary,
   saveStoredMonthlySummary,
   loadStoredMonthlySummariesMap,
   upsertStoredMonthlySummary,
@@ -41,6 +40,11 @@ import {
   extractAndSaveServerUrlFromUrl,
   isIncomeSubcategory,
 } from "./services/storage";
+import {
+  computeOfflineMonthlySummary,
+  overlayPendingTransactionsOnSummary,
+} from "./services/offlineEngine";
+import { getLocalMonthString } from "./utils/formatters";
 import {
   getBaseApiUrl,
   fetchCatalog,
@@ -56,14 +60,14 @@ import {
 } from "./services/api";
 import { Settings } from "lucide-react";
 
-const CURRENT_APP_VERSION = { code: 14, name: "1.4.0" };
+const APP_VERSION_NAME = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.4.0";
+const CURRENT_APP_VERSION = { code: 14, name: APP_VERSION_NAME };
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("capture");
   const [catalog, setCatalog] = useState(loadStoredCatalog);
   const [transactions, setTransactions] = useState<MobileTransaction[]>(loadStoredTransactions);
-  const [monthlySummary, setMonthlySummary] = useState(loadStoredMonthlySummary);
-  const [monthlySummariesMap, setMonthlySummariesMap] = useState(loadStoredMonthlySummariesMap);
+  const [rawSummariesMap, setMonthlySummariesMap] = useState(loadStoredMonthlySummariesMap);
   const [historyCache, setHistoryCache] = useState<HistoricalTransactionItem[]>(loadStoredHistoryCache);
   const [isServerOnline, setIsServerOnline] = useState(false);
   const [isPaired, setIsPaired] = useState(true);
@@ -71,6 +75,28 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<MobileVersionInfo | null>(null);
   const [latestApkInfo, setLatestApkInfo] = useState<MobileVersionInfo | null>(null);
   const [otaBannerDismissed, setOtaBannerDismissed] = useState(false);
+
+  const monthlySummariesMap = useMemo(() => {
+    const currentMonth = getLocalMonthString();
+    const baseCurrent =
+      rawSummariesMap[currentMonth] ||
+      computeOfflineMonthlySummary(currentMonth, [], catalog.personal_subcategories);
+    const enriched: Record<string, typeof baseCurrent> = {
+      ...rawSummariesMap,
+      [currentMonth]: baseCurrent,
+    };
+    const result: Record<string, typeof baseCurrent> = {};
+    Object.entries(enriched).forEach(([mKey, summary]) => {
+      result[mKey] = overlayPendingTransactionsOnSummary(
+        summary,
+        transactions,
+        catalog.personal_subcategories
+      );
+    });
+    return result;
+  }, [rawSummariesMap, transactions, catalog.personal_subcategories]);
+
+  const monthlySummary = monthlySummariesMap[getLocalMonthString()] || null;
 
   // Modal / Diálogo para configurar la URL del servidor y el token de emparejamiento
   const [showServerConfigModal, setShowServerConfigModal] = useState(false);
@@ -119,7 +145,6 @@ export function App() {
 
       const remoteSummary = await fetchMonthlySummary();
       if (remoteSummary) {
-        setMonthlySummary(remoteSummary);
         saveStoredMonthlySummary(remoteSummary);
         setMonthlySummariesMap(upsertStoredMonthlySummary(remoteSummary));
       }
@@ -322,26 +347,6 @@ export function App() {
       return updated;
     });
 
-    // Actualización optimista del gasto de Deseos para que el semáforo refleje el apunte al instante
-    if (newTx.subcategory_name && monthlySummary?.wants) {
-      const isWants = catalog.personal_subcategories.some(
-        (s) => s.id === newTx.subcategory_id && (s.category_name.toLowerCase().includes("deseo") || s.category_id === 3)
-      );
-      if (isWants) {
-        const newSpent = monthlySummary.wants.spent + newTx.amount;
-        const updatedSummary = {
-          ...monthlySummary,
-          wants: {
-            ...monthlySummary.wants,
-            spent: newSpent,
-            remaining: monthlySummary.wants.budget - newSpent,
-          },
-        };
-        setMonthlySummary(updatedSummary);
-        saveStoredMonthlySummary(updatedSummary);
-      }
-    }
-
     // Intentar sincronizar inmediatamente si estamos conectados y emparejados
     if (isServerOnline && isPaired) {
       setTimeout(() => {
@@ -362,22 +367,23 @@ export function App() {
     });
 
     // Revertir incremento optimista de Deseos si aplica
-    if (liveTx.type !== "INCOME" && monthlySummary?.wants) {
+    if (liveTx.status === "SYNCED" && liveTx.type !== "INCOME" && monthlySummary?.wants) {
       const isWants = catalog.personal_subcategories.some(
         (s) => s.id === liveTx.subcategory_id && (s.category_name.toLowerCase().includes("deseo") || s.category_id === 3)
       );
       if (isWants && liveTx.amount > 0) {
-        const newSpent = Math.max(0, monthlySummary.wants.spent - liveTx.amount);
+        const baseForMonth = rawSummariesMap[monthlySummary.month] || monthlySummary;
+        const newSpent = Math.max(0, baseForMonth.wants.spent - liveTx.amount);
         const updatedSummary = {
-          ...monthlySummary,
+          ...baseForMonth,
           wants: {
-            ...monthlySummary.wants,
+            ...baseForMonth.wants,
             spent: newSpent,
-            remaining: monthlySummary.wants.budget - newSpent,
+            remaining: baseForMonth.wants.budget - newSpent,
           },
         };
-        setMonthlySummary(updatedSummary);
         saveStoredMonthlySummary(updatedSummary);
+        setMonthlySummariesMap(upsertStoredMonthlySummary(updatedSummary));
       }
     }
 

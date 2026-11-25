@@ -3,7 +3,8 @@ import { RefreshCw, ShieldCheck, AlertTriangle, Edit3, Check, X, TrendingUp, Pie
 import { MobileMonthlySummary, MobileSubcategorySummary, MobileTransaction, SubcategoryItem } from "../types";
 import { fetchMonthlySummary, updateMonthlyBudget } from "../services/api";
 import { getLocalMonthString, getOfflineMonthlySummary } from "../services/storage";
-import { getSubcategoryEmoji } from "./CategoryChips";
+import { getSubcategoryEmoji } from "../utils/categories";
+import { formatEuro } from "../utils/formatters";
 
 interface MonthlySummaryViewProps {
   isServerOnline: boolean;
@@ -95,13 +96,6 @@ export const MonthlySummaryView = ({
     } finally {
       setSavingBudget(false);
     }
-  };
-
-  const formatEuro = (val: number) => {
-    return (val || 0).toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }) + " €";
   };
 
   const MONTH_NAMES_ES = [

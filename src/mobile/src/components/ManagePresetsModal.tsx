@@ -97,7 +97,8 @@ export const ManagePresetsModal = ({
   };
 
   const handleSaveAndClose = () => {
-    onSavePresets(localPresets);
+    const validPresets = localPresets.filter((p) => p.name.trim().length > 0 && Number(p.amount) > 0);
+    onSavePresets(validPresets);
     onClose();
   };
 

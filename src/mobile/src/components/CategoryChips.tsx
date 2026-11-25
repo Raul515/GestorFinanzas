@@ -1,6 +1,9 @@
 import { useState, ChangeEvent } from "react";
 import { Search, X, Check, Plus } from "lucide-react";
 import { SubcategoryItem } from "../types";
+import { getSubcategoryEmoji } from "../utils/categories";
+
+export { getSubcategoryEmoji };
 
 interface CategoryChipsProps {
   subcategories: SubcategoryItem[];
@@ -9,30 +12,6 @@ interface CategoryChipsProps {
   onCreateSubcategory?: (name: string, categoryName: string) => Promise<SubcategoryItem | null> | SubcategoryItem | null;
   txType?: "EXPENSE" | "INCOME";
 }
-
-export const getSubcategoryEmoji = (name: string): string => {
-  const lower = name.toLowerCase();
-  if (lower.includes("nómina") || lower.includes("nomina") || lower.includes("salario") || lower.includes("sueldo")) return "💰";
-  if (lower.includes("bizum")) return "📲";
-  if (lower.includes("devoluc") || lower.includes("reembols")) return "🔄";
-  if (lower.includes("venta") || lower.includes("vinted") || lower.includes("wallapop")) return "🏷️";
-  if (lower.includes("ingreso") || lower.includes("interes") || lower.includes("dividend")) return "💵";
-  if (lower.includes("café") || lower.includes("cafe") || lower.includes("desayun")) return "☕";
-  if (lower.includes("super") || lower.includes("compra") || lower.includes("mercadona") || lower.includes("aliment")) return "🛒";
-  if (lower.includes("restauran") || lower.includes("cen") || lower.includes("comid") || lower.includes("bar")) return "🍽️";
-  if (lower.includes("gasol") || lower.includes("combust") || lower.includes("diesel")) return "⛽";
-  if (lower.includes("farmac") || lower.includes("medic") || lower.includes("salud")) return "💊";
-  if (lower.includes("transpor") || lower.includes("metro") || lower.includes("bus") || lower.includes("tren")) return "🚇";
-  if (lower.includes("pádel") || lower.includes("padel") || lower.includes("gimnas") || lower.includes("deport")) return "🎾";
-  if (lower.includes("alquiler") || lower.includes("hipoteca") || lower.includes("hogar") || lower.includes("vivienda")) return "🏠";
-  if (lower.includes("luz") || lower.includes("agua") || lower.includes("gas") || lower.includes("suministr")) return "💡";
-  if (lower.includes("suscrip") || lower.includes("netflix") || lower.includes("spotify") || lower.includes("internet")) return "📱";
-  if (lower.includes("ropa") || lower.includes("calzad")) return "👕";
-  if (lower.includes("viaj") || lower.includes("hotel") || lower.includes("vuelo")) return "✈️";
-  if (lower.includes("emergenc") || lower.includes("colch")) return "🛡️";
-  if (lower.includes("ahorr") || lower.includes("invers")) return "📈";
-  return "🏷️";
-};
 
 export const CategoryChips = ({
   subcategories,

@@ -1,8 +1,10 @@
 import { useState, useMemo, ChangeEvent, KeyboardEvent } from "react";
 import { Search, X, Tag, Calendar, Camera, Sparkles } from "lucide-react";
 import { HistoricalTransactionItem, MobileTransaction } from "../types";
-import { getSubcategoryEmoji } from "./CategoryChips";
+import { getSubcategoryEmoji } from "../utils/categories";
+import { formatDateDisplay } from "../utils/formatters";
 import { getReceiptImageUrl } from "../services/api";
+import { ReceiptViewerModal } from "./ReceiptViewerModal";
 
 interface SearchViewProps {
   isServerOnline: boolean;
@@ -24,22 +26,20 @@ export const SearchView = ({
   const [isSearchingServer, setIsSearchingServer] = useState(false);
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
 
-  // Formato español de fecha DD/MM/AAAA
-  const formatDateDisplay = (isoDate: string) => {
-    if (!isoDate) return "";
-    const [y, m, d] = isoDate.split("-");
-    return d && m && y ? `${d}/${m}/${y}` : isoDate;
-  };
-
   // 1. Filtrado instantáneo en memoria sobre transacciones locales y caché histórica (0 ms latencia)
   const localResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
 
-    // Combinar transacciones de la cola local reciente con la caché histórica
+    const seenEventIds = new Set(localTransactions.map((t) => t.event_id).filter(Boolean));
+    const dedupedHistory = historyCache.filter(
+      (item) => !item.mobile_event_id || !seenEventIds.has(item.mobile_event_id)
+    );
+
     const combined: HistoricalTransactionItem[] = [
       ...localTransactions.map((t, idx) => ({
         id: -1 * (idx + 1),
+        mobile_event_id: t.event_id,
         date: t.date,
         amount: t.amount,
         description: t.description,
@@ -50,7 +50,7 @@ export const SearchView = ({
         receipt_filename: t.receipt_filename || undefined,
         receipt_url: t.receipt_base64 || getReceiptImageUrl(t.receipt_filename),
       })),
-      ...historyCache,
+      ...dedupedHistory,
     ];
 
     // Filtrar por concepto o por subcategoría
@@ -245,40 +245,10 @@ export const SearchView = ({
         </div>
       )}
 
-      {/* Modal Visor de Comprobante / Ticket */}
-      {viewingReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl bg-[#0F172A] border border-white/[0.12] p-3.5 shadow-2xl flex flex-col gap-3 max-h-[90vh]">
-            <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
-              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-emerald-400" />
-                <span>Comprobante de Ticket</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setViewingReceipt(null)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-100 active:bg-white/[0.06]"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto rounded-xl bg-[#070B12] flex items-center justify-center p-1 border border-white/[0.06]">
-              <img
-                src={viewingReceipt}
-                alt="Ticket completo"
-                className="max-h-[65vh] w-auto max-w-full object-contain rounded-lg shadow-sm"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setViewingReceipt(null)}
-              className="w-full py-2.5 rounded-xl bg-[#172033] hover:bg-[#202b44] text-slate-200 text-xs font-bold active:scale-95 transition-all border border-white/[0.08]"
-            >
-              Cerrar
-            </button>
-          </div>
-        </div>
-      )}
+      <ReceiptViewerModal
+        imageUrl={viewingReceipt}
+        onClose={() => setViewingReceipt(null)}
+      />
     </div>
   );
 };
