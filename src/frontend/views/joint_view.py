@@ -27,21 +27,15 @@ MESES_ES = [
 ]
 
 
+try:
+    from utils.formatting import format_date_es as _shared_format_date_es  # type: ignore
+except ImportError:
+    from frontend.utils.formatting import format_date_es as _shared_format_date_es  # type: ignore
+
+
 def _format_date_es(d_val: Any) -> str:
     """Formatea cualquier fecha a estándar español DD/MM/AAAA."""
-    if not d_val:
-        return "—"
-    s = str(d_val).strip()
-    if not s or s == "—":
-        return "—"
-    try:
-        clean = s.split("T")[0]
-        parts = clean.split("-")
-        if len(parts) == 3:
-            return f"{parts[2]}/{parts[1]}/{parts[0]}"
-    except Exception:
-        pass
-    return s
+    return _shared_format_date_es(d_val, fallback="—")
 
 
 def render_joint_view(selected_year: int) -> None:
@@ -1383,12 +1377,14 @@ def _render_tab_buscador_gastos(account: Dict[str, Any], selected_year: int) -> 
             start_date_val = st.date_input(
                 "Fecha Desde",
                 value=date(selected_year, 1, 1),
+                format="DD/MM/YYYY",
                 key="joint_search_start_date",
             )
         with col3:
             end_date_val = st.date_input(
                 "Fecha Hasta",
                 value=date(selected_year, 12, 31),
+                format="DD/MM/YYYY",
                 key="joint_search_end_date",
             )
 
@@ -1919,7 +1915,7 @@ def _render_tab_configuracion(account: Dict[str, Any], sync_status: Dict[str, An
                 new_custom_budget = 0.0
                 st.info("ℹ️ El presupuesto total se calcula sumando el presupuesto de necesidades más las cuotas de huchas activas no cumplidas.")
 
-        acc_saved = st.button("💾 Guardar Cambios de Configuración", type="primary", use_container_width=True, key="btn_save_joint_cfg")
+        acc_saved = st.button("💾 Guardar Cambios de Configuración", type="primary", width="stretch", key="btn_save_joint_cfg")
         if acc_saved:
             payload_acc = {
                 "household_name": new_acc_name.strip(),

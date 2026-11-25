@@ -49,6 +49,7 @@ def test_frontend_api_client_refresh(mock_post):
 @patch("frontend.api_client.requests.get")
 def test_frontend_api_client_handles_errors_gracefully(mock_get):
     import requests
+    api_client.clear_all_frontend_cache()
     # 1. Simular error de red (ConnectionError)
     mock_get.side_effect = requests.exceptions.ConnectionError("Backend inaccesible")
     assert api_client.get_categorias() == []
@@ -63,6 +64,7 @@ def test_frontend_api_client_handles_errors_gracefully(mock_get):
     assert api_client.get_market_news() is None
     assert api_client.get_screener_universes() == []
     assert api_client.get_screener_universe("ibex35") is None
+    api_client.clear_all_frontend_cache()
 
 
 @patch("frontend.api_client.requests.get")

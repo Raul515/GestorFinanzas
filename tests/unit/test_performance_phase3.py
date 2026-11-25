@@ -113,6 +113,6 @@ def test_joint_accounting_service_uses_joinedload():
     with open(service_path, "r", encoding="utf-8") as f:
         code = f.read()
 
-    assert "joinedload(JointTransaction.joint_subcategory)" in code
-    assert "joinedload(JointTransaction.joint_sinking_fund)" in code
+    assert "joinedload(JointTransaction.subcategory)" in code
+    assert "joinedload(JointTransaction.sinking_fund)" in code
 

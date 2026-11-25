@@ -18,15 +18,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+try:
+    from utils.formatting import format_datetime_es as _shared_format_datetime_es  # type: ignore
+except ImportError:
+    from frontend.utils.formatting import format_datetime_es as _shared_format_datetime_es  # type: ignore
+
+
 def format_iso_timestamp(iso_str: Optional[str]) -> str:
     """Convierte un timestamp ISO-8601 a un formato legible para el usuario."""
     if not iso_str:
         return "Versión inicial (sin registro)"
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%d/%m/%Y %H:%M:%S")
-    except Exception:
-        return iso_str[:19].replace("T", " ")
+    return _shared_format_datetime_es(iso_str, include_seconds=True, fallback="Versión inicial (sin registro)")
 
 
 def render_updater_view() -> None:

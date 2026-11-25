@@ -42,21 +42,15 @@ def get_local_ip() -> str:
             return "localhost"
 
 
+try:
+    from utils.formatting import format_date_es as _shared_format_date_es  # type: ignore
+except ImportError:
+    from frontend.utils.formatting import format_date_es as _shared_format_date_es  # type: ignore
+
+
 def format_display_date(date_val: Any) -> str:
     """Convierte cualquier formato de fecha a DD/MM/AAAA según la Regla 12."""
-    if not date_val:
-        return "N/A"
-    date_str = str(date_val).strip()
-    try:
-        if "T" in date_str or " " in date_str:
-            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            return dt.strftime("%d/%m/%Y")
-        parts = date_str.split("-")
-        if len(parts) == 3:
-            return f"{parts[2]}/{parts[1]}/{parts[0]}"
-    except Exception:
-        pass
-    return date_str
+    return _shared_format_date_es(date_val, fallback="N/A")
 
 
 def generate_qr_png_bytes(url: str, ecc: QrCode.Ecc = QrCode.Ecc.MEDIUM) -> bytes:
@@ -128,7 +122,7 @@ def render_mobile_view() -> None:
         with col_ip_btn:
             st.write("")
             st.write("")
-            if st.button("Aplicar IP", use_container_width=True):
+            if st.button("Aplicar IP", width="stretch"):
                 cleaned_ip = user_ip_input.strip()
                 if cleaned_ip:
                     st.session_state["custom_mobile_host_ip"] = cleaned_ip
@@ -138,7 +132,7 @@ def render_mobile_view() -> None:
         with col_ip_reset:
             st.write("")
             st.write("")
-            if st.button("Detectar Auto", use_container_width=True, help="Restablece la detección automática de IP."):
+            if st.button("Detectar Auto", width="stretch", help="Restablece la detección automática de IP."):
                 st.session_state.pop("custom_mobile_host_ip", None)
                 st.rerun()
 
@@ -175,7 +169,7 @@ def render_mobile_view() -> None:
             unsafe_allow_html=True,
         )
 
-        if st.button("🔄 Generar Nuevo PIN", use_container_width=True, help="Genera un nuevo código de vinculación de 6 dígitos con validez de 10 minutos."):
+        if st.button("🔄 Generar Nuevo PIN", width="stretch", help="Genera un nuevo código de vinculación de 6 dígitos con validez de 10 minutos."):
             new_pin_data = api_client.generate_mobile_pin(ttl_seconds=600)
             if new_pin_data:
                 st.session_state["mobile_pairing_pin_data"] = new_pin_data
@@ -205,9 +199,9 @@ def render_mobile_view() -> None:
 
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
-            st.link_button("🌐 Probar en este PC", localhost_pin_url, use_container_width=True)
+            st.link_button("🌐 Probar en este PC", localhost_pin_url, width="stretch")
         with col_btn2:
-            st.link_button("📖 Ver Guía Completa", "https://github.com/", use_container_width=True, help="Consulta docs/guia_companion_movil.md en el repositorio.")
+            st.link_button("📖 Ver Guía Completa", "https://github.com/", width="stretch", help="Consulta docs/guia_companion_movil.md en el repositorio.")
 
         guide_tabs = st.tabs(["🤖 Android (Chrome PWA)", "🍏 iPhone (Safari)", "📦 Android APK (Sin Barras)", "🔄 Syncthing (Opcional)"])
 
@@ -297,7 +291,7 @@ def render_mobile_view() -> None:
         st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
         col_act1, col_act2 = st.columns([1, 2])
         with col_act1:
-            if st.button("🔄 Procesar Ficheros de la Carpeta Inbox", key="btn_process_mobile_folder", use_container_width=True):
+            if st.button("🔄 Procesar Ficheros de la Carpeta Inbox", key="btn_process_mobile_folder", width="stretch"):
                 with st.spinner("Procesando ficheros JSON pendientes en sync/mobile/inbox/..."):
                     res = api_client.process_mobile_folder()
                     if res and res.get("success"):
@@ -419,7 +413,7 @@ def render_mobile_view() -> None:
                 "ID Móvil": event_id[:16] + "..." if len(event_id) > 16 else event_id,
             })
 
-        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+        st.dataframe(table_rows, width="stretch", hide_index=True)
     else:
         st.info("ℹ️ Aún no se han registrado transacciones desde el móvil. Captura tu primer gasto desde la micro-app para verlo reflejado aquí.")
 

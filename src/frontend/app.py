@@ -64,28 +64,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+from utils.formatting import format_datetime_es as _shared_format_datetime_es
+
+
 def _format_datetime_es(raw: Any) -> str:
     """Formatea strings de fecha y hora ISO a estándar español DD/MM/AAAA HH:MM."""
-    if not raw:
-        return ""
-    s = str(raw).strip()
-    try:
-        clean = s.replace("Z", "").split(".")[0]
-        if "T" in clean:
-            d_part, t_part = clean.split("T")
-        elif " " in clean:
-            d_part, t_part = clean.split(" ")
-        else:
-            d_part, t_part = clean, ""
-        d_p = d_part.split("-")
-        if len(d_p) == 3:
-            res = f"{d_p[2]}/{d_p[1]}/{d_p[0]}"
-            if t_part:
-                res += f" {t_part[:5]}"
-            return res
-    except Exception:
-        pass
-    return s[:16].replace("T", " ")
+    return _shared_format_datetime_es(raw, fallback="")
 
 
 st.set_page_config(page_title="Gestor Finanzas", layout="wide")
@@ -1298,7 +1282,7 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
             st.info("Cargando activos del universo... Si es la primera vez que se consulta, puede demorarse unos segundos.")
         else:
             cached_tag = "📦 Desde caché local (24h)" if screener_data.get("from_cache") else "⚡ Datos en vivo"
-            fetch_time = screener_data.get("updated_at", "")[:16].replace("T", " ")
+            fetch_time = _format_datetime_es(screener_data.get("updated_at", ""))
             tot_c = screener_data.get("total_count", 0)
             filt_c = screener_data.get("filtered_count", 0)
 
@@ -1496,9 +1480,9 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
         if data:
             # Estado de caché
             if data.get("from_cache"):
-                st.caption(f"⚡ Datos servidos desde la caché local de 24h. Última actualización: {str(data.get('updated_at', ''))[:19]}")
+                st.caption(f"⚡ Datos servidos desde la caché local de 24h. Última actualización: {_format_datetime_es(data.get('updated_at', ''))}")
             else:
-                st.caption(f"✨ Datos actualizados en directo. Fecha de extracción: {str(data.get('updated_at', ''))[:19]}")
+                st.caption(f"✨ Datos actualizados en directo. Fecha de extracción: {_format_datetime_es(data.get('updated_at', ''))}")
 
             # Cabecera de la empresa
             name = data.get("name") or active_ticker
@@ -2282,7 +2266,7 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
                         with col_l1:
                             st.markdown(f"**Conclusión del agente**: {log_msg}")
                         with col_l2:
-                            st.caption(f"⏱️ {log_time[:19].replace('T', ' ')}")
+                            st.caption(f"⏱️ {_format_datetime_es(log_time)}")
 
                         if data_keys:
                             st.write("🔑 *Claves inyectadas al estado compartido:*")
