@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.domain.schemas.market import (
     AnalyzedNewsItem,
     ImpactLevel,
@@ -16,11 +15,13 @@ from backend.domain.schemas.market import (
     NewsItem,
     NewsTopic,
 )
-from backend.services.latency_profiler import track_external_latency
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+    sanitize_secret_value,
+)
 from backend.services.news_service import fetch_financial_news
-
-# Cargar automáticamente variables de entorno desde el archivo .env si existe
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +47,7 @@ Debes responder ÚNICAMENTE en formato JSON como un array de objetos con las cla
 
 def _get_gemini_client(api_key: Optional[str] = None) -> Optional[genai.Client]:
     """Inicializa el cliente de Google GenAI si la clave de API está presente."""
-    key = api_key or os.getenv("GEMINI_API_KEY")
-    if not key or not key.strip():
-        return None
-    clean_key = key.strip().strip("'\"")
-    if not clean_key:
-        return None
-    try:
-        return genai.Client(api_key=clean_key)
-    except Exception as e:
-        logger.warning(f"No se pudo inicializar genai.Client: {e}")
-        return None
+    return get_gemini_client(api_key=api_key)
 
 
 def _fallback_analyzed_items(
@@ -103,13 +94,12 @@ def analyze_news_batch(
         )
         return fallback, False
 
-    raw_model = (
-        model_name
-        or os.getenv("GEMINI_NEWS_MODEL")
-        or os.getenv("GEMINI_MODEL")
-        or DEFAULT_GEMINI_MODEL
+    target_model = resolve_gemini_model(
+        "GEMINI_NEWS_MODEL",
+        "GEMINI_MODEL",
+        default=DEFAULT_GEMINI_MODEL,
+        model_override=model_name,
     )
-    target_model = raw_model.strip().strip("'\"") or DEFAULT_GEMINI_MODEL
 
     # Construir contenido optimizado para el lote (RNF-3: economía de tokens)
     items_payload = [
@@ -129,10 +119,7 @@ def analyze_news_batch(
             models_to_try.append("gemma-4-31b-it")
 
     # Fallback garantizado a Gemini Flash Lite (modelo base fiable usado en Deep Dive y Copiloto)
-    gemini_fallback = (
-        os.getenv("GEMINI_MODEL")
-        or "gemini-3.5-flash-lite"
-    ).strip().strip("'\"")
+    gemini_fallback = sanitize_secret_value(os.getenv("GEMINI_MODEL")) or "gemini-3.5-flash-lite"
     if gemini_fallback and gemini_fallback not in models_to_try:
         models_to_try.append(gemini_fallback)
 
@@ -147,13 +134,13 @@ def analyze_news_batch(
 
     for m in models_to_try:
         try:
-            with track_external_latency(ExternalProviderEnum.GEMINI, "news_sentiment_analysis", target=m) as ctx:
-                response = client.models.generate_content(
-                    model=m,
-                    contents=prompt_text,
-                    config=config,
-                )
-                ctx.status_code = 200
+            response = generate_gemini_content(
+                client,
+                model=m,
+                contents=prompt_text,
+                config=config,
+                operation="news_sentiment_analysis",
+            )
 
             raw_text = response.text or "[]"
             parsed_results = json.loads(raw_text)

@@ -17,6 +17,7 @@ from backend.domain.schemas.screener import (
     StockScreenerItem,
     UniverseInfo,
 )
+from backend.services.cache_aside import get_or_compute_cached
 from backend.services.screener_service import (
     UNIVERSES_METADATA,
     apply_screener_filters,
@@ -83,37 +84,23 @@ def get_universe_screener(
         )
 
     cache_key = f"{CACHE_KEY_PREFIX}{clean_id}"
-    cached_data = repo.get_market_cache(cache_key)
+    def _compute_universe() -> dict:
+        fresh_items = fetch_universe_data(clean_id)
+        return {
+            "items": [item.model_dump(mode="json") for item in fresh_items],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
-    items: List[ScreenerItem] = []
-    from_cache = False
-    updated_at: datetime = datetime.now(timezone.utc)
-
-    if cached_data and "items" in cached_data:
-        try:
-            items = _reconstitute_screener_items(cached_data.get("items", []))
-            from_cache = True
-            raw_updated = cached_data.get("updated_at")
-            if raw_updated:
-                updated_at = datetime.fromisoformat(raw_updated)
-            else:
-                updated_at = datetime.now(timezone.utc)
-        except Exception as exc:
-            logger.warning("Error deserializando caché para '%s': %s. Regenerando datos.", cache_key, exc)
-            items = []
-
-    if not from_cache or not items:
-        items = fetch_universe_data(clean_id)
-        updated_at = datetime.now(timezone.utc)
-        from_cache = False
-        repo.set_market_cache(
-            key=cache_key,
-            data={
-                "items": [item.model_dump(mode="json") for item in items],
-                "updated_at": updated_at.isoformat(),
-            },
-            ttl_hours=DEFAULT_TTL_HOURS,
-        )
+    payload, from_cache = get_or_compute_cached(
+        repo,
+        cache_key=cache_key,
+        ttl_hours=DEFAULT_TTL_HOURS,
+        compute_fn=_compute_universe,
+        validate_cached_fn=lambda data: bool(data.get("items")) and bool(_reconstitute_screener_items(data.get("items", []))),
+    )
+    items = _reconstitute_screener_items(payload.get("items", []))
+    raw_updated = payload.get("updated_at")
+    updated_at = datetime.fromisoformat(raw_updated) if raw_updated else datetime.now(timezone.utc)
 
     filter_params = ScreenerFilterParams(
         preset=preset,

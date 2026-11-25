@@ -15,14 +15,15 @@ from google.genai import types
 from sqlalchemy.orm import Session
 
 from backend.database.interfaz.db_interface import IRepository
-from backend.domain.schemas.latency_metrics import ExternalProviderEnum
 from backend.services.copilot_tools import (
     COPILOT_TOOL_DEFINITIONS,
     execute_copilot_tool,
 )
-from backend.services.latency_profiler import track_external_latency
-
-load_dotenv()
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +63,14 @@ ESTILO Y DESCARGO LEGAL:
 """
 
 
-def get_configured_copilot_model() -> str:
+def get_configured_copilot_model(model_override: Optional[str] = None) -> str:
     """Resuelve el modelo Gemini configurado respetando la jerarquía de variables de entorno."""
-    return (
-        os.getenv("GEMINI_COPILOT_MODEL")
-        or os.getenv("GEMINI_DEEPDIVE_MODEL")
-        or os.getenv("GEMINI_MODEL")
-        or DEFAULT_COPILOT_MODEL
+    return resolve_gemini_model(
+        "GEMINI_COPILOT_MODEL",
+        "GEMINI_DEEPDIVE_MODEL",
+        "GEMINI_MODEL",
+        default=DEFAULT_COPILOT_MODEL,
+        model_override=model_override,
     )
 
 
@@ -86,11 +88,11 @@ def run_copilot_turn(
     Ejecuta un turno completo de conversación con el Copiloto Patrimonial.
     Orquesta el envío de historial, detección de Function Calls, ejecución local de tools y síntesis final.
     """
-    effective_api_key = api_key or os.getenv("GEMINI_API_KEY")
-    effective_model = model_name or get_configured_copilot_model()
+    client = get_gemini_client(api_key=api_key)
+    effective_model = get_configured_copilot_model(model_override=model_name)
 
     # Degradación elegante si no hay API key configurada
-    if not effective_api_key:
+    if client is None:
         logger.info("Sin GEMINI_API_KEY detectada; devolviendo mensaje de degradación elegante.")
         return {
             "reply_text": (
@@ -113,8 +115,6 @@ def run_copilot_turn(
     tool_calls_details: List[Dict[str, Any]] = []
 
     try:
-        client = genai.Client(api_key=effective_api_key)
-
         # Preparar declaraciones de herramientas para Function Calling
         function_declarations = [
             types.FunctionDeclaration(
@@ -169,13 +169,13 @@ def run_copilot_turn(
         final_text = ""
         while iterations < max_tool_iterations:
             iterations += 1
-            with track_external_latency(ExternalProviderEnum.GEMINI, "copilot_chat", target=effective_model) as ctx:
-                response = client.models.generate_content(
-                    model=effective_model,
-                    contents=contents,
-                    config=config,
-                )
-                ctx.status_code = 200
+            response = generate_gemini_content(
+                client,
+                model=effective_model,
+                contents=contents,
+                config=config,
+                operation="copilot_chat",
+            )
 
             # Si el modelo solicita llamadas a funciones
             if response.function_calls:

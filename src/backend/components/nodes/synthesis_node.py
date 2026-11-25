@@ -14,14 +14,19 @@ from google.genai import types
 
 from backend.domain.states.investment_committee_state import InvestmentCommitteeState
 from backend.components.prompts.committee_prompts import SYSTEM_PROMPT_PORTFOLIO_SYNTHESIZER
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+)
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
 def synthesis_node(
     state: InvestmentCommitteeState,
     client: Optional[genai.Client] = None,
+    model_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Integra la deliberación del Comité y formula el veredicto final y el plan de acción.
@@ -77,14 +82,18 @@ def synthesis_node(
     unassigned = safety_status.get("unassigned_balance", 0.0)
     initial_notes = state.get("initial_notes") or ""
 
-    api_key = os.getenv("GEMINI_API_KEY")
     final_verdict = ""
     action_plan = ""
+    genai_client = client or get_gemini_client()
 
-    if api_key or client is not None:
+    if genai_client is not None:
         try:
-            genai_client = client or genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+            eff_model = resolve_gemini_model(
+                "GEMINI_COMMITTEE_MODEL",
+                "GEMINI_MODEL",
+                default="gemini-3.5-flash-lite",
+                model_override=model_name,
+            )
 
             risks_formatted = "\n".join(f"- {r}" for r in bear_risks) if bear_risks else "- Sin riesgos particulares reportados."
 
@@ -104,13 +113,15 @@ def synthesis_node(
                 f"### PLAN DE ACCIÓN\n(Estrategia gradual de asignación prudente sobre el saldo disponible, margen de seguridad y tramos)."
             )
 
-            response = genai_client.models.generate_content(
-                model=model_name,
+            response = generate_gemini_content(
+                genai_client,
+                model=eff_model,
                 contents=prompt_user,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT_PORTFOLIO_SYNTHESIZER,
                     temperature=0.3,
                 ),
+                operation="committee_synthesis",
             )
             raw_text = response.text or ""
             if "### PLAN DE ACCIÓN" in raw_text:

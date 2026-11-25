@@ -351,43 +351,18 @@ def search_local_knowledge(
             ),
         }
 
-    results: List[Dict[str, Any]] = []
-
     try:
-        query_words = [w for w in clean_query.split() if len(w) > 2]
-        if not query_words:
-            query_words = [clean_query]
+        from backend.external_components.data_ingestion.local_doc_loader import LocalDocLoader
 
-        for root, _, files in os.walk(target_dir):
-            for file_name in files:
-                if file_name.endswith((".txt", ".md", ".json")):
-                    file_path = os.path.join(root, file_name)
-                    try:
-                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                            content = f.read()
-
-                        # Comprobar coincidencias
-                        content_lower = content.lower()
-                        if any(w in content_lower for w in query_words):
-                            # Extraer fragmentos con contexto
-                            snippets = []
-                            lines = content.splitlines()
-                            for idx, line in enumerate(lines):
-                                if any(w in line.lower() for w in query_words):
-                                    start = max(0, idx - 1)
-                                    end = min(len(lines), idx + 2)
-                                    snippets.append("\n".join(lines[start:end]))
-                                    if len(snippets) >= 3:
-                                        break
-
-                            results.append(
-                                {
-                                    "file": file_name,
-                                    "excerpt": "\n---\n".join(snippets) if snippets else content[:300],
-                                }
-                            )
-                    except Exception as read_exc:
-                        logger.warning("No se pudo leer el archivo %s: %s", file_path, read_exc)
+        loader = LocalDocLoader(knowledge_dir=target_dir)
+        matches = loader.search_documents(query=query)
+        results = [
+            {
+                "file": item["filename"],
+                "excerpt": item["excerpt"],
+            }
+            for item in matches
+        ]
 
         return {
             "query": query,

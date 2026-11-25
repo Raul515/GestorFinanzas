@@ -34,57 +34,24 @@ from backend.domain.schemas.joint import (
     SyncEventPayload,
 )
 
+from backend.services.sync_storage import (
+    archive_processed_file,
+    get_or_create_device_id,
+    is_sync_event_file,
+    quarantine_error_file,
+    resolve_sync_dir,
+)
+from backend.utils.dates import format_utc_iso
+from backend.utils.files import atomic_write_json
+
 logger = logging.getLogger(__name__)
-
-
-def get_or_create_device_id(data_dir: Optional[Path] = None) -> str:
-    """
-    Obtiene o genera de forma persistente un identificador único de dispositivo.
-    Prioridad:
-    1. Variable de entorno DEVICE_ID (si está definida y no vacía).
-    2. Archivo device_id.txt en el directorio data/ (persiste en disco/volumen Docker).
-    3. Generación automática y almacenamiento persistente (nombre de host + uuid parcial).
-    """
-    env_id = os.environ.get("DEVICE_ID")
-    if env_id and env_id.strip():
-        return env_id.strip()
-
-    if data_dir is None:
-        data_dir = Path(__file__).resolve().parent.parent / "data"
-
-    data_dir.mkdir(parents=True, exist_ok=True)
-    device_id_file = data_dir / "device_id.txt"
-    if device_id_file.exists():
-        try:
-            stored_id = device_id_file.read_text(encoding="utf-8").strip()
-            if stored_id:
-                return stored_id
-        except Exception as exc:
-            logger.warning("No se pudo leer device_id.txt: %s", exc)
-
-    node_name = platform.node() or "device"
-    clean_node = "".join(c for c in node_name if c.isalnum() or c in ("-", "_"))[:12] or "device"
-    new_id = f"{clean_node}_{uuid.uuid4().hex[:8]}"
-    try:
-        device_id_file.write_text(new_id, encoding="utf-8")
-    except Exception as exc:
-        logger.warning("No se pudo persistir device_id.txt en disco: %s", exc)
-    return new_id
 
 
 class JointSyncService:
     """Servicio de gestión de buzones de sincronización y resolución de conflictos LWW."""
 
     def __init__(self, base_sync_dir: Optional[str] = None, local_device_id: Optional[str] = None):
-        env_sync_dir = os.environ.get("BASE_SYNC_DIR")
-        if base_sync_dir:
-            self.base_dir = Path(base_sync_dir)
-        elif env_sync_dir and env_sync_dir.strip():
-            self.base_dir = Path(env_sync_dir.strip())
-        else:
-            # Por defecto: directorio 'sync' en la raíz del proyecto
-            root_dir = Path(__file__).resolve().parent.parent.parent.parent
-            self.base_dir = root_dir / "sync"
+        self.base_dir = resolve_sync_dir(base_sync_dir)
 
         self.outbox_dir = self.base_dir / "outbox"
         self.inbox_dir = self.base_dir / "inbox"
@@ -114,7 +81,7 @@ class JointSyncService:
         Utiliza escritura temporal y renombramiento atómico para evitar que Syncthing lea archivos parciales.
         """
         eff_event_id = event_id or str(uuid.uuid4())
-        eff_timestamp = timestamp_utc or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        eff_timestamp = timestamp_utc or format_utc_iso()
         eff_device_id = origin_device_id or self.local_device_id
 
         event_payload = SyncEventPayload(
@@ -126,45 +93,22 @@ class JointSyncService:
             payload=payload,
         )
 
-        filename = f"evt_{eff_event_id}.json"
-        tmp_path = self.outbox_dir / f"{filename}.tmp"
-        final_path = self.outbox_dir / filename
+        final_path = self.outbox_dir / f"evt_{eff_event_id}.json"
 
         try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(event_payload.model_dump(), f, indent=2, ensure_ascii=False)
-            # Renombrado atómico en el mismo sistema de ficheros
-            os.replace(tmp_path, final_path)
+            atomic_write_json(final_path, event_payload.model_dump())
             logger.info("Evento delta emitido con éxito a outbox: %s", final_path.name)
             self.rotate_outbox()
         except Exception as exc:
             logger.error("Error emitiendo evento delta a outbox (%s): %s", eff_event_id, exc)
-            if tmp_path.exists():
-                try:
-                    tmp_path.unlink()
-                except OSError:
-                    pass
             raise
 
         return event_payload
 
     @staticmethod
     def _is_sync_file(file_path: Path, require_json: bool = True) -> bool:
-        """
-        Determina si un archivo es un artefacto de sincronización válido:
-        - Debe ser un archivo regular (no directorio ni enlace roto).
-        - No debe ser un archivo oculto ni de sistema (empieza por '.').
-        - No debe ser .gitkeep ni un archivo temporal (.tmp).
-        - Opcionalmente requiere extensión .json.
-        """
-        if not file_path.is_file():
-            return False
-        name = file_path.name
-        if name.startswith(".") or name == ".gitkeep" or name.endswith(".tmp"):
-            return False
-        if require_json and file_path.suffix.lower() != ".json":
-            return False
-        return True
+        """Delega en el helper común de archivos válidos de sincronización."""
+        return is_sync_event_file(file_path, require_json=require_json)
 
     def rotate_outbox(self, max_files: int = 50) -> None:
         """

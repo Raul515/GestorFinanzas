@@ -12,6 +12,7 @@ from backend.database.componentes.sqlite_db import get_db
 from backend.database.componentes.sqlite_crud import SQLiteRepository
 from backend.database.interfaz.db_interface import IRepository
 from backend.domain.schemas.deepdive import DeepDiveResponse
+from backend.services.cache_aside import get_or_compute_cached
 from backend.services.equity_deepdive import get_equity_deepdive_data
 from backend.services.llm_quality_value_analyst import analyze_quality_value
 
@@ -42,44 +43,29 @@ def get_deepdive_analysis(
     clean_ticker = ticker.strip().upper()
     cache_key = f"{CACHE_KEY_PREFIX}{clean_ticker}"
 
-    cached_data = repo.get_market_cache(cache_key)
-    if cached_data:
-        try:
-            response = DeepDiveResponse.model_validate(cached_data)
-            response.from_cache = True
-            return response
-        except Exception as exc:
-            logger.warning(
-                "Error deserializando análisis en caché para '%s': %s. Regenerando datos.",
-                clean_ticker,
-                exc,
+    def _compute_deepdive() -> dict:
+        deepdive_data = get_equity_deepdive_data(clean_ticker)
+        if not deepdive_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No se pudieron encontrar o extraer datos financieros para el símbolo bursátil '{clean_ticker}'.",
             )
+        report = analyze_quality_value(deepdive_data)
+        deepdive_data.quality_value_report = report
+        deepdive_data.from_cache = False
+        deepdive_data.updated_at = datetime.now(timezone.utc)
+        return deepdive_data.model_dump(mode="json")
 
-    # Extracción contable cuantitativa
-    deepdive_data = get_equity_deepdive_data(clean_ticker)
-    if not deepdive_data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No se pudieron encontrar o extraer datos financieros para el símbolo bursátil '{clean_ticker}'.",
-        )
-
-    # Generación de tesis agéntica Quality Value
-    report = analyze_quality_value(deepdive_data)
-    deepdive_data.quality_value_report = report
-    deepdive_data.from_cache = False
-    deepdive_data.updated_at = datetime.now(timezone.utc)
-
-    # Persistencia en caché de 24 horas
-    try:
-        repo.set_market_cache(
-            key=cache_key,
-            data=deepdive_data.model_dump(mode="json"),
-            ttl_hours=DEFAULT_TTL_HOURS,
-        )
-    except Exception as exc:
-        logger.warning("Fallo al persistir en caché SQLite para '%s': %s", cache_key, exc)
-
-    return deepdive_data
+    payload, from_cache = get_or_compute_cached(
+        repo,
+        cache_key=cache_key,
+        ttl_hours=DEFAULT_TTL_HOURS,
+        compute_fn=_compute_deepdive,
+        validate_cached_fn=lambda data: bool(DeepDiveResponse.model_validate(data)),
+    )
+    response = DeepDiveResponse.model_validate(payload)
+    response.from_cache = from_cache
+    return response
 
 
 @router.post("/refresh/{ticker}", response_model=DeepDiveResponse)

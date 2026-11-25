@@ -13,14 +13,19 @@ from google.genai import types
 
 from backend.domain.states.investment_committee_state import InvestmentCommitteeState
 from backend.components.prompts.committee_prompts import SYSTEM_PROMPT_RISK_DEBATER
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+)
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
 def risk_debate_node(
     state: InvestmentCommitteeState,
     client: Optional[genai.Client] = None,
+    model_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Formula la doble tesis de inversión obligatoria identificando al menos 2 riesgos bajistas severos.
@@ -46,13 +51,17 @@ def risk_debate_node(
     fundamental_data = state.get("fundamental_data", {})
     macro_data = state.get("macro_data", {})
 
-    api_key = os.getenv("GEMINI_API_KEY")
     bear_risks: List[str] = []
+    genai_client = client or get_gemini_client()
 
-    if api_key or client is not None:
+    if genai_client is not None:
         try:
-            genai_client = client or genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+            eff_model = resolve_gemini_model(
+                "GEMINI_COMMITTEE_MODEL",
+                "GEMINI_MODEL",
+                default="gemini-3.5-flash-lite",
+                model_override=model_name,
+            )
 
             prompt_user = (
                 f"Audita críticamente la oportunidad sobre '{ticker}'.\n"
@@ -63,13 +72,15 @@ def risk_debate_node(
                 f"Formula obligatoriamente al menos 2 riesgos bajistas severos, separando cada riesgo en una línea que empiece por '- ' o un número."
             )
 
-            response = genai_client.models.generate_content(
-                model=model_name,
+            response = generate_gemini_content(
+                genai_client,
+                model=eff_model,
                 contents=prompt_user,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT_RISK_DEBATER,
                     temperature=0.3,
                 ),
+                operation="committee_risk",
             )
             raw_text = response.text or ""
             for line in raw_text.split("\n"):

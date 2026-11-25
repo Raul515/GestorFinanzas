@@ -14,10 +14,11 @@ from google import genai
 from google.genai import types
 
 from backend.domain.schemas.deepdive import DeepDiveResponse, QualityValueReport
-from backend.domain.schemas.latency_metrics import ExternalProviderEnum
-from backend.services.latency_profiler import track_external_latency
-
-load_dotenv()
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,33 +82,17 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido con las siguientes cla
 
 def _get_gemini_client(api_key: Optional[str] = None) -> Optional[genai.Client]:
     """Inicializa el cliente de Google GenAI si la clave de API está configurada."""
-    key = api_key or os.getenv("GEMINI_API_KEY")
-    if not key or not key.strip():
-        return None
-    clean_key = key.strip().strip("'\"")
-    if not clean_key:
-        return None
-    try:
-        return genai.Client(api_key=clean_key)
-    except Exception as exc:
-        logger.warning("Fallo al inicializar genai.Client: %s", exc)
-        return None
+    return get_gemini_client(api_key=api_key)
 
 
 def get_configured_deepdive_model(model_override: Optional[str] = None) -> str:
     """Resuelve el modelo Gemini a emplear priorizando GEMINI_DEEPDIVE_MODEL, GEMINI_MODEL y fallback por defecto."""
-    if model_override and model_override.strip():
-        return model_override.strip().strip("'\"")
-
-    env_deepdive = os.getenv("GEMINI_DEEPDIVE_MODEL")
-    if env_deepdive and env_deepdive.strip():
-        return env_deepdive.strip().strip("'\"")
-
-    env_general = os.getenv("GEMINI_MODEL")
-    if env_general and env_general.strip():
-        return env_general.strip().strip("'\"")
-
-    return DEFAULT_DEEPDIVE_MODEL
+    return resolve_gemini_model(
+        "GEMINI_DEEPDIVE_MODEL",
+        "GEMINI_MODEL",
+        default=DEFAULT_DEEPDIVE_MODEL,
+        model_override=model_override,
+    )
 
 
 def _build_accounting_payload(deepdive_data: DeepDiveResponse) -> Dict[str, Any]:
@@ -189,13 +174,13 @@ def analyze_quality_value(
             temperature=0.2,
         )
 
-        with track_external_latency(ExternalProviderEnum.GEMINI, "quality_value_report", target=target_model) as ctx:
-            response = client.models.generate_content(
-                model=target_model,
-                contents=prompt_text,
-                config=config,
-            )
-            ctx.status_code = 200
+        response = generate_gemini_content(
+            client,
+            model=target_model,
+            contents=prompt_text,
+            config=config,
+            operation="quality_value_report",
+        )
 
         raw_text = response.text or "{}"
         parsed_data = json.loads(raw_text)

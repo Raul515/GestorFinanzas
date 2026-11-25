@@ -54,13 +54,12 @@ def get_db_path() -> Path:
     return Path(DB_PATH).resolve()
 
 
+from backend.utils.files import calculate_file_sha256
+
+
 def calculate_sha256(file_path: Path) -> str:
     """Calcula el hash criptográfico SHA-256 de un fichero en bloques de 64 KB."""
-    sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest()
+    return calculate_file_sha256(file_path)
 
 
 def format_bytes(size_bytes: int) -> str:

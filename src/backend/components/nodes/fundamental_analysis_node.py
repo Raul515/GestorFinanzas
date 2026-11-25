@@ -16,8 +16,12 @@ from backend.database.interfaz.db_interface import IRepository
 from backend.domain.states.investment_committee_state import InvestmentCommitteeState
 from backend.components.tools.committee_tools import fetch_fundamental_deepdive
 from backend.components.prompts.committee_prompts import SYSTEM_PROMPT_FUNDAMENTAL_ANALYST
+from backend.services.llm_client import (
+    generate_gemini_content,
+    get_gemini_client,
+    resolve_gemini_model,
+)
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +29,7 @@ def fundamental_analysis_node(
     state: InvestmentCommitteeState,
     repo: Optional[IRepository] = None,
     client: Optional[genai.Client] = None,
+    model_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Realiza la auditoría cuantitativa contable y formula la tesis favorable bajo metodología Quality Value.
@@ -86,13 +91,17 @@ def fundamental_analysis_node(
     fcf_yield = fund_data.get("fcf_analysis", {}).get("fcf_yield_percentage", 0.0)
 
     # 2. Generación cognitiva de la tesis favorable con Google Gemini
-    api_key = os.getenv("GEMINI_API_KEY")
     bull_thesis = ""
+    genai_client = client or get_gemini_client()
 
-    if api_key or client is not None:
+    if genai_client is not None:
         try:
-            genai_client = client or genai.Client(api_key=api_key)
-            model_name = os.getenv("GEMINI_COMMITTEE_MODEL") or os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+            eff_model = resolve_gemini_model(
+                "GEMINI_COMMITTEE_MODEL",
+                "GEMINI_MODEL",
+                default="gemini-3.5-flash-lite",
+                model_override=model_name,
+            )
 
             prompt_user = (
                 f"Analiza la siguiente información contable cuantitativa de '{company_name}' ({clean_ticker}) "
@@ -103,13 +112,15 @@ def fundamental_analysis_node(
                 f"Destaca sus ventajas competitivas, capacidad de generación de caja y solvencia."
             )
 
-            response = genai_client.models.generate_content(
-                model=model_name,
+            response = generate_gemini_content(
+                genai_client,
+                model=eff_model,
                 contents=prompt_user,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT_FUNDAMENTAL_ANALYST,
                     temperature=0.3,
                 ),
+                operation="committee_fundamental",
             )
             bull_thesis = response.text or ""
         except Exception as exc:

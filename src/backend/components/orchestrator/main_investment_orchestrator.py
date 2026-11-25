@@ -157,10 +157,10 @@ class MainInvestmentOrchestrator:
         return macro_evaluation_node(state)
 
     def _step_fundamental(self, state: InvestmentCommitteeState) -> Dict[str, Any]:
-        return fundamental_analysis_node(state, repo=self.repo, client=self.client)
+        return fundamental_analysis_node(state, repo=self.repo, client=self.client, model_name=self.model_name)
 
     def _step_risk(self, state: InvestmentCommitteeState) -> Dict[str, Any]:
-        return risk_debate_node(state, client=self.client)
+        return risk_debate_node(state, client=self.client, model_name=self.model_name)
 
     def _step_advisor(self, state: InvestmentCommitteeState) -> Dict[str, Any]:
-        return synthesis_node(state, client=self.client)
+        return synthesis_node(state, client=self.client, model_name=self.model_name)

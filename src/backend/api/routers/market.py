@@ -12,6 +12,7 @@ from backend.domain.schemas.market import (
     MarketNewsResponse,
     MarketRefreshResponse,
 )
+from backend.services.cache_aside import get_or_compute_cached
 from backend.services.market_data import get_macro_overview_response
 from backend.services.llm_news_analyst import get_analyzed_market_news
 
@@ -35,21 +36,16 @@ def get_macro_indicators(
     Retorna el resumen de indicadores macroeconómicos y deuda soberana (IBEX 35, EuroStoxx, Bonos, Prima de Riesgo).
     Utiliza una política de caché persistente de 24 horas en SQLite.
     """
-    cached_data = repo.get_market_cache(CACHE_KEY_MACRO_INDICATORS)
-    if cached_data:
-        try:
-            cached_data["is_cached"] = True
-            return MacroOverviewResponse(**cached_data)
-        except Exception as e:
-            logger.warning(f"Error deserializando caché de '{CACHE_KEY_MACRO_INDICATORS}': {e}. Regenerando datos.")
-
-    fresh_overview = get_macro_overview_response(is_cached=False)
-    repo.set_market_cache(
-        key=CACHE_KEY_MACRO_INDICATORS,
-        data=fresh_overview.model_dump(mode="json"),
+    payload, from_cache = get_or_compute_cached(
+        repo,
+        cache_key=CACHE_KEY_MACRO_INDICATORS,
         ttl_hours=DEFAULT_TTL_HOURS,
+        compute_fn=lambda: get_macro_overview_response(is_cached=False).model_dump(mode="json"),
+        validate_cached_fn=lambda data: bool(MacroOverviewResponse(**data)),
     )
-    return fresh_overview
+    if from_cache:
+        payload["is_cached"] = True
+    return MacroOverviewResponse(**payload)
 
 
 @router.get("/news", response_model=MarketNewsResponse)
@@ -61,27 +57,17 @@ def get_market_news(
     Retorna las noticias financieras más recientes con análisis de IA (impacto, temática contextual y síntesis).
     Aplica caché de 24 horas y degradación elegante si no hay conexión o cuota de IA disponible.
     """
-    cached_data = repo.get_market_cache(CACHE_KEY_MACRO_NEWS)
-    if cached_data:
-        # Solo servir desde caché si el análisis de IA fue exitoso.
-        # Si la caché contiene una degradación temporal previa, reintentar consulta fresca.
-        if cached_data.get("ai_analysis_available", True):
-            try:
-                cached_data["is_cached"] = True
-                return MarketNewsResponse(**cached_data)
-            except Exception as e:
-                logger.warning(f"Error deserializando caché de '{CACHE_KEY_MACRO_NEWS}': {e}. Regenerando datos.")
-        else:
-            logger.info("Caché de noticias contenía degradación temporal sin IA. Reintentando consulta.")
-
-    fresh_news = get_analyzed_market_news(limit=limit)
-    if fresh_news.ai_analysis_available:
-        repo.set_market_cache(
-            key=CACHE_KEY_MACRO_NEWS,
-            data=fresh_news.model_dump(mode="json"),
-            ttl_hours=DEFAULT_TTL_HOURS,
-        )
-    return fresh_news
+    payload, from_cache = get_or_compute_cached(
+        repo,
+        cache_key=CACHE_KEY_MACRO_NEWS,
+        ttl_hours=DEFAULT_TTL_HOURS,
+        compute_fn=lambda: get_analyzed_market_news(limit=limit).model_dump(mode="json"),
+        validate_cached_fn=lambda data: data.get("ai_analysis_available", True) and bool(MarketNewsResponse(**data)),
+        should_cache_fn=lambda data: bool(data.get("ai_analysis_available", False)),
+    )
+    if from_cache:
+        payload["is_cached"] = True
+    return MarketNewsResponse(**payload)
 
 
 @router.post("/refresh", response_model=MarketRefreshResponse)
