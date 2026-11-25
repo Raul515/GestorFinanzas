@@ -13,8 +13,10 @@ import streamlit as st
 
 try:
     import api_client
+    from components.ui_cards import open_receipt_dialog
 except ImportError:
     from frontend import api_client  # type: ignore
+    from frontend.components.ui_cards import open_receipt_dialog  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -368,24 +370,40 @@ def render_mobile_view() -> None:
         subcats_list = api_client.get_subcategorias() or []
         subcat_names = {s.get("id"): s.get("nombre") or s.get("name") for s in subcats_list if s.get("id")}
 
-        table_rows = []
-        for t in mobile_txs[:30]:  # Mostrar las 30 más recientes
+        mh1, mh2, mh3, mh4, mh5 = st.columns([1.3, 2.5, 2.2, 1.4, 1.2])
+        mh1.markdown("**Fecha**")
+        mh2.markdown("**Concepto**")
+        mh3.markdown("**Subcategoría**")
+        mh4.markdown("**Importe**")
+        mh5.markdown("**Ticket**")
+        st.markdown("<hr style='margin: 4px 0 8px 0;'>", unsafe_allow_html=True)
+
+        for idx, t in enumerate(mobile_txs[:30]):  # Mostrar las 30 más recientes
             raw_date = t.get("date") or t.get("fecha")
             sub_id = t.get("subcategory_id") or t.get("subcategoria_id")
             sub_name = subcat_names.get(sub_id, f"Subcategoría #{sub_id}")
             amount_val = float(t.get("amount") or t.get("cantidad") or 0.0)
             concept_val = t.get("description") or t.get("concepto") or "-"
-            event_id = str(t.get("mobile_event_id"))
+            formatted_date = format_display_date(raw_date)
+            receipt_fn = t.get("receipt_filename")
+            tx_key_id = t.get("id") or idx
 
-            table_rows.append({
-                "Fecha": format_display_date(raw_date),
-                "Concepto": concept_val,
-                "Subcategoría": sub_name,
-                "Importe": f"{amount_val:.2f} €",
-                "ID Móvil": event_id[:16] + "..." if len(event_id) > 16 else event_id,
-            })
-
-        st.dataframe(table_rows, width="stretch", hide_index=True)
+            mr1, mr2, mr3, mr4, mr5 = st.columns([1.3, 2.5, 2.2, 1.4, 1.2])
+            mr1.write(formatted_date)
+            mr2.write(concept_val)
+            mr3.write(sub_name)
+            mr4.write(f"{amount_val:,.2f} €")
+            with mr5:
+                if receipt_fn:
+                    if st.button("📷 Ver", key=f"btn_mob_rx_{tx_key_id}_{idx}", help="Ver foto del ticket"):
+                        open_receipt_dialog(
+                            receipt_filename=str(receipt_fn),
+                            concept=str(concept_val),
+                            amount_label=f"{amount_val:,.2f} €",
+                            date_label=formatted_date,
+                        )
+                else:
+                    st.caption("—")
     else:
         st.info("ℹ️ Aún no se han registrado transacciones desde el móvil. Captura tu primer gasto desde la micro-app para verlo reflejado aquí.")
 

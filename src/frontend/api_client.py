@@ -82,6 +82,7 @@ from frontend.api.mobile import (
     get_mobile_catalog,
     get_mobile_monthly_summary,
     get_mobile_pairing_token,
+    get_mobile_receipt_bytes,
     get_mobile_status,
     get_mobile_version,
     process_mobile_folder,

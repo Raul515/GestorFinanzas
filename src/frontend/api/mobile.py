@@ -1,6 +1,7 @@
 """Cliente HTTP para Sincronización Móvil Quick-Capture y OTA APK."""
 
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 import requests
 
@@ -154,3 +155,45 @@ def upload_mobile_apk(
         },
         ctx="upload_mobile_apk",
     )
+
+
+def get_mobile_receipt_bytes(
+    receipt_filename: str,
+    pairing_token: Optional[str] = None,
+) -> Optional[bytes]:
+    """Descarga los bytes de un comprobante de ticket desde el backend local."""
+    global _cached_pairing_token
+    if not receipt_filename or not receipt_filename.strip():
+        return None
+
+    safe_filename = quote(receipt_filename.strip(), safe="")
+    path = f"/api/mobile/receipts/{safe_filename}"
+    effective_token = pairing_token or get_cached_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else None
+
+    response = http.request(
+        "GET",
+        path,
+        headers=headers,
+        timeout=5,
+        raw_response=True,
+        default=None,
+        log_context=f"get_mobile_receipt_bytes({receipt_filename})",
+    )
+    if response is not None and getattr(response, "status_code", None) in (401, 403) and not pairing_token:
+        _cached_pairing_token = None
+        refreshed = get_cached_pairing_token(force_refresh=True)
+        if refreshed:
+            response = http.request(
+                "GET",
+                path,
+                headers={"X-Mobile-Pairing-Token": refreshed},
+                timeout=5,
+                raw_response=True,
+                default=None,
+                log_context=f"get_mobile_receipt_bytes_retry({receipt_filename})",
+            )
+
+    if response is not None and getattr(response, "status_code", None) == 200:
+        return response.content
+    return None

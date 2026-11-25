@@ -23,4 +23,5 @@ class Transaction(TransactionBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    receipt_filename: Optional[str] = None
 

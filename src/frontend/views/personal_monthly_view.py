@@ -10,6 +10,7 @@ from backend.domain.constants import is_default_personal_subcategory
 
 try:
     from frontend import api_client
+    from frontend.components.ui_cards import open_receipt_dialog
     from frontend.services.financial_calculator import (
         calculate_503020_percentages,
         calculate_annual_metrics,
@@ -22,6 +23,7 @@ try:
     from frontend.utils.formatting import format_datetime_es as _shared_format_datetime_es
 except ImportError:
     import api_client  # type: ignore
+    from components.ui_cards import open_receipt_dialog  # type: ignore
     from services.financial_calculator import (  # type: ignore
         calculate_503020_percentages,
         calculate_annual_metrics,
@@ -101,7 +103,15 @@ def render_personal_monthly_view(year_selected: int, categorias: List[Dict[str, 
         st.cache_data.clear()
         todas_subcats = api_client.get_subcategorias()
         categorias = api_client.get_categorias()
-        subcat_options = {s['id']: s.get('nombre') or s.get('name') for s in todas_subcats} if todas_subcats else {}
+        subcat_options = (
+            {
+                int(s['id']): str(s.get('nombre') or s.get('name') or f"Subcategoría #{s['id']}")
+                for s in todas_subcats
+                if s.get('id') is not None
+            }
+            if todas_subcats
+            else {}
+        )
 
     # Totales del mes
     totales_m = calculate_category_totals(
@@ -239,8 +249,8 @@ def render_personal_monthly_view(year_selected: int, categorias: List[Dict[str, 
         if not transacciones_m:
             st.info("No hay transacciones registradas en este mes.")
         else:
-            st.caption(f"Listado de transacciones registradas para {nombre_mes}. Pulsa en 🗑️ para eliminar un apunte.")
-            h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([1.5, 2.2, 2.2, 1.8, 2.8, 1.2])
+            st.caption(f"Listado de transacciones registradas para {nombre_mes}. Pulsa en 📷 para ver el ticket o en 🗑️ para eliminar un apunte.")
+            h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([1.4, 2.1, 2.1, 1.6, 2.6, 1.6])
             with h_col1:
                 st.markdown("**Fecha**")
             with h_col2:
@@ -300,7 +310,7 @@ def render_personal_monthly_view(year_selected: int, categorias: List[Dict[str, 
                 tx_monto = float(tx.get("cantidad") if tx.get("cantidad") is not None else tx.get("amount", 0.0))
                 tx_desc = tx.get("concepto") or tx.get("description") or "—"
 
-                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([1.5, 2.2, 2.2, 1.8, 2.8, 1.2])
+                r_col1, r_col2, r_col3, r_col4, r_col5, r_col6 = st.columns([1.4, 2.1, 2.1, 1.6, 2.6, 1.6])
                 with r_col1:
                     st.write(tx_fecha)
                 with r_col2:
@@ -312,19 +322,35 @@ def render_personal_monthly_view(year_selected: int, categorias: List[Dict[str, 
                 with r_col5:
                     st.write(tx_desc)
                 with r_col6:
-                    with st.popover("🗑️", help="Eliminar transacción"):
-                        st.markdown(f"¿Eliminar apunte de **{tx_monto:,.2f} €**?")
-                        st.caption(f"{sub_nombre} ({tx_fecha})")
-                        is_pauta_tx = bool(tx.get("applied_strategy_id") or str(tx_desc).startswith("[Pauta "))
-                        if is_pauta_tx:
-                            st.warning("⚠️ **Estrategia Vinculada**: Al eliminar esta transacción, se anulará la estrategia completa y se revertirán también sus transacciones hermanas.")
-                        if st.button("Confirmar", key=f"btn_del_tx_{mes_key}_{tx_id}", type="primary", width="stretch"):
-                            if api_client.delete_transaction(tx_id):
-                                msg = "Estrategia y transacciones revertidas correctamente" if is_pauta_tx else "Transacción eliminada correctamente"
-                                st.toast(msg, icon="🗑️")
-                                st.rerun()
-                            else:
-                                st.error("Error al intentar eliminar la transacción.")
+                    receipt_fn = tx.get("receipt_filename")
+                    if receipt_fn:
+                        act_c1, act_c2 = st.columns(2)
+                        with act_c1:
+                            if st.button("📷", key=f"btn_view_rx_{mes_key}_{tx_id}", help="Ver foto del ticket"):
+                                open_receipt_dialog(
+                                    receipt_filename=str(receipt_fn),
+                                    concept=str(tx_desc),
+                                    amount_label=f"{tx_monto:,.2f} €",
+                                    date_label=tx_fecha,
+                                )
+                        del_container = act_c2
+                    else:
+                        del_container = r_col6
+
+                    with del_container:
+                        with st.popover("🗑️", help="Eliminar transacción"):
+                            st.markdown(f"¿Eliminar apunte de **{tx_monto:,.2f} €**?")
+                            st.caption(f"{sub_nombre} ({tx_fecha})")
+                            is_pauta_tx = bool(tx.get("applied_strategy_id") or str(tx_desc).startswith("[Pauta "))
+                            if is_pauta_tx:
+                                st.warning("⚠️ **Estrategia Vinculada**: Al eliminar esta transacción, se anulará la estrategia completa y se revertirán también sus transacciones hermanas.")
+                            if st.button("Confirmar", key=f"btn_del_tx_{mes_key}_{tx_id}", type="primary", width="stretch"):
+                                if tx_id is not None and api_client.delete_transaction(int(tx_id)):
+                                    msg = "Estrategia y transacciones revertidas correctamente" if is_pauta_tx else "Transacción eliminada correctamente"
+                                    st.toast(msg, icon="🗑️")
+                                    st.rerun()
+                                else:
+                                    st.error("Error al intentar eliminar la transacción.")
 
     # Personalizar Presupuesto del Mes (Opcional)
     with st.expander(f"✏️ Personalizar Presupuesto de {nombre_mes} (Opcional)"):

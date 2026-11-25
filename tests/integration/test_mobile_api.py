@@ -533,6 +533,14 @@ def test_mobile_receipts_api_flow(client: TestClient, db_session: Session, auth_
     assert resp_synced_receipt.status_code == 200
     assert len(resp_synced_receipt.content) > 0
 
+    # 8. Verificar que GET /transactions/ expone receipt_filename para el visor de PC (Streamlit)
+    resp_txs = client.get("/transactions/?month=2026-11")
+    assert resp_txs.status_code == 200
+    tx_list = resp_txs.json()
+    matched = [t for t in tx_list if t.get("mobile_event_id") == "evt_int_rec_001"]
+    assert len(matched) == 1
+    assert matched[0]["receipt_filename"] == "receipt_evt_int_rec_001.jpg"
+
 
 def test_mobile_income_sync_and_summary_api(client: TestClient, db_session: Session, auth_headers: dict):
     """Verifica el flujo completo de captura y consulta de ingresos vía API (Fase 13)."""

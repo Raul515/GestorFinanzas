@@ -101,3 +101,25 @@ def render_month_navigator(mes_key: Optional[str] = None, *, key_prefix: str = "
         )
     sel_month_idx = _MONTH_NAMES_ES.index(sel_month_name) + 1
     return f"{sel_year}-{sel_month_idx:02d}"
+
+
+@st.dialog("📷 Comprobante / Ticket Adjunto")
+def open_receipt_dialog(
+    receipt_filename: str,
+    concept: str,
+    amount_label: str,
+    date_label: str,
+) -> None:
+    """Muestra un diálogo modal con la foto del ticket descargada bajo demanda del backend."""
+    try:
+        from frontend import api_client
+    except ImportError:
+        import api_client  # type: ignore
+
+    st.markdown(f"**{concept}** · `{amount_label}` · 📅 {date_label}")
+    with st.spinner("Cargando imagen del ticket..."):
+        img_bytes = api_client.get_mobile_receipt_bytes(receipt_filename)
+    if img_bytes:
+        st.image(img_bytes, caption=f"Ticket ({receipt_filename})", width="stretch")
+    else:
+        st.warning("⚠️ No se pudo cargar la foto del comprobante desde el servidor local.")
