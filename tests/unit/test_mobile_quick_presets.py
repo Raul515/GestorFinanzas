@@ -254,3 +254,33 @@ def test_mobile_quick_presets_and_hybrid_1tap_pwa_bundle(client: TestClient):
     assert "Mantén pulsado para" in bundle_js
     assert "Deshacer" in bundle_js
 
+
+def test_mobile_pwa_sw_precaches_vite_assets_and_uses_instant_shell(client: TestClient):
+    """Verifica que /mobile/sw.js pre-cachee los bundles JS/CSS de Vite y sirva App Shell Cache-First sin bloqueo de red."""
+    import re
+
+    html_resp = client.get("/mobile/")
+    assert html_resp.status_code == 200
+    html = html_resp.text
+
+    js_match = re.search(r'src="(/mobile/assets/index-[^"]+\.js)"', html)
+    css_match = re.search(r'href="(/mobile/assets/index-[^"]+\.css)"', html)
+    assert js_match is not None, "index.html no referencia bundle JS de Vite"
+    assert css_match is not None, "index.html no referencia bundle CSS de Vite"
+
+    sw_resp = client.get("/mobile/sw.js")
+    assert sw_resp.status_code == 200
+    sw_js = sw_resp.text
+
+    # 1. El Service Worker debe haber sido inyectado por Vite con nombre versionado y los assets reales
+    assert "__SW_CACHE_NAME_MARKER__" not in sw_js
+    assert "__SW_ASSETS_MARKER__" not in sw_js
+    assert js_match.group(1) in sw_js
+    assert css_match.group(1) in sw_js
+    assert "/mobile/index.html" in sw_js
+
+    # 2. La navegación debe consultar caché primero (App Shell) y usar timeout ante fallos de red
+    assert "matchShellFromCache" in sw_js
+    assert "fetchWithTimeout" in sw_js
+
+
