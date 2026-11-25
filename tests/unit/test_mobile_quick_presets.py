@@ -5,6 +5,7 @@ y la salvaguarda predictiva para categorías de Deseos (30%).
 """
 
 from datetime import date
+from typing import Any, Dict, List
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ from backend.services.mobile_sync_service import MobileSyncService
 
 
 # Presets por defecto definidos en la especificación RF-18
-DEFAULT_PRESETS_DATA = [
+DEFAULT_PRESETS_DATA: List[Dict[str, Any]] = [
     {
         "id": "preset-cafe",
         "name": "Café",
@@ -224,29 +225,32 @@ def test_custom_preset_creation_and_sync_fallback_by_name(populated_db: Session)
 
 
 def test_mobile_quick_presets_and_hybrid_1tap_pwa_bundle(client: TestClient):
-    """Verifica que el bundle PWA estático en /mobile/ incluya los componentes y lógica de Presets 1-Tap (Fase 14)."""
+    """Verifica que el bundle PWA React en /mobile/ incluya los presets 1-Tap y textos híbridos (Fase 14)."""
+    import re
+
     resp = client.get("/mobile/")
     assert resp.status_code == 200
     html = resp.text
 
+    # Localizar el bundle JS compilado de Vite referenciado en index.html
+    match = re.search(r'src="(/mobile/assets/index-[^"]+\.js)"', html)
+    assert match is not None, "index.html no referencia el bundle JS de Vite en /mobile/assets/"
+    bundle_resp = client.get(match.group(1))
+    assert bundle_resp.status_code == 200
+    bundle_js = bundle_resp.text
+
     # 1. Clave de almacenamiento local y presets por defecto
-    assert "gestor_mobile_quick_presets" in html
-    assert "preset-cafe" in html
-    assert "Café" in html
-    assert "1.5" in html or "1.50" in html
-    assert "Cena" in html
-    assert "20" in html or "20.00" in html
-    assert "Cine" in html
-    assert "5.5" in html or "5.50" in html
+    assert "gestor_mobile_quick_presets" in bundle_js
+    assert "preset-cafe" in bundle_js
+    assert "Café" in bundle_js
+    assert "1.5" in bundle_js
+    assert "Cena" in bundle_js
+    assert "20" in bundle_js
+    assert "Cine" in bundle_js
+    assert "5.5" in bundle_js
 
-    # 2. Funciones de renderizado y lógica híbrida (tap / long-press / undo)
-    assert "renderQuickPresets" in html
-    assert "renderManagePresetsModal" in html
-    assert "handleDirectSavePreset" in html
-    assert "handleSelectPreset" in html
-    assert "undoDirectSave" in html
-
-    # 3. Micro-guía visual accesible para el usuario
-    assert "Toca para rellenar" in html
-    assert "Mantén pulsado para" in html
+    # 2. Textos de interfaz híbrida (tap / long-press / deshacer / modal)
+    assert "Toca para rellenar" in bundle_js
+    assert "Mantén pulsado para" in bundle_js
+    assert "Deshacer" in bundle_js
 

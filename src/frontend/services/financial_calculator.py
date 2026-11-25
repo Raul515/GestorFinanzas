@@ -13,6 +13,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from backend.services.financial_calculator import (
+    calculate_503020_targets,
     calculate_category_totals,
     calculate_503020_percentages,
     calculate_annual_metrics,
@@ -20,6 +21,7 @@ from backend.services.financial_calculator import (
 )
 
 __all__ = [
+    "calculate_503020_targets",
     "calculate_category_totals",
     "calculate_503020_percentages",
     "calculate_annual_metrics",

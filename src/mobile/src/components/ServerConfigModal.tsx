@@ -1,7 +1,8 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { Capacitor } from "@capacitor/core";
-import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck, Zap } from "lucide-react";
+import { Server, KeyRound, Check, X, RefreshCw, AlertTriangle, ShieldCheck, Zap, Download } from "lucide-react";
 import { testServerConnection, TestConnectionResult, pairWithPin } from "../services/api";
+import { MobileVersionInfo } from "../types";
 import { isIOSDevice } from "../services/storage";
 
 interface ServerConfigModalProps {
@@ -12,6 +13,8 @@ interface ServerConfigModalProps {
   isOnline: boolean;
   isPaired: boolean;
   onSave: (newServerUrl: string, newPairingToken: string) => void;
+  latestApkInfo?: MobileVersionInfo | null;
+  onDownloadApk?: () => void;
 }
 
 export const ServerConfigModal = ({
@@ -22,6 +25,8 @@ export const ServerConfigModal = ({
   isOnline,
   isPaired,
   onSave,
+  latestApkInfo,
+  onDownloadApk,
 }: ServerConfigModalProps) => {
   const [serverUrl, setServerUrl] = useState(currentServerUrl || "");
   const [pairingToken, setPairingToken] = useState(currentPairingToken || "");
@@ -299,6 +304,31 @@ export const ServerConfigModal = ({
         {typeof window !== "undefined" && window.location.protocol === "http:" && isIOSDevice() && (
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-[9.5px] leading-snug text-amber-200">
             🍏 <strong className="text-amber-100">Uso en iPhone (HTTP Wi-Fi):</strong> Apple restringe la caché offline si la app se cierra por completo fuera de casa sin HTTPS. Para capturar sin cobertura en la calle, <strong>mantén la app en segundo plano</strong> (sin forzar el cierre). Al volver a tu Wi-Fi sincronizará automáticamente.
+          </div>
+        )}
+
+        {/* Sección compacta de descarga de APK Android (solo dispositivos no-iOS cuando hay APK publicada) */}
+        {!isIOSDevice() && latestApkInfo?.apk_available && onDownloadApk && (
+          <div className="bg-emerald-500/[0.08] border border-emerald-500/25 rounded-xl p-2.5 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base shrink-0">📱</span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-bold text-emerald-300 truncate">
+                  App Android (APK v{latestApkInfo.version_name})
+                </span>
+                <span className="text-[9.5px] text-slate-400 truncate">
+                  {Capacitor.isNativePlatform() ? "Última versión en el servidor" : "Opcional: instalar app nativa"}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onDownloadApk}
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-[10.5px] flex items-center gap-1 shrink-0 transition-all"
+            >
+              <Download className="w-3 h-3" />
+              <span>Descargar</span>
+            </button>
           </div>
         )}
 

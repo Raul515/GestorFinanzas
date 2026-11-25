@@ -38,6 +38,7 @@ from backend.domain.schemas.mobile import (
     MobileHistoricalTransactionItem,
     MobileSearchResponse,
 )
+from backend.services.financial_calculator import calculate_503020_targets
 from backend.services.joint_sync_service import get_or_create_device_id
 
 logger = logging.getLogger(__name__)
@@ -664,13 +665,12 @@ class MobileSyncService:
             })
 
         total_income_real = round(income_budgeted + income_total, 2)
-        income_base = income_budgeted if income_budgeted > 0.0 else total_income_real
 
         has_income_category = any(self.is_income_category(c) for c in categories)
         if has_income_category:
-            rule_target_needs = round(income_base * 0.50, 2)
-            rule_target_wants = round(income_base * 0.30, 2)
-            rule_target_savings = round(income_base * 0.20, 2)
+            rule_target_needs, rule_target_wants, rule_target_savings = calculate_503020_targets(
+                total_income_real
+            )
         else:
             rule_target_needs = None
             rule_target_wants = None
@@ -741,7 +741,7 @@ class MobileSyncService:
                 spent_amount=0,
                 remaining_amount=0,
                 rule_percentage=50.0,
-                budget=round(income_base * 0.50, 2) if has_income_category else 0.0,
+                budget=rule_target_needs if rule_target_needs is not None else 0.0,
             )
         if not wants_summary:
             wants_summary = MobileCategorySummary(
@@ -751,7 +751,7 @@ class MobileSyncService:
                 spent_amount=0,
                 remaining_amount=0,
                 rule_percentage=30.0,
-                budget=round(income_base * 0.30, 2) if has_income_category else 0.0,
+                budget=rule_target_wants if rule_target_wants is not None else 0.0,
             )
         if not savings_summary:
             savings_summary = MobileCategorySummary(
@@ -761,7 +761,7 @@ class MobileSyncService:
                 spent_amount=0,
                 remaining_amount=0,
                 rule_percentage=20.0,
-                budget=round(income_base * 0.20, 2) if has_income_category else 0.0,
+                budget=rule_target_savings if rule_target_savings is not None else 0.0,
             )
 
         if unassigned_spent > 0:

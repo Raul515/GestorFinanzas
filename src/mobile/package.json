@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:pwa": "tsc && vite build --mode pwa",
     "preview": "vite preview"
   },
   "dependencies": {

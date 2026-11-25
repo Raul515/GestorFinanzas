@@ -431,7 +431,7 @@ export const QuickCaptureView = ({
       </div>
 
       {/* Fila integrada: Concepto y Adjunto de Foto del Ticket (Fase 12) */}
-      <div className="my-0.5 flex items-center gap-1.5">
+      <div className="my-0.5 flex items-start gap-1.5">
         <div className="flex-1 min-w-0">
           <ConceptSuggestions
             concept={concept}
@@ -452,17 +452,17 @@ export const QuickCaptureView = ({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center p-2.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-300 hover:text-emerald-400 active:scale-95 transition-all shadow-sm shrink-0"
+            className="h-[34px] w-[38px] flex items-center justify-center rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-300 hover:text-emerald-400 active:scale-95 transition-all shadow-sm shrink-0"
             title="Adjuntar foto del ticket"
           >
             <Camera className="w-4 h-4 text-emerald-400" />
           </button>
         ) : (
-          <div className="flex items-center gap-1.5 p-1 bg-emerald-500/10 border border-emerald-500/30 rounded-xl shrink-0">
+          <div className="h-[34px] flex items-center gap-1.5 px-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl shrink-0">
             <img
               src={receiptBase64}
               alt="Ticket adjunto"
-              className="w-7 h-7 object-cover rounded-lg border border-emerald-500/40"
+              className="w-6 h-6 object-cover rounded-lg border border-emerald-500/40"
             />
             <button
               type="button"

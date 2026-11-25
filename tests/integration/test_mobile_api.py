@@ -579,7 +579,7 @@ def test_mobile_income_sync_and_summary_api(client: TestClient, db_session: Sess
     assert sync_resp.status_code == 200
     assert sync_resp.json()["processed_count"] == 2
 
-    # 3. Consultar /summary y validar balance
+    # 3. Consultar /summary y validar balance y topes 50/30/20 sobre ingreso real
     today_month = date.today().strftime("%Y-%m")
     sum_resp = client.get(f"/api/mobile/summary?month={today_month}", headers=auth_headers)
     assert sum_resp.status_code == 200
@@ -587,6 +587,22 @@ def test_mobile_income_sync_and_summary_api(client: TestClient, db_session: Sess
     assert sum_data["total_income"] == 100.0
     assert sum_data["total_spent"] == 25.0
     assert sum_data["remaining_budget"] == 75.0
+    assert sum_data["needs"]["budget"] == 50.0
+    assert sum_data["wants"]["budget"] == 30.0
+    assert sum_data["savings"]["budget"] == 20.0
+
+    # 3b. Añadir presupuesto de ingreso base (300 €) sobre el ingreso real existente (100 €) -> real total 400 € -> 200/120/80
+    from backend.domain.models.budgets import MonthlyBudget
+    db_session.add(MonthlyBudget(month=today_month, subcategory_id=sub_bizum.id, amount=300.0))
+    db_session.commit()
+
+    sum_resp_2 = client.get(f"/api/mobile/summary?month={today_month}", headers=auth_headers)
+    assert sum_resp_2.status_code == 200
+    sum_data_2 = sum_resp_2.json()
+    assert sum_data_2["total_income"] == 400.0
+    assert sum_data_2["needs"]["budget"] == 200.0
+    assert sum_data_2["wants"]["budget"] == 120.0
+    assert sum_data_2["savings"]["budget"] == 80.0
 
     # 4. Búsqueda devuelve type='INCOME' para el ingreso
     search_resp = client.get("/api/mobile/transactions/search?q=Devoluci%C3%B3n", headers=auth_headers)

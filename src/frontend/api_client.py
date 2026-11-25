@@ -2263,9 +2263,13 @@ def upload_mobile_apk(
     version_code: int,
     version_name: str,
     release_notes: str = "",
+    token: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Publica una nueva release de APK de Android para distribución OTA."""
+    global _cached_pairing_token
     url = f"{API_URL}/api/mobile/upload-apk"
+    effective_token = token or get_cached_pairing_token()
+    headers = {"X-Mobile-Pairing-Token": effective_token} if effective_token else {}
     files = {"apk_file": (filename, file_bytes, "application/vnd.android.package-archive")}
     data = {
         "version_code": str(version_code),
@@ -2273,9 +2277,11 @@ def upload_mobile_apk(
         "release_notes": release_notes,
     }
     try:
-        response = _session.post(url, files=files, data=data, timeout=60)
+        response = _session.post(url, files=files, data=data, headers=headers, timeout=60)
         if response.status_code == 200:
             return response.json()
+        if response.status_code in (401, 403):
+            _cached_pairing_token = None
         logger.warning("Fallo al subir APK móvil (%s): %s", response.status_code, response.text)
     except requests.exceptions.RequestException as e:
         logger.error("Error de red al subir APK móvil en %s: %s", url, e)

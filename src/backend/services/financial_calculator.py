@@ -8,6 +8,19 @@ Desacoplado por completo de la capa de presentación.
 from typing import Dict, List, Any, Tuple
 
 
+def calculate_503020_targets(real_income: float) -> Tuple[float, float, float]:
+    """
+    Calcula los topes presupuestarios de la regla 50/30/20 a partir del ingreso neto real.
+    Retorna: (target_needs, target_wants, target_savings) redondeados a 2 decimales.
+    """
+    base_income = max(0.0, float(real_income or 0.0))
+    return (
+        round(base_income * 0.50, 2),
+        round(base_income * 0.30, 2),
+        round(base_income * 0.20, 2),
+    )
+
+
 def calculate_category_totals(
     categorias: List[Dict[str, Any]],
     todas_subcats: List[Dict[str, Any]],
@@ -62,14 +75,15 @@ def calculate_category_totals(
             "subcategorias": cat_subcats,
         }
 
-    # Derivar los topes presupuestarios 50/30/20 a partir del ingreso neto presupuestado
-    pres_ing = totales_m.get(ingresos_name, {}).get("presupuesto", 0.0)
+    # Derivar los topes presupuestarios 50/30/20 a partir del ingreso neto real (presupuestado + real)
+    real_ing = float(totales_m.get(ingresos_name, {}).get("real", 0.0))
+    target_nec, target_des, target_aho = calculate_503020_targets(real_ing)
     if necesidades_name in totales_m:
-        totales_m[necesidades_name]["presupuesto"] = pres_ing * 0.50
+        totales_m[necesidades_name]["presupuesto"] = target_nec
     if deseos_name in totales_m:
-        totales_m[deseos_name]["presupuesto"] = pres_ing * 0.30
+        totales_m[deseos_name]["presupuesto"] = target_des
     if ahorro_name in totales_m:
-        totales_m[ahorro_name]["presupuesto"] = pres_ing * 0.20
+        totales_m[ahorro_name]["presupuesto"] = target_aho
 
     return totales_m
 

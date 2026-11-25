@@ -69,6 +69,8 @@ export function App() {
   const [isPaired, setIsPaired] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<MobileVersionInfo | null>(null);
+  const [latestApkInfo, setLatestApkInfo] = useState<MobileVersionInfo | null>(null);
+  const [otaBannerDismissed, setOtaBannerDismissed] = useState(false);
 
   // Modal / Diálogo para configurar la URL del servidor y el token de emparejamiento
   const [showServerConfigModal, setShowServerConfigModal] = useState(false);
@@ -172,19 +174,23 @@ export function App() {
           refreshHeavyData(true);
         }
 
-        // Comprobar si hay una nueva versión de APK para auto-actualización OTA (solo Android)
+        // Comprobar disponibilidad de APK en el servidor (solo Android)
         if (!isIOSDevice()) {
           const versionInfo = await fetchLatestVersion();
-          if (
-            versionInfo &&
-            versionInfo.version_code > CURRENT_APP_VERSION.code &&
-            versionInfo.apk_available
-          ) {
-            setAvailableUpdate(versionInfo);
+          if (versionInfo && versionInfo.apk_available) {
+            setLatestApkInfo(versionInfo);
+            // El banner superior OTA solo se muestra en la APK nativa instalada cuando hay una versión superior
+            if (Capacitor.isNativePlatform() && versionInfo.version_code > CURRENT_APP_VERSION.code) {
+              setAvailableUpdate(versionInfo);
+            } else {
+              setAvailableUpdate(null);
+            }
           } else {
+            setLatestApkInfo(null);
             setAvailableUpdate(null);
           }
         } else {
+          setLatestApkInfo(null);
           setAvailableUpdate(null);
         }
       }
@@ -501,20 +507,30 @@ export function App() {
         </div>
       </header>
 
-      {/* Banner de Actualización OTA disponible */}
-      {availableUpdate && (
+      {/* Banner de Actualización OTA disponible (solo APK nativa) */}
+      {availableUpdate && !otaBannerDismissed && (
         <div className="bg-emerald-500/20 border-b border-emerald-500/30 px-3.5 py-1.5 flex items-center justify-between text-xs text-emerald-300 shrink-0">
           <div className="flex items-center gap-1.5 font-medium">
             <span>🚀</span>
             <span>Nueva versión v{availableUpdate.version_name}</span>
           </div>
-          <button
-            type="button"
-            onClick={handleOpenOtaDownload}
-            className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-extrabold text-[11px] active:scale-95 shadow-sm"
-          >
-            Actualizar
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleOpenOtaDownload}
+              className="px-2.5 py-0.5 rounded-lg bg-emerald-500 text-slate-950 font-extrabold text-[11px] active:scale-95 shadow-sm"
+            >
+              Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={() => setOtaBannerDismissed(true)}
+              className="px-1.5 py-0.5 rounded-lg text-emerald-300/70 hover:text-emerald-200 font-bold text-xs"
+              title="Ocultar aviso"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 
@@ -577,6 +593,8 @@ export function App() {
         isOnline={isServerOnline}
         isPaired={isPaired}
         onSave={handleSaveServerConfig}
+        latestApkInfo={latestApkInfo}
+        onDownloadApk={handleOpenOtaDownload}
       />
     </div>
   );

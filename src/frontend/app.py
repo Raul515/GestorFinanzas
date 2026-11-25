@@ -191,44 +191,16 @@ if modulo_personal == "📊 Presupuesto y Meses":
         else:
             # Recolectar datos de los 12 meses (RF-10: Caching en RAM TTL 120s para suprimir 24 llamadas HTTP redundantes)
             cached_annual = api_client.get_annual_summary_data(year_selected)
-            anual_data = {m: {cat['nombre']: {"presupuesto": 0.0, "real": 0.0} for cat in categorias} for m in range(1, 13)}
-        
+            anual_data = {}
+
             for m in range(1, 13):
                 m_info = cached_annual.get(m, {})
                 presupuestos_m = m_info.get("presupuestos", [])
                 transacciones_m = m_info.get("transacciones", [])
-            
-                for cat in categorias:
-                    cat_subcats = [s for s in todas_subcats if (s.get('categoria_id') if s.get('categoria_id') is not None else s.get('category_id')) == cat['id']]
-                    p_sum = 0.0
-                    r_sum = 0.0
-                    for s in cat_subcats:
-                        s_id = s['id']
-                        p_val = 0.0
-                        if presupuestos_m:
-                            p_match = [p for p in presupuestos_m if (p.get('subcategoria_id') if p.get('subcategoria_id') is not None else p.get('subcategory_id')) == s_id]
-                            if p_match:
-                                p_val = p_match[0].get('cantidad') if p_match[0].get('cantidad') is not None else p_match[0].get('amount', 0.0)
-                        p_sum += p_val
-                    
-                        t_val = 0.0
-                        if transacciones_m:
-                            r_match = [t.get('cantidad', t.get('amount', 0.0)) for t in transacciones_m if (t.get('subcategoria_id') if t.get('subcategoria_id') is not None else t.get('subcategory_id')) == s_id]
-                            t_val = sum(r_match)
-                    
-                        r_sum += (p_val + t_val)
-                
-                    anual_data[m][cat['nombre']]["presupuesto"] = p_sum
-                    anual_data[m][cat['nombre']]["real"] = r_sum
-            
-                # Derivar automáticamente presupuestos de bloques según regla 50/30/20
-                p_ing_m = anual_data[m][ingresos_name]["presupuesto"]
-                if necesidades_name in anual_data[m]:
-                    anual_data[m][necesidades_name]["presupuesto"] = p_ing_m * 0.50
-                if deseos_name in anual_data[m]:
-                    anual_data[m][deseos_name]["presupuesto"] = p_ing_m * 0.30
-                if ahorro_name in anual_data[m]:
-                    anual_data[m][ahorro_name]["presupuesto"] = p_ing_m * 0.20
+                anual_data[m] = calculate_category_totals(
+                    categorias, todas_subcats, presupuestos_m, transacciones_m,
+                    ingresos_name, necesidades_name, deseos_name, ahorro_name,
+                )
 
             # Totales Consolidados Anuales
             ann_metrics = calculate_annual_metrics(

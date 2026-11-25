@@ -19,6 +19,7 @@ from backend.domain.schemas.guidelines import (
     MonthlyScenarioType,
     SynopticTableRow,
 )
+from backend.services.financial_calculator import calculate_503020_targets
 
 
 def evaluate_monthly_guidelines(
@@ -37,9 +38,7 @@ def evaluate_monthly_guidelines(
     Evalúa el estado financiero de un mes individual y genera las pautas deterministas correspondientes,
     calculando importes exactos en euros, estrategias de redistribución y tablas sinópticas.
     """
-    target_needs = 0.50 * real_income if real_income > 0 else 0.0
-    target_wants = 0.30 * real_income if real_income > 0 else 0.0
-    target_savings = 0.20 * real_income if real_income > 0 else 0.0
+    target_needs, target_wants, target_savings = calculate_503020_targets(real_income)
 
     total_spent = real_needs + real_wants + real_savings
     unassigned_amount = max(0.0, real_income - total_spent)

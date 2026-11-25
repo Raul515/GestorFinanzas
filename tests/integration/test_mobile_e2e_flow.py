@@ -176,8 +176,9 @@ def test_mobile_e2e_syncthing_inbox_and_file_rotation(client: TestClient, db_ses
             assert resp_status_1.status_code == 200
             assert resp_status_1.json()["pending_inbox_files"] == 1
 
-            # 3. Disparar procesamiento de la carpeta
-            resp_proc = client.post("/api/mobile/process-folder")
+            # 3. Disparar procesamiento de la carpeta (requiere token de emparejamiento)
+            token_hdrs = {"X-Mobile-Pairing-Token": custom_service.get_or_create_pairing_token()}
+            resp_proc = client.post("/api/mobile/process-folder", headers=token_hdrs)
             assert resp_proc.status_code == 200
             proc_data = resp_proc.json()
             assert proc_data["success"] is True

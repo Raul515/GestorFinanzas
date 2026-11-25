@@ -1,5 +1,6 @@
 import pytest
 from backend.services.financial_calculator import (
+    calculate_503020_targets,
     calculate_category_totals,
     calculate_503020_percentages,
     calculate_annual_metrics,
@@ -148,4 +149,60 @@ def test_get_monthly_needs_budget():
     )
     # 800 + 350 = 1150.0 € (cine pertenece a categoría 20, excluida)
     assert total_needs == 1150.0
+
+
+def test_calculate_503020_targets_and_negative_clamp():
+    """Verifica el cálculo SSOT de topes 50/30/20 sobre el ingreso real y clamp a 0 en negativos."""
+    assert calculate_503020_targets(400.0) == (200.0, 120.0, 80.0)
+    assert calculate_503020_targets(0.0) == (0.0, 0.0, 0.0)
+    assert calculate_503020_targets(-150.0) == (0.0, 0.0, 0.0)
+
+
+def test_calculate_category_totals_503020_uses_real_income():
+    """Verifica que los topes 50/30/20 se recalculen sobre el ingreso real aunque el presupuesto sea 0 o menor."""
+    categorias = [
+        {"id": 1, "nombre": "Ingresos Netos", "tipo": "ingreso"},
+        {"id": 2, "nombre": "Necesidades Básicas", "tipo": "gasto"},
+        {"id": 3, "nombre": "Deseos", "tipo": "gasto"},
+        {"id": 4, "nombre": "Ahorro e Inversión", "tipo": "ahorro"},
+    ]
+    subcategorias = [
+        {"id": 10, "categoria_id": 1, "nombre": "Otros Ingresos"},
+        {"id": 20, "categoria_id": 2, "nombre": "Alquiler"},
+        {"id": 30, "categoria_id": 3, "nombre": "Restaurantes"},
+        {"id": 40, "categoria_id": 4, "nombre": "Fondo"},
+    ]
+
+    # Caso 1: Presupuesto de ingreso 0 € + ingreso real de 400 € -> 200 / 120 / 80 €
+    totals_zero_budget = calculate_category_totals(
+        categorias=categorias,
+        todas_subcats=subcategorias,
+        presupuestos_m=[],
+        transacciones_m=[{"subcategoria_id": 10, "cantidad": 400.0}],
+        ingresos_name="Ingresos Netos",
+        necesidades_name="Necesidades Básicas",
+        deseos_name="Deseos",
+        ahorro_name="Ahorro e Inversión",
+    )
+    assert totals_zero_budget["Ingresos Netos"]["presupuesto"] == 0.0
+    assert totals_zero_budget["Ingresos Netos"]["real"] == 400.0
+    assert totals_zero_budget["Necesidades Básicas"]["presupuesto"] == 200.0
+    assert totals_zero_budget["Deseos"]["presupuesto"] == 120.0
+    assert totals_zero_budget["Ahorro e Inversión"]["presupuesto"] == 80.0
+
+    # Caso 2: Presupuesto 1500 € + ingreso real extra de 400 € (real = 1900 €) -> 950 / 570 / 380 €
+    totals_with_budget = calculate_category_totals(
+        categorias=categorias,
+        todas_subcats=subcategorias,
+        presupuestos_m=[{"subcategoria_id": 10, "cantidad": 1500.0}],
+        transacciones_m=[{"subcategoria_id": 10, "cantidad": 400.0}],
+        ingresos_name="Ingresos Netos",
+        necesidades_name="Necesidades Básicas",
+        deseos_name="Deseos",
+        ahorro_name="Ahorro e Inversión",
+    )
+    assert totals_with_budget["Ingresos Netos"]["real"] == 1900.0
+    assert totals_with_budget["Necesidades Básicas"]["presupuesto"] == 950.0
+    assert totals_with_budget["Deseos"]["presupuesto"] == 570.0
+    assert totals_with_budget["Ahorro e Inversión"]["presupuesto"] == 380.0
 
