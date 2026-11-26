@@ -326,4 +326,17 @@
        - Persistencia local completa en el dispositivo (SQLite embebido en Capacitor o IndexedDB estructurado) para catálogo, presupuestos, histórico completo, Fondo de Emergencia y cálculo 50/30/20 autónomo sin depender del servidor PC.
        - Copia de seguridad/exportación directa desde el móvil y sincronización opcional (con el PC o entre dispositivos vía P2P/nube privada/NAS) en lugar de obligatoria.
        - Paridad progresiva de funcionalidades (gestión completa de categorías, presupuestos mensuales/anuales y opcionalmente finanzas conjuntas) manteniendo los principios constitucionales de privacidad local.
+
+19. **Priorización Oficial de Próximas Mejoras (Acordada 2026-11-26)**:
+    - **Prioridad Alta**:
+      1. **HTTPS Local (Tailscale Serve / Caddy)**: Service Worker offline real en iPhone, WebAPK standalone en Android y URL fija.
+      2. **Huchas Conjuntas y Gastos del Hogar en Móvil (Spec 010 + Móvil)**: captura compartida (`Personal | Hogar`) y aportaciones rápidas.
+      3. **App Móvil Autónoma / Independiente del PC**: persistencia local completa y operativa autónoma sin depender de tener el PC/Docker encendido.
+    - **Prioridad Media**:
+      4. **Streaming de Respuestas de IA (`SSE` + `st.write_stream`)**: respuestas en tiempo real para Copiloto y Comité Asesor.
+      5. **Conector MCP / Gmail para Newsletters Financieras**: lectura filtrada (`gmail.readonly`) y extracción de filtros para el Screener.
+    - **Prioridad Baja / Largo Plazo**:
+      6. **Backups Avanzados (Post-Spec 011)**: el sistema actual ya es suficientemente robusto; queda para más adelante compresión, cifrado y nube externa.
+      7. **Modernización de UI PC (React/Tauri) + Paginación/Downsampling**.
+      8. **Caché compartida de análisis Deep Dive**.
        - *Visor de Instantáneas en Modo Solo Lectura*: Inspección temporal de copias antiguas sin sobrescribir la base activa.
