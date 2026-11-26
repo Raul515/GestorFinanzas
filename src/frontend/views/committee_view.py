@@ -45,8 +45,10 @@ def _format_datetime_es(raw: Any) -> str:
     return _shared_format_datetime_es(raw, fallback="")
 
 
-def render_committee_view() -> None:
+def render_committee_view(year_selected: Optional[int] = None) -> None:
     """Renderiza la pestaña del Comité Asesor Multiagente."""
+    if year_selected is None:
+        year_selected = date.today().year
     st.header("🏛️ Comité Asesor de Inversión Multiagente")
     st.caption(
         "Órgano colegiado de deliberación patrimonial orquestado con LangGraph. Coordina cinco agentes cognitivos especializados "

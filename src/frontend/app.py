@@ -171,7 +171,7 @@ elif modulo_personal == "🧠 Inversión y Mercado (IA)":
     with tab_copilot:
         render_copilot_view()
     with tab_committee:
-        render_committee_view()
+        render_committee_view(year_selected=year_selected)
 
 elif modulo_personal == "⚙️ Ajustes y Sistema":
     tabs_list = [
