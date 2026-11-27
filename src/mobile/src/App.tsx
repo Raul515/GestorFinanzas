@@ -541,7 +541,7 @@ export function App() {
       )}
 
       {/* Contenido principal según pestaña activa con scroll elástico y min-h-0 */}
-      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto overflow-x-hidden">
         {activeTab === "capture" ? (
           <QuickCaptureView
             subcategories={catalog.personal_subcategories}

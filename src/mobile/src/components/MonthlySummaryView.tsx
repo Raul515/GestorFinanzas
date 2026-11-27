@@ -137,24 +137,24 @@ export const MonthlySummaryView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto no-scrollbar gap-2.5 text-slate-100">
-      {/* Cabecera con selector de mes universal (compatible iOS/Android) y botón de refresco */}
-      <div className="flex items-center justify-between pt-0.5 gap-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+    <div className="flex-1 flex flex-col max-w-sm mx-auto w-full px-3 py-2 overflow-y-auto overflow-x-hidden no-scrollbar gap-2.5 text-slate-100">
+      {/* Cabecera apilada con selector de mes universal (compatible iOS/Android) y botón de refresco */}
+      <div className="flex flex-col pt-0.5 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
             <PieChart className="w-4 h-4" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-black text-sm tracking-tight text-slate-100">Mi Mes</h2>
             <p className="text-[10px] text-slate-400 font-medium">Ejecución y presupuestos</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 w-full">
           <button
             type="button"
             onClick={() => shiftMonth(-1)}
-            className="px-2 py-1 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95 shrink-0"
             title="Mes anterior"
           >
             ◀
@@ -162,7 +162,7 @@ export const MonthlySummaryView = ({
           <select
             value={currentMonth}
             onChange={(e: ChangeEvent<HTMLSelectElement>) => setCurrentMonth(e.target.value)}
-            className="bg-[#0F172A] border border-white/[0.08] text-xs font-bold rounded-xl px-2 py-1 text-slate-200 focus:outline-none focus:border-emerald-500/60"
+            className="flex-1 min-w-0 bg-[#0F172A] border border-white/[0.08] text-xs font-bold rounded-xl px-2.5 py-1.5 text-slate-200 text-center focus:outline-none focus:border-emerald-500/60"
           >
             {getMonthOptions(currentMonth).map((mVal) => (
               <option key={mVal} value={mVal}>
@@ -173,7 +173,7 @@ export const MonthlySummaryView = ({
           <button
             type="button"
             onClick={() => shiftMonth(1)}
-            className="px-2 py-1 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95"
+            className="px-2.5 py-1.5 rounded-lg bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-bold active:scale-95 shrink-0"
             title="Mes siguiente"
           >
             ▶
@@ -182,7 +182,7 @@ export const MonthlySummaryView = ({
             type="button"
             onClick={() => loadData(currentMonth, true)}
             disabled={loading}
-            className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+            className="p-1.5 rounded-xl bg-[#0F172A] border border-white/[0.08] text-slate-400 hover:text-emerald-400 active:scale-95 disabled:opacity-50 transition-all shadow-sm shrink-0"
             title={isServerOnline ? "Recargar métricas" : "Reconectar y recargar"}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
