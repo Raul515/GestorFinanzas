@@ -22,6 +22,9 @@ class PrivacyFilter(logging.Filter):
     # Expresión regular para claves de API de Google AI / Gemini (ej. AIzaSyD-...)
     GEMINI_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z\-_]{35}")
 
+    # Expresión regular para tokens maestros del Companion Móvil (ej. sec_...)
+    MOBILE_TOKEN_PATTERN = re.compile(r"\bsec_[0-9a-fA-F]{16,64}\b")
+
     # Expresión regular para cabeceras de autorización Bearer
     BEARER_TOKEN_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-_\.]+")
 
@@ -44,6 +47,9 @@ class PrivacyFilter(logging.Filter):
 
         # Ofuscación de claves de Gemini
         text = self.GEMINI_KEY_PATTERN.sub("[REDACTED]", text)
+
+        # Ofuscación de tokens maestros móviles
+        text = self.MOBILE_TOKEN_PATTERN.sub("[REDACTED]", text)
 
         # Ofuscación de tokens de tipo Bearer
         text = self.BEARER_TOKEN_PATTERN.sub("Bearer [REDACTED]", text)

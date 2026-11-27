@@ -90,10 +90,6 @@ def render_mobile_view() -> None:
     is_https_mode = active_public_url.lower().startswith("https://")
     server_base_url = active_public_url if active_public_url else http_server_base_url
 
-    token_query = f"?token={pairing_token}" if pairing_token else ""
-    mobile_url = f"{server_base_url}/mobile/{token_query}"
-    localhost_url = f"http://localhost:8000/mobile/{token_query}"
-
     # ==============================================================================
     # SECCIÓN 1: ACCESO RÁPIDO CON CÓDIGO PIN DE 6 DÍGITOS Y ENLACES
     # ==============================================================================
@@ -172,8 +168,7 @@ def render_mobile_view() -> None:
     active_pin = pin_data.get("pin", "------") if pin_data else "------"
     formatted_pin = f"{active_pin[:3]} {active_pin[3:]}" if len(active_pin) == 6 else active_pin
     clean_mobile_url = f"{server_base_url}/mobile/"
-    auto_pair_url = f"{clean_mobile_url}?pin={active_pin}" if active_pin != "------" else clean_mobile_url
-    localhost_pin_url = f"http://localhost:8000/mobile/?pin={active_pin}" if active_pin != "------" else localhost_url
+    localhost_pin_url = f"http://localhost:8000/mobile/?pin={active_pin}" if active_pin != "------" else "http://localhost:8000/mobile/"
 
     col_pin, col_info = st.columns([1, 2])
 

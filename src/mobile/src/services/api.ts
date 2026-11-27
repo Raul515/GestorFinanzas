@@ -440,12 +440,23 @@ export const fetchHistoryCache = async (months = 12): Promise<HistoricalTransact
 
 export const getReceiptImageUrl = (urlOrFilename?: string | null): string | undefined => {
   if (!urlOrFilename) return undefined;
-  if (urlOrFilename.startsWith("data:")) return urlOrFilename;
+  if (urlOrFilename.startsWith("data:") || urlOrFilename.startsWith("blob:")) return urlOrFilename;
   const path = urlOrFilename.startsWith("/api/") ? urlOrFilename : `/api/mobile/receipts/${urlOrFilename}`;
-  let base = `${getBaseApiUrl()}${path}`;
-  const token = getStoredPairingToken();
-  if (token) {
-    base += (base.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+  return `${getBaseApiUrl()}${path}`;
+};
+
+export const fetchReceiptBlobUrl = async (imageUrl: string): Promise<string | null> => {
+  try {
+    const res = await fetchWithTimeout(
+      imageUrl,
+      { headers: getCommonHeaders() },
+      8000
+    );
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    console.warn("Error descargando comprobante autenticado:", err);
+    return null;
   }
-  return base;
 };

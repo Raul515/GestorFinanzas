@@ -2,9 +2,11 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 import os
+import re
 import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from backend.utils.env_setup import ensure_env_file
 from backend.utils.logging_config import setup_logging
 from backend.init_db_data import populate
@@ -115,24 +117,47 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Gestor Finanzas API", lifespan=lifespan)
 
-# Soporte integral de CORS para clientes móviles (Capacitor APK y clientes PWA cross-origin)
+# Soporte integral de CORS para clientes móviles (autenticación por cabecera X-Mobile-Pairing-Token, sin cookies)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+_PROXY_CONFINEMENT_HEADERS = (
+    "x-forwarded-for",
+    "forwarded",
+    "x-real-ip",
+    "tailscale-user-login",
+    "tailscale-user-name",
+)
+_SENSITIVE_QUERY_PATTERN = re.compile(r"(?i)(^|&)(token|pin)=[^&]*")
 
 
 @app.middleware("http")
 async def log_requests_middleware(request: Request, call_next):
-    """Middleware de observabilidad para registrar método, ruta, código HTTP y latencia."""
+    """Middleware de seguridad proxy (confinamiento móvil) y observabilidad con sanitización."""
     start_time = time.perf_counter()
     method = request.method
     query = request.url.query
-    path_with_query = f"{request.url.path}?{query}" if query else request.url.path
+    safe_query = _SENSITIVE_QUERY_PATTERN.sub(r"\1\2=[REDACTED]", query) if query else ""
+    path_with_query = f"{request.url.path}?{safe_query}" if safe_query else request.url.path
+
+    # Si la petición entra a través de proxy inverso (ej. Tailscale Serve), confinar solo a rutas móviles
+    if method != "OPTIONS" and any(request.headers.get(h, "").strip() for h in _PROXY_CONFINEMENT_HEADERS):
+        req_path = request.url.path
+        if not (
+            req_path == "/mobile"
+            or req_path.startswith("/mobile/")
+            or req_path.startswith("/api/mobile/")
+        ):
+            logger.warning("Acceso denegado por proxy a ruta no móvil: %s %s", method, path_with_query)
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Acceso denegado: el túnel remoto solo permite rutas móviles."},
+            )
 
     try:
         response = await call_next(request)

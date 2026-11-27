@@ -766,6 +766,24 @@ def test_admin_endpoints_reject_proxied_https_tailscale_headers(client: TestClie
     assert resp_pin.status_code == 403
 
 
+def test_proxy_confinement_blocks_non_mobile_routes_and_allows_mobile(client: TestClient):
+    """Verifica confinamiento proxy: tráfico vía Tailscale/proxy solo puede acceder a /mobile y /api/mobile."""
+    proxy_headers = {"Tailscale-User-Login": "user@tailnet", "X-Forwarded-For": "100.64.0.12"}
+
+    # 1. Rutas de escritorio y raíz quedan bloqueadas con 403 si llegan proxiadas
+    assert client.get("/", headers=proxy_headers).status_code == 403
+    assert client.get("/transactions/", headers=proxy_headers).status_code == 403
+    assert client.get("/backup/list", headers=proxy_headers).status_code == 403
+
+    # 2. Sin proxy (acceso local directo / Streamlit) siguen respondiendo 200 OK
+    assert client.get("/").status_code == 200
+
+    # 3. Rutas móviles públicas siguen permitidas bajo proxy (con /admin/* bloqueado)
+    assert client.get("/api/mobile/status", headers=proxy_headers).status_code == 200
+    assert client.get("/mobile/", headers=proxy_headers).status_code == 200
+
+
+
 
 
 

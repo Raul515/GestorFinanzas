@@ -9,14 +9,14 @@ const DEFAULT_ASSETS = [
   "/mobile/icon-192.svg",
   "/mobile/icon-512.svg"
 ];
-const CACHE_NAME = "gestor-finanzas-mobile-v1.4.0-6ecef1f15b";
+const CACHE_NAME = "gestor-finanzas-mobile-v1.4.0-b0a0bc634a";
 const ASSETS_TO_CACHE = [
   "/mobile/",
-  "/mobile/assets/index-VXnBt-eg.css",
-  "/mobile/assets/index-uNo5Idpr.js",
-  "/mobile/assets/web-BEGz8DnN.js",
-  "/mobile/assets/web-Bq85ucHN.js",
-  "/mobile/assets/web-DdD-7P6s.js",
+  "/mobile/assets/index-BjPswGAA.css",
+  "/mobile/assets/index-DHFyLEVP.js",
+  "/mobile/assets/web-BeOUc60D.js",
+  "/mobile/assets/web-Bxmj-53I.js",
+  "/mobile/assets/web-dVOuf0GQ.js",
   "/mobile/icon-192.png",
   "/mobile/icon-192.svg",
   "/mobile/icon-512.png",

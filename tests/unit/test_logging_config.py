@@ -196,3 +196,16 @@ def test_idempotent_setup_logging_no_duplicate_handlers(tmp_path):
 
     logger2 = setup_logging(str(log_file))
     assert len(logger2.handlers) == initial_count
+
+
+def test_privacy_filter_masks_mobile_pairing_tokens():
+    """Verifica que PrivacyFilter enmascare tokens móviles sec_... y query ?token=sec_..."""
+    pf = PrivacyFilter()
+    fake_sec = "sec_" + "a1b2c3d4" * 4
+    sanitized_url = pf.sanitize(f"GET /api/mobile/receipts/r1.jpg?token={fake_sec}")
+    assert fake_sec not in sanitized_url
+    assert "[REDACTED]" in sanitized_url
+
+    sanitized_bare = pf.sanitize(f"Token suelto {fake_sec} detectado")
+    assert fake_sec not in sanitized_bare
+    assert "[REDACTED]" in sanitized_bare
