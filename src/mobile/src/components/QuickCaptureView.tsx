@@ -293,21 +293,23 @@ export const QuickCaptureView = ({
     <div className="flex-1 flex flex-col gap-1.5 max-w-sm mx-auto w-full px-3 py-2 pb-4 overflow-y-auto no-scrollbar">
       {/* Toast de confirmación rápida con soporte para Deshacer (1-Tap) y Safe-Area iOS */}
       {toastInfo && (
-        <div className="fixed top-[calc(12px+env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span className="truncate">{toastInfo.message}</span>
-          {toastInfo.eventId && onDeleteExpense && (
-            <button
-              type="button"
-              onClick={() => {
-                onDeleteExpense(toastInfo.eventId!);
-                setToastInfo(null);
-              }}
-              className="bg-slate-950 text-white font-bold px-2 py-0.5 rounded-full text-[10px] hover:bg-slate-800 active:scale-95 transition-all ml-1 shrink-0"
-            >
-              Deshacer
-            </button>
-          )}
+        <div className="fixed top-[calc(12px+env(safe-area-inset-top,0px))] inset-x-3 z-50 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto max-w-full bg-emerald-500 text-slate-950 font-bold px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="leading-tight">{toastInfo.message}</span>
+            {toastInfo.eventId && onDeleteExpense && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteExpense(toastInfo.eventId!);
+                  setToastInfo(null);
+                }}
+                className="bg-slate-950 text-white font-bold px-2 py-0.5 rounded-full text-[10px] hover:bg-slate-800 active:scale-95 transition-all ml-1 shrink-0"
+              >
+                Deshacer
+              </button>
+            )}
+          </div>
         </div>
       )}
 
