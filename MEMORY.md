@@ -328,16 +328,21 @@
        - Copia de seguridad/exportación directa desde el móvil y sincronización opcional (con el PC o entre dispositivos vía P2P/nube privada/NAS) en lugar de obligatoria.
        - Paridad progresiva de funcionalidades (gestión completa de categorías, presupuestos mensuales/anuales y opcionalmente finanzas conjuntas) manteniendo los principios constitucionales de privacidad local.
 
-19. **Priorización Oficial de Próximas Mejoras (Acordada 2026-11-26)**:
+19. **Priorización Oficial de Próximas Mejoras (Acordada 2026-11-26 / Actualizada 2026-11-27)**:
+    - **Completada en Spec 016 Ampliación**: **HTTPS Local vía Tailscale Serve (`tailscale serve --bg 8000` + `MOBILE_PUBLIC_URL`)**:
+      - *Criterios prácticos por plataforma*:
+        - **iPhone (iOS Safari y Chrome)**: Tailscale HTTPS es **necesario** si se desea arranque instantáneo y operativa 100% offline tras cerrar por completo la PWA (WebKit bloquea `ServiceWorker` sobre HTTP local; sin Tailscale solo funciona offline manteniendo la app abierta en segundo plano).
+        - **Android (APK vs PWA + Tailscale)**: con la **APK nativa**, no hace falta instalar Tailscale para uso doméstico (basta cambiar IP si alterna cable/Wi-Fi y actualizar `.apk` manualmente). Con **PWA + Tailscale HTTPS**, Android instala la PWA a pantalla completa sin barra de Chrome, mantiene URL fija `.ts.net` y se **auto-actualiza en 2s** al abrirla conectada al PC sin recompilar `.apk`.
+        - **Uso bajo demanda en el móvil**: **no requiere tener Tailscale encendido siempre en 2º plano**; la app opera offline con Tailscale apagado y solo hace falta activarlo unos segundos cuando el PC/Docker estén encendidos para sincronizar.
     - **Prioridad Alta**:
-      1. **HTTPS Local (Tailscale Serve / Caddy)**: Service Worker offline real en iPhone, WebAPK standalone en Android y URL fija.
-      2. **Huchas Conjuntas y Gastos del Hogar en Móvil (Spec 010 + Móvil)**: captura compartida (`Personal | Hogar`) y aportaciones rápidas.
-      3. **App Móvil Autónoma / Independiente del PC**: persistencia local completa y operativa autónoma sin depender de tener el PC/Docker encendido.
+      1. **Huchas Conjuntas y Gastos del Hogar en Móvil (Spec 010 + Móvil)**: captura compartida (`Personal | Hogar`) y aportaciones rápidas.
+      2. **App Móvil Autónoma / Independiente del PC**: persistencia local completa y operativa autónoma sin depender de tener el PC/Docker encendido.
     - **Prioridad Media**:
-      4. **Streaming de Respuestas de IA (`SSE` + `st.write_stream`)**: respuestas en tiempo real para Copiloto y Comité Asesor.
-      5. **Conector MCP / Gmail para Newsletters Financieras**: lectura filtrada (`gmail.readonly`) y extracción de filtros para el Screener.
+      3. **Streaming de Respuestas de IA (`SSE` + `st.write_stream`)**: respuestas en tiempo real para Copiloto y Comité Asesor.
+      4. **Conector MCP / Gmail para Newsletters Financieras**: lectura filtrada (`gmail.readonly`) y extracción de filtros para el Screener.
     - **Prioridad Baja / Largo Plazo**:
-      6. **Backups Avanzados (Post-Spec 011)**: el sistema actual ya es suficientemente robusto; queda para más adelante compresión, cifrado y nube externa.
-      7. **Modernización de UI PC (React/Tauri) + Paginación/Downsampling**.
-      8. **Caché compartida de análisis Deep Dive**.
+      5. **Backups Avanzados (Post-Spec 011)**: el sistema actual ya es suficientemente robusto; queda para más adelante compresión, cifrado y nube externa.
+      6. **Modernización de UI PC (React/Tauri) + Paginación/Downsampling**.
+      7. **Caché compartida de análisis Deep Dive**.
+      8. **Tailscale Sidecar opcional en Docker (`tailscale/tailscale` + `TS_AUTHKEY`)**: contenedor opcional bajo perfil Docker Compose para que el usuario no tenga que instalar Tailscale en el sistema operativo del PC (aunque seguiría requiriendo cuenta Tailscale/Auth Key en `.env` y la app en el móvil).
        - *Visor de Instantáneas en Modo Solo Lectura*: Inspección temporal de copias antiguas sin sobrescribir la base activa.

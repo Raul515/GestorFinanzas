@@ -237,13 +237,13 @@ def render_mobile_view() -> None:
             if is_https_mode:
                 st.markdown(
                     f"""
-                    1. Activa **Tailscale** en el PC y en tu teléfono *(funciona en Wi-Fi y 4G/5G)*.
+                    1. Enciende **Tailscale** en el PC y en tu Android *(solo hace falta activarlo en el móvil unos segundos cuando vayas a sincronizar; en la calle funciona 100% offline con Tailscale apagado)*.
                     2. Abre en **Google Chrome**: `{clean_mobile_url}`
                     3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
-                    4. Pulsa el menú (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
-                    5. ¡Listo! Conexión cifrada HTTPS activa sin necesidad de tocar `chrome://flags`.
+                    4. Pulsa el menú (**tres puntos `⋮`**) → **«Instalar aplicación»** / **«Añadir a la pantalla principal»**.
+                    5. ✅ **Ventajas PWA + Tailscale en Android**: se instala a **pantalla completa sin barra**, tienes **URL fija** aunque cambies entre cable/Wi-Fi y **se auto-actualiza sola** al conectar sin recompilar ni reinstalar `.apk`.
 
-                    > 🏠 *¿Otro dispositivo sin Tailscale?* Puede seguir usando la IP Wi-Fi local: `{http_clean_mobile_url}`
+                    > 🏠 *¿No quieres usar Tailscale en Android?* Puedes seguir usando la IP Wi-Fi local (`{http_clean_mobile_url}`) o la **📦 Android APK** de la tercera pestaña.
                     """
                 )
             else:
@@ -253,10 +253,12 @@ def render_mobile_view() -> None:
                     2. Abre en **Google Chrome**: `{http_clean_mobile_url}`
                     3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
                     4. Pulsa el menú de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
-                    5. ¡Listo! Tendrás el acceso directo listo para capturar gastos en 1 tap con operativa 100% offline.
+                    5. ¡Listo! Se **auto-actualiza sola** en 2 s al conectar con el PC y funciona 100% offline.
 
-                    > ℹ️ **Nota sobre la barra superior de Chrome en Android**:
-                    > En redes Wi-Fi locales bajo HTTP, Android muestra una barra de navegación delgada debido a las políticas WebAPK de Google. La app funciona de forma idéntica y sin límites. Si prefieres **pantalla completa pura de borde a borde (sin barra)**, puedes instalar la **📦 Android APK**.
+                    > ℹ️ **Sobre la barra superior de Chrome en Android**:
+                    > En HTTP Wi-Fi local muestra una barra superior delgada. Si quieres **pantalla completa sin barra**:
+                    > - Sin apps externas: instala la **📦 Android APK** (requiere actualizar `.apk` manualmente si cambia el código y ajustar IP si alternas cable/Wi-Fi).
+                    > - Con actualizaciones automáticas y URL fija: activa el **modo HTTPS opcional (Tailscale)** arriba.
                     >
                     > 💡 **Si Chrome indica «Esta aplicación no se puede instalar»**:
                     > 1. En Chrome en el móvil abre: `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
@@ -269,13 +271,13 @@ def render_mobile_view() -> None:
             if is_https_mode:
                 st.markdown(
                     f"""
-                    1. Activa **Tailscale** en el PC y en tu iPhone *(funciona en Wi-Fi y 4G/5G)*.
+                    1. Enciende **Tailscale** en el PC y en tu iPhone *(puedes tener Tailscale apagado todo el día y activarlo solo unos segundos al sincronizar con el PC encendido)*.
                     2. Abre en **Safari** (recomendado) o Chrome: `{clean_mobile_url}`
                     3. **Instalación como App Nativa**:
                        - Toca **Compartir** (`⬆️`) → **«Añadir a la pantalla de inicio»** (`➕`) → **Añadir**.
                     4. **Vinculación en la App Instalada**:
                        - Abre el icono **Gestor Finanzas**, introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
-                    5. ✅ **Modo HTTPS activo**: Safari/WebKit habilita el *Service Worker*, por lo que la PWA abrirá **al instante y 100% offline incluso tras cerrar la app**.
+                    5. ✅ **Tailscale HTTPS es necesario en iPhone para offline completo**: gracias a HTTPS, Safari/Chrome iOS activan el *Service Worker*, por lo que la app arranca **al instante y 100% offline incluso tras cerrarla por completo** (y se auto-actualiza al sincronizar).
                     """
                 )
             else:
@@ -284,27 +286,24 @@ def render_mobile_view() -> None:
                     1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
                     2. Abre en **Safari**: `{http_clean_mobile_url}` *(con la barra final `/`)*.
                     3. **Instalación como App Nativa**:
-                       - Toca el botón **Compartir** de Safari (icono de cuadrado con flecha hacia arriba `⬆️`).
-                       - Desliza hacia abajo y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
-                       - Confirma pulsando **Añadir** arriba a la derecha.
+                       - Toca **Compartir** (`⬆️`) → **«Añadir a la pantalla de inicio»** (`➕`) → **Añadir**.
                     4. **Vinculación en la App Instalada**:
-                       - Abre el nuevo icono **Gestor Finanzas** desde la pantalla de inicio de tu iPhone (se abrirá a pantalla completa pura, sin barras de Safari).
-                       - Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular** *(o pulsa en ⚙️ para confirmar la conexión)*.
-                    5. ¡Listo! Disfrutarás de una experiencia móvil fluida con teclado numérico ergonómico y selector de mes táctil.
+                       - Abre el icono **Gestor Finanzas**, introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular** *(o pulsa ⚙️ para confirmar la conexión)*.
+                    5. ¡Listo! Pantalla completa nativa y teclado numérico ergonómico.
 
-                    > 🍏 **Consejo de Operativa Offline en iPhone (HTTP LAN)**:
-                    > Sin HTTPS, Apple WebKit bloquea los *Service Workers* en Safari y Chrome iOS: para capturar sin cobertura fuera de casa **mantén la app abierta en segundo plano** (sin forzar el cierre), o activa el **modo HTTPS opcional (Tailscale)** arriba para soporte offline tras cerrar la app.
+                    > 🍏 **Importante en iPhone (HTTP vs HTTPS/Tailscale)**:
+                    > Sin HTTPS, Apple bloquea el *Service Worker* tanto en Safari como en Chrome iOS: si cierras la app del todo fuera de casa no podrá arrancar offline hasta que vuelvas a tu Wi-Fi (para usarla por HTTP offline debes **mantenerla abierta en segundo plano**).
+                    > Si quieres **arranque instantáneo offline en iPhone incluso cerrando la app**, activa arriba el **modo HTTPS opcional (Tailscale)** *(en el iPhone basta encender Tailscale solo cuando vayas a sincronizar con el PC)*.
                     """
                 )
 
         with guide_tabs[2]:
             st.markdown(
                 f"""
-                1. Diseñado para quienes desean eliminar totalmente la barra superior de Chrome en Android.
-                2. En la sección inferior **«📦 Distribución y Actualizaciones»**, descarga el archivo `.apk` publicado.
-                3. Instálalo en tu Android permitiendo la instalación desde fuentes desconocidas.
-                4. Al abrir la app por primera vez, pulsa el engranaje de configuración `[⚙️]`, introduce `{server_base_url}` y el PIN de 6 dígitos (`{active_pin}`).
-                5. ¡Disfruta de una experiencia 100% nativa de pantalla completa sin barras!
+                1. **Sin apps externas (no necesita Tailscale)** en la Wi-Fi de casa y **pantalla completa pura sin barras**.
+                2. En la sección inferior **«📦 Distribución y Actualizaciones»**, descarga el archivo `.apk` publicado e instálalo permitiendo orígenes desconocidos.
+                3. En la app, pulsa `[⚙️]`, introduce `{http_server_base_url}` *(o tu URL `https://` si también usas Tailscale)* y el **PIN de 6 dígitos** (`{active_pin}`).
+                4. ℹ️ *Nota frente a la PWA + Tailscale*: con la APK no dependes de Tailscale en tu Wi-Fi, pero si tu PC cambia de IP (cable/Wi-Fi) tendrás que ajustarla en `⚙️` y descargar/instalar el nuevo `.apk` cuando actualices el código móvil.
                 """
             )
 

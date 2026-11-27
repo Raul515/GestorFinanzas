@@ -99,23 +99,37 @@ Si cambias de red Wi-Fi o el router asigna una nueva IP a tu PC (ej. pasa de `19
 
 ---
 
-## 🔒 Modo HTTPS Opcional (Tailscale Serve — Recomendado para iPhone y 4G/5G)
+## 🔒 Modo HTTPS Opcional (Tailscale Serve) y Comparativa de Uso por Dispositivo
 
-Si no quieres usar ninguna app externa, puedes seguir utilizando el Companion Móvil exactamente igual por **HTTP Wi-Fi** o mediante la **APK nativa de Android**. Ambos modos conviven a la vez sin conflicto.
+No es obligatorio usar HTTPS ni Tailscale: quien no quiera instalar aplicaciones externas puede seguir usando el Companion Móvil en casa por **HTTP Wi-Fi** o con la **APK nativa de Android**. Ambos modos conviven a la vez sin conflicto.
 
-Si además quieres **HTTPS válido de fábrica** (imprescindible para que Safari/Chrome en iPhone mantengan el modo *100% offline* incluso tras cerrar la app) junto con una **URL fija** (independiente de si el PC está por cable o Wi-Fi) y **sincronización automática por 4G/5G**:
+### ¿Qué opción te conviene más según tu teléfono?
 
+| Plataforma y Modo | ¿Necesita Tailscale? | Pantalla completa (sin barras) | Offline tras cerrar app | Actualizaciones móviles |
+| :--- | :--- | :--- | :--- | :--- |
+| **Android — App Nativa APK** | **No** *(salvo que quieras 4G fuera o no cambiar entre IP Wi-Fi/cable)* | **Sí** | **Sí** *(siempre instantánea)* | Descargar/instalar nuevo `.apk` |
+| **Android — PWA con Tailscale (HTTPS)** | **Sí** *(en PC y móvil)* | **Sí** *(permite instalarla limpia sin barra de Chrome)* | **Sí** *(al instante)* | **Automáticas en 2 s** al abrir conectada al PC *(además de URL fija para siempre)* |
+| **Android — PWA HTTP Wi-Fi** | **No** | Barra superior de Chrome | **Sí** *(con `chrome://flags`)* | **Automáticas en 2 s** |
+| **iPhone (iOS) — PWA con Tailscale (HTTPS)** *(Recomendado)* | **Sí (necesario)** | **Sí** | **Sí** *(Safari/Chrome activan el Service Worker)* | **Automáticas en 2 s** |
+| **iPhone (iOS) — PWA HTTP Wi-Fi** | **No** | **Sí** | **Solo si no cierras la app** *(mantener en 2º plano)* | **Automáticas en 2 s** |
+
+> 💡 **¿Tengo que llevar Tailscale siempre encendido en el móvil?**
+> **No.** Puedes tener Tailscale **apagado** todo el día en el móvil: la app (PWA o APK) abrirá al instante desde caché y guardará tus gastos offline (`Pendiente`). Cuando quieras sincronizar con tu PC encendido (con Docker o `uvicorn` corriendo), simplemente enciendes Tailscale en el móvil unos segundos hasta que aparezca **`🟢 En línea`** y desaparezcan los pendientes, y luego puedes volver a apagarlo.
+> *(En Windows, Tailscale ya arranca automático y `tailscale serve --bg 8000` queda guardado permanentemente aunque reinicies el ordenador o Docker).*
+
+### Cómo activar Tailscale Serve (Opcional en 4 pasos)
 1. **Instala Tailscale** (plan gratuito personal) en tu PC y en tus teléfonos móviles iniciando sesión con la misma cuenta.
+   - *(Consejo para el PC)*: en el panel web de Tailscale (`Machines` → menú `...` de tu PC), marca **`Disable key expiry`** para que Windows no caduque la sesión cada 180 días.
 2. En tu PC (PowerShell / Terminal), activa el proxy HTTPS privado sobre el puerto de Docker/FastAPI:
    ```powershell
    tailscale serve --bg 8000
    ```
-   Tailscale te mostrará tu dirección HTTPS privada permanente, por ejemplo: `https://mi-pc.tailXXXX.ts.net`.
+   Tailscale te mostrará tu dirección HTTPS privada permanente, por ejemplo: `https://mi-pc.tailXXXX.ts.net` *(puedes cambiar el nombre del equipo en `Machines → ... → Edit machine name...`)*.
 3. **Configura la URL en el proyecto (opcional, para que Streamlit la muestre en las guías)**:
    - En el archivo `.env` de la raíz del proyecto, define:
      ```env
      MOBILE_PUBLIC_URL=https://mi-pc.tailXXXX.ts.net
      ```
-   - O bien introdúcela directamente en Streamlit dentro de `⚙️ Ajustes y Sistema -> 📱 Companion Móvil -> ⚙️ Configuración de IP / HTTPS`.
+   - O bien introdúcela temporalmente en Streamlit dentro de `⚙️ Ajustes y Sistema -> 📱 Companion Móvil -> ⚙️ Configuración de IP / HTTPS` (si rellenas ambos, el campo de Streamlit manda durante la sesión actual y `.env` manda al reiniciar o recargar).
 4. **Vincula tus móviles una única vez** entrando a `https://mi-pc.tailXXXX.ts.net/mobile/` con el **PIN de 6 dígitos**.
    - **Seguridad garantizada (SEC-01)**: aunque el tráfico entre por el proxy HTTPS de Tailscale, el backend bloquea automáticamente con `403` las rutas administrativas (`/api/mobile/admin/*`), manteniéndolas accesibles únicamente desde el PC local / Streamlit.

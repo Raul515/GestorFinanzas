@@ -48,3 +48,40 @@ def test_ensure_env_file_does_not_overwrite_existing():
 
         assert env_file.read_text(encoding="utf-8") == "TEST_VAR=MY_CUSTOM_KEY"
 
+
+def test_parse_env_lines_and_fill_empty_docker_env_without_dotenv(monkeypatch, tmp_path: Path):
+    """Verifica el fallback sin python-dotenv y que rellena variables vacías dejadas por Docker Compose."""
+    from backend.utils import env_setup
+
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "# Comentario\n"
+        'MOBILE_PUBLIC_URL="https://pc-casa.tail1234.ts.net"\n'
+        "HOST_IP=192.168.0.15\n"
+        "EXISTING_DOCKER=desde_env\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".env.example").write_text("", encoding="utf-8")
+
+    # Simular entorno del contenedor frontend (sin python-dotenv y con MOBILE_PUBLIC_URL="")
+    monkeypatch.setattr(env_setup, "_dotenv_values", None)
+    monkeypatch.setattr(env_setup, "_LOADED_FROM_ENV_KEYS", set())
+    monkeypatch.setenv("MOBILE_PUBLIC_URL", "")
+    monkeypatch.delenv("HOST_IP", raising=False)
+    monkeypatch.setenv("EXISTING_DOCKER", "valor_explicito_docker")
+
+    # Apuntar parents[3] de __file__ hacia tmp_path
+    fake_file = tmp_path / "src" / "backend" / "utils" / "env_setup.py"
+    fake_file.parent.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(env_setup, "__file__", str(fake_file))
+
+    import os
+
+    result_path = ensure_env_file()
+    assert result_path == env_path
+    assert os.environ["MOBILE_PUBLIC_URL"] == "https://pc-casa.tail1234.ts.net"
+    assert os.environ["HOST_IP"] == "192.168.0.15"
+    # Una variable explícita no vacía en Docker NO debe ser pisada
+    assert os.environ["EXISTING_DOCKER"] == "valor_explicito_docker"
+
+
