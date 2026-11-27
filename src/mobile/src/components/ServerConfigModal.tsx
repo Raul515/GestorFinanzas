@@ -184,13 +184,26 @@ export const ServerConfigModal = ({
                 setServerUrl(e.target.value);
                 setTestResult(null);
               }}
-              placeholder="http://192.168.1.45:8000"
+              placeholder="http://192.168.1.45:8000 o https://mi-pc.ts.net"
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
             />
           </div>
           <p className="text-[10px] text-slate-500">
-            Ej: <code className="text-slate-400">http://192.168.1.45:8000</code> o la IP de tu Zona Wi-Fi.
+            Ej: <code className="text-slate-400">http://192.168.1.45:8000</code> (Wi-Fi) o <code className="text-slate-400">https://mi-pc.ts.net</code> (Tailscale).
           </p>
+          {typeof window !== "undefined" &&
+            window.location.protocol === "https:" &&
+            /^http:\/\//i.test(serverUrl.trim()) &&
+            !serverUrl.includes("localhost") &&
+            !serverUrl.includes("127.0.0.1") && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-2 text-[9.5px] leading-snug text-amber-200 flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400 mt-0.5" />
+                <span>
+                  Estás en modo <strong>HTTPS</strong>: el navegador bloqueará peticiones hacia una URL{" "}
+                  <code>http://</code>. Usa tu dominio <code>https://</code> o pulsa <em>Usar origen actual</em>.
+                </span>
+              </div>
+            )}
         </div>
 
         {/* Bloque: Emparejamiento por PIN (Recomendado sin cámara) */}

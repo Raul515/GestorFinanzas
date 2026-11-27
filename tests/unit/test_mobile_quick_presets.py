@@ -279,8 +279,9 @@ def test_mobile_pwa_sw_precaches_vite_assets_and_uses_instant_shell(client: Test
     assert css_match.group(1) in sw_js
     assert "/mobile/index.html" in sw_js
 
-    # 2. La navegación debe consultar caché primero (App Shell) y usar timeout ante fallos de red
+    # 2. La navegación debe consultar caché primero (App Shell), evitar redirecciones en WebKit y usar timeout
     assert "matchShellFromCache" in sw_js
     assert "fetchWithTimeout" in sw_js
+    assert "sanitizeForCache" in sw_js
 
 

@@ -8,14 +8,19 @@ from unittest.mock import MagicMock, patch
 
 from backend.domain.schemas.transactions import Transaction as TransactionSchema
 from frontend import api_client
-from frontend.views.mobile_view import format_display_date, get_local_ip
+from frontend.views.mobile_view import format_display_date, get_local_ip, normalize_public_mobile_url
 
 
 def test_mobile_view_helpers():
-    """Verifica las funciones de soporte de formato de fecha, ip y PIN."""
+    """Verifica las funciones de soporte de formato de fecha, ip, URL HTTPS opcional y PIN."""
     assert format_display_date("2026-11-13") == "13/11/2026"
     assert format_display_date("2026-11-13T18:45:00Z") == "13/11/2026"
     assert format_display_date("") == "N/A"
+
+    assert normalize_public_mobile_url("") == ""
+    assert normalize_public_mobile_url("  https://mi-pc.tail1234.ts.net/  ") == "https://mi-pc.tail1234.ts.net"
+    assert normalize_public_mobile_url("mi-pc.tail1234.ts.net/") == "https://mi-pc.tail1234.ts.net"
+    assert normalize_public_mobile_url("http://192.168.0.15:8000/") == "http://192.168.0.15:8000"
 
     ip = get_local_ip()
     assert isinstance(ip, str)

@@ -726,6 +726,47 @@ def test_admin_generate_pin_access_control(client: TestClient):
     assert "Acceso denegado" in exc_info.value.detail
 
 
+def test_admin_endpoints_reject_proxied_https_tailscale_headers(client: TestClient):
+    """Verifica SEC-01: peticiones loopback/Docker con cabeceras de proxy (Tailscale/Caddy) son bloqueadas con 403."""
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    from backend.api.routers.mobile import generate_admin_pairing_pin, get_admin_pairing_token
+
+    service = MobileSyncService()
+
+    # 1. Simular petición llegando por loopback (127.0.0.1) pero proxiada por Tailscale Serve
+    proxied_tailscale_req = Request(
+        {
+            "type": "http",
+            "client": ("127.0.0.1", 55000),
+            "headers": [(b"tailscale-user-login", b"usuario@example.com")],
+        }
+    )
+    with pytest.raises(HTTPException) as exc_ts:
+        get_admin_pairing_token(request=proxied_tailscale_req, service=service)
+    assert exc_ts.value.status_code == 403
+
+    # 2. Simular petición llegando desde bridge Docker (172.28.199.5) pero con X-Forwarded-For externo
+    proxied_xff_req = Request(
+        {
+            "type": "http",
+            "client": ("172.28.199.5", 42100),
+            "headers": [(b"x-forwarded-for", b"100.64.0.12")],
+        }
+    )
+    with pytest.raises(HTTPException) as exc_xff:
+        generate_admin_pairing_pin(request=proxied_xff_req, service=service)
+    assert exc_xff.value.status_code == 403
+
+    # 3. Llamada vía TestClient HTTP real con cabecera X-Forwarded-For -> 403 Forbidden
+    resp_token = client.get("/api/mobile/admin/pairing-token", headers={"X-Forwarded-For": "100.64.0.12"})
+    assert resp_token.status_code == 403
+
+    resp_pin = client.post("/api/mobile/admin/generate-pin", headers={"Tailscale-User-Login": "user@tailnet"})
+    assert resp_pin.status_code == 403
+
+
+
 
 
 

@@ -181,8 +181,35 @@ def get_status(
     return service.get_sync_status(db, authenticated=is_authenticated)
 
 
+_PROXY_FORWARDING_HEADERS = (
+    "x-forwarded-for",
+    "forwarded",
+    "x-real-ip",
+    "tailscale-user-login",
+    "tailscale-user-name",
+)
+
+
 def _verify_admin_network_access(request: Request, endpoint_name: str) -> None:
-    """Verifica que la petición administrativa provenga de loopback o de la subred interna autorizada (SEC-01)."""
+    """Verifica que la petición administrativa provenga de loopback o red interna directa sin proxy (SEC-01)."""
+    # Si la petición trae cabeceras de proxy inverso (ej. Tailscale Serve, Caddy, Nginx),
+    # proviene de un cliente externo reenviado y debe ser rechazada aunque el socket llegue por 127.0.0.1 o bridge Docker.
+    try:
+        req_headers = request.headers
+    except (KeyError, AttributeError):
+        req_headers = {}
+    for hdr in _PROXY_FORWARDING_HEADERS:
+        if str(req_headers.get(hdr, "")).strip():
+            logger.warning(
+                "Acceso administrativo denegado en %s por cabecera de proxy (%s)",
+                endpoint_name,
+                hdr,
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Acceso denegado. Los endpoints administrativos no están permitidos a través de proxy o túnel.",
+            )
+
     client_ip = request.client.host if request.client else "unknown"
     is_allowed = client_ip in ("127.0.0.1", "::1", "localhost", "testclient")
     if not is_allowed:

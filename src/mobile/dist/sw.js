@@ -9,14 +9,14 @@ const DEFAULT_ASSETS = [
   "/mobile/icon-192.svg",
   "/mobile/icon-512.svg"
 ];
-const CACHE_NAME = "gestor-finanzas-mobile-v1.4.0-61c08b72a4";
+const CACHE_NAME = "gestor-finanzas-mobile-v1.4.0-5f4ae8058e";
 const ASSETS_TO_CACHE = [
   "/mobile/",
   "/mobile/assets/index-CscVD8ut.css",
-  "/mobile/assets/index-DgVAY7iV.js",
-  "/mobile/assets/web-BBNi1doj.js",
-  "/mobile/assets/web-DWeL5O9d.js",
-  "/mobile/assets/web-RBHGAyzi.js",
+  "/mobile/assets/index-DjbGsCm-.js",
+  "/mobile/assets/web-C7MIBzUa.js",
+  "/mobile/assets/web-CPDTlEQg.js",
+  "/mobile/assets/web-DYxerX1B.js",
   "/mobile/icon-192.png",
   "/mobile/icon-192.svg",
   "/mobile/icon-512.png",
@@ -36,6 +36,18 @@ function fetchWithTimeout(request, options = {}, timeoutMs = NETWORK_TIMEOUT_MS)
   });
 }
 
+async function sanitizeForCache(response) {
+  if (!response || !response.redirected) {
+    return response;
+  }
+  const body = await response.clone().arrayBuffer();
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(response.headers),
+  });
+}
+
 async function matchShellFromCache(request) {
   return (
     (await caches.match(request, { ignoreSearch: true })) ||
@@ -50,7 +62,13 @@ self.addEventListener("install", (event) => {
       return Promise.all(
         ASSETS_TO_CACHE.map((assetUrl) =>
           fetchWithTimeout(assetUrl, { cache: "no-store" }, 5000)
-            .then((res) => (res && res.ok ? cache.put(assetUrl, res) : cache.add(assetUrl)))
+            .then(async (res) => {
+              if (res && res.ok) {
+                const cleanRes = await sanitizeForCache(res);
+                return cache.put(assetUrl, cleanRes);
+              }
+              return cache.add(assetUrl);
+            })
             .catch(() => cache.add(assetUrl).catch(() => null))
         )
       );
@@ -112,9 +130,11 @@ self.addEventListener("fetch", (event) => {
         try {
           const networkResponse = await fetchWithTimeout("/mobile/index.html", { cache: "no-store" }, NETWORK_TIMEOUT_MS);
           if (networkResponse && networkResponse.status === 200) {
+            const cleanRes = await sanitizeForCache(networkResponse);
             const cache = await caches.open(CACHE_NAME);
-            await cache.put("/mobile/index.html", networkResponse.clone());
-            await cache.put("/mobile/", networkResponse.clone());
+            await cache.put("/mobile/index.html", cleanRes.clone());
+            await cache.put("/mobile/", cleanRes.clone());
+            return cleanRes;
           }
           return networkResponse;
         } catch {

@@ -51,6 +51,16 @@ def format_display_date(date_val: Any) -> str:
     return _shared_format_date_es(date_val, fallback="N/A")
 
 
+def normalize_public_mobile_url(raw_url: Any) -> str:
+    """Normaliza una URL pública HTTPS opcional (ej. Tailscale Serve) para el Companion Móvil."""
+    clean = str(raw_url or "").strip().rstrip("/")
+    if not clean:
+        return ""
+    if not clean.lower().startswith(("http://", "https://")):
+        clean = f"https://{clean}"
+    return clean
+
+
 def render_mobile_view() -> None:
     """Renderiza la pestaña del Companion Móvil en Streamlit."""
     st.title("📱 Companion Móvil Quick-Capture")
@@ -67,7 +77,19 @@ def render_mobile_view() -> None:
     local_ip = custom_ip.strip() if custom_ip and custom_ip.strip() else detected_ip
     is_docker_detected = local_ip.startswith("172.")
 
-    server_base_url = f"http://{local_ip}:8000"
+    http_server_base_url = f"http://{local_ip}:8000"
+    http_clean_mobile_url = f"{http_server_base_url}/mobile/"
+
+    env_public_url = normalize_public_mobile_url(os.environ.get("MOBILE_PUBLIC_URL", ""))
+    session_public_override = st.session_state.get("custom_mobile_public_url")
+    active_public_url = (
+        normalize_public_mobile_url(session_public_override)
+        if session_public_override is not None
+        else env_public_url
+    )
+    is_https_mode = active_public_url.lower().startswith("https://")
+    server_base_url = active_public_url if active_public_url else http_server_base_url
+
     token_query = f"?token={pairing_token}" if pairing_token else ""
     mobile_url = f"{server_base_url}/mobile/{token_query}"
     localhost_url = f"http://localhost:8000/mobile/{token_query}"
@@ -77,7 +99,7 @@ def render_mobile_view() -> None:
     # ==============================================================================
     st.subheader("🔗 Conexión Rápida desde el Teléfono")
 
-    with st.expander("⚙️ Configuración de IP / Docker Wi-Fi", expanded=is_docker_detected):
+    with st.expander("⚙️ Configuración de IP / HTTPS (Tailscale / Docker Wi-Fi)", expanded=is_docker_detected and not is_https_mode):
         if is_docker_detected and not custom_ip:
             st.warning(
                 f"⚠️ **Entorno Docker detectado**: La IP detectada (`{detected_ip}`) pertenece a la red interna del contenedor. "
@@ -110,6 +132,34 @@ def render_mobile_view() -> None:
             st.write("")
             if st.button("Detectar Auto", width="stretch", help="Restablece la detección automática de IP."):
                 st.session_state.pop("custom_mobile_host_ip", None)
+                st.rerun()
+
+        st.markdown("---")
+        st.caption(
+            "🔒 **HTTPS Opcional (Tailscale Serve)**: si usas `tailscale serve --bg 8000`, introduce aquí tu URL HTTPS (o fíjala en `.env` con `MOBILE_PUBLIC_URL`). "
+            "Si la dejas vacía, todo sigue funcionando por HTTP local sin apps externas."
+        )
+        col_https_in, col_https_btn, col_https_reset = st.columns([3, 1, 1])
+        with col_https_in:
+            user_https_input = st.text_input(
+                "URL HTTPS pública / Tailscale (opcional):",
+                value=active_public_url,
+                placeholder="Ejemplo: https://mi-pc.tailXXXX.ts.net",
+                help="Desbloquea Service Worker offline completo en iPhone y acceso por 4G/5G.",
+                key="input_custom_mobile_public_url",
+            )
+        with col_https_btn:
+            st.write("")
+            st.write("")
+            if st.button("Aplicar HTTPS", width="stretch"):
+                cleaned_https = normalize_public_mobile_url(user_https_input)
+                st.session_state["custom_mobile_public_url"] = cleaned_https
+                st.rerun()
+        with col_https_reset:
+            st.write("")
+            st.write("")
+            if st.button("Solo HTTP", width="stretch", help="Vuelve al modo HTTP Wi-Fi local en esta sesión."):
+                st.session_state["custom_mobile_public_url"] = ""
                 st.rerun()
 
     # Gestión del PIN de emparejamiento (6 dígitos)
@@ -172,6 +222,8 @@ def render_mobile_view() -> None:
             unsafe_allow_html=True,
         )
         st.code(clean_mobile_url, language=None)
+        if is_https_mode:
+            st.caption(f"🏠 Alternativa sin Tailscale (Wi-Fi local HTTP): `{http_clean_mobile_url}`")
 
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -179,45 +231,71 @@ def render_mobile_view() -> None:
         with col_btn2:
             st.link_button("📖 Ver Guía Completa", "https://github.com/", width="stretch", help="Consulta docs/guia_companion_movil.md en el repositorio.")
 
-        guide_tabs = st.tabs(["🤖 Android (Chrome PWA)", "🍏 iPhone (Safari)", "📦 Android APK (Sin Barras)", "🔄 Syncthing (Opcional)"])
+        guide_tabs = st.tabs(["🤖 Android (Chrome PWA)", "🍏 iPhone (Safari / Chrome)", "📦 Android APK (Sin Barras)", "🔄 Syncthing (Opcional)"])
 
         with guide_tabs[0]:
-            st.markdown(
-                f"""
-                1. Conecta tu teléfono a la **misma Wi-Fi** que este PC.
-                2. Abre en **Google Chrome**: `http://{local_ip}:8000/mobile`
-                3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
-                4. Pulsa el menú de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
-                5. ¡Listo! Tendrás el acceso directo listo para capturar gastos en 1 tap con operativa 100% offline.
+            if is_https_mode:
+                st.markdown(
+                    f"""
+                    1. Activa **Tailscale** en el PC y en tu teléfono *(funciona en Wi-Fi y 4G/5G)*.
+                    2. Abre en **Google Chrome**: `{clean_mobile_url}`
+                    3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
+                    4. Pulsa el menú (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
+                    5. ¡Listo! Conexión cifrada HTTPS activa sin necesidad de tocar `chrome://flags`.
 
-                > ℹ️ **Nota sobre la barra superior de Chrome en Android**:
-                > En redes Wi-Fi locales bajo HTTP, Android muestra una barra de navegación delgada debido a las políticas WebAPK de Google. La app funciona de forma idéntica y sin límites. Si prefieres **pantalla completa pura de borde a borde (sin barra)**, puedes instalar la **📦 Android APK**.
-                >
-                > 💡 **Si Chrome indica «Esta aplicación no se puede instalar»**:
-                > 1. En Chrome en el móvil abre: `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
-                > 2. Actívalo en **Enabled** y escribe: `http://{local_ip}:8000`
-                > 3. Pulsa **Relaunch**.
-                """
-            )
+                    > 🏠 *¿Otro dispositivo sin Tailscale?* Puede seguir usando la IP Wi-Fi local: `{http_clean_mobile_url}`
+                    """
+                )
+            else:
+                st.markdown(
+                    f"""
+                    1. Conecta tu teléfono a la **misma Wi-Fi** que este PC.
+                    2. Abre en **Google Chrome**: `{http_clean_mobile_url}`
+                    3. Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
+                    4. Pulsa el menú de opciones (**tres puntos `⋮`**) y selecciona **«Instalar aplicación»** o **«Añadir a la pantalla principal»**.
+                    5. ¡Listo! Tendrás el acceso directo listo para capturar gastos en 1 tap con operativa 100% offline.
+
+                    > ℹ️ **Nota sobre la barra superior de Chrome en Android**:
+                    > En redes Wi-Fi locales bajo HTTP, Android muestra una barra de navegación delgada debido a las políticas WebAPK de Google. La app funciona de forma idéntica y sin límites. Si prefieres **pantalla completa pura de borde a borde (sin barra)**, puedes instalar la **📦 Android APK**.
+                    >
+                    > 💡 **Si Chrome indica «Esta aplicación no se puede instalar»**:
+                    > 1. En Chrome en el móvil abre: `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
+                    > 2. Actívalo en **Enabled** y escribe: `http://{local_ip}:8000`
+                    > 3. Pulsa **Relaunch**.
+                    """
+                )
 
         with guide_tabs[1]:
-            st.markdown(
-                f"""
-                1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
-                2. Abre en **Safari**: `http://{local_ip}:8000/mobile/` *(con la barra final `/`)*.
-                3. **Instalación como App Nativa**:
-                   - Toca el botón **Compartir** de Safari (icono de cuadrado con flecha hacia arriba `⬆️`).
-                   - Desliza hacia abajo y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
-                   - Confirma pulsando **Añadir** arriba a la derecha.
-                4. **Vinculación en la App Instalada**:
-                   - Abre el nuevo icono **Gestor Finanzas** desde la pantalla de inicio de tu iPhone (se abrirá a pantalla completa pura, sin barras de Safari).
-                   - Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular** *(o pulsa en ⚙️ para confirmar la conexión)*.
-                5. ¡Listo! Disfrutarás de una experiencia móvil fluida con teclado numérico ergonómico y selector de mes táctil.
+            if is_https_mode:
+                st.markdown(
+                    f"""
+                    1. Activa **Tailscale** en el PC y en tu iPhone *(funciona en Wi-Fi y 4G/5G)*.
+                    2. Abre en **Safari** (recomendado) o Chrome: `{clean_mobile_url}`
+                    3. **Instalación como App Nativa**:
+                       - Toca **Compartir** (`⬆️`) → **«Añadir a la pantalla de inicio»** (`➕`) → **Añadir**.
+                    4. **Vinculación en la App Instalada**:
+                       - Abre el icono **Gestor Finanzas**, introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular**.
+                    5. ✅ **Modo HTTPS activo**: Safari/WebKit habilita el *Service Worker*, por lo que la PWA abrirá **al instante y 100% offline incluso tras cerrar la app**.
+                    """
+                )
+            else:
+                st.markdown(
+                    f"""
+                    1. Conecta el iPhone a la **misma red Wi-Fi** que el ordenador.
+                    2. Abre en **Safari**: `{http_clean_mobile_url}` *(con la barra final `/`)*.
+                    3. **Instalación como App Nativa**:
+                       - Toca el botón **Compartir** de Safari (icono de cuadrado con flecha hacia arriba `⬆️`).
+                       - Desliza hacia abajo y selecciona **«Añadir a la pantalla de inicio»** (`➕`).
+                       - Confirma pulsando **Añadir** arriba a la derecha.
+                    4. **Vinculación en la App Instalada**:
+                       - Abre el nuevo icono **Gestor Finanzas** desde la pantalla de inicio de tu iPhone (se abrirá a pantalla completa pura, sin barras de Safari).
+                       - Introduce el **PIN de 6 dígitos** (`{active_pin}`) y pulsa **Vincular** *(o pulsa en ⚙️ para confirmar la conexión)*.
+                    5. ¡Listo! Disfrutarás de una experiencia móvil fluida con teclado numérico ergonómico y selector de mes táctil.
 
-                > 🍏 **Consejo de Operativa Offline en iPhone (HTTP LAN)**:
-                > Debido a políticas estrictas de Apple WebKit para redes locales HTTP, para capturar gastos sin cobertura fuera de casa, **mantén la app abierta en segundo plano** (no la cierres deslizando hacia arriba en el selector de apps). Al volver a tu Wi-Fi, se reconectará y sincronizará en automático.
-                """
-            )
+                    > 🍏 **Consejo de Operativa Offline en iPhone (HTTP LAN)**:
+                    > Sin HTTPS, Apple WebKit bloquea los *Service Workers* en Safari y Chrome iOS: para capturar sin cobertura fuera de casa **mantén la app abierta en segundo plano** (sin forzar el cierre), o activa el **modo HTTPS opcional (Tailscale)** arriba para soporte offline tras cerrar la app.
+                    """
+                )
 
         with guide_tabs[2]:
             st.markdown(
@@ -225,7 +303,7 @@ def render_mobile_view() -> None:
                 1. Diseñado para quienes desean eliminar totalmente la barra superior de Chrome en Android.
                 2. En la sección inferior **«📦 Distribución y Actualizaciones»**, descarga el archivo `.apk` publicado.
                 3. Instálalo en tu Android permitiendo la instalación desde fuentes desconocidas.
-                4. Al abrir la app por primera vez, pulsa el engranaje de configuración `[⚙️]`, introduce la IP `{local_ip}` y el PIN de 6 dígitos (`{active_pin}`).
+                4. Al abrir la app por primera vez, pulsa el engranaje de configuración `[⚙️]`, introduce `{server_base_url}` y el PIN de 6 dígitos (`{active_pin}`).
                 5. ¡Disfruta de una experiencia 100% nativa de pantalla completa sin barras!
                 """
             )

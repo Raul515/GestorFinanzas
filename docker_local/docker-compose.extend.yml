@@ -15,6 +15,7 @@ services:
       - PYTHONPATH=/app/src:/app
       - API_URL=http://backend_gestor:8000
       - HOST_IP=${HOST_IP:-}
+      - MOBILE_PUBLIC_URL=${MOBILE_PUBLIC_URL:-}
     volumes:
       - ../:/app
       - /app/.venv

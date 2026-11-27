@@ -219,6 +219,11 @@ El objetivo de la **Especificación 016** es desarrollar una **micro-aplicación
   - Aislamiento de Red Docker y Exclusión Estricta de Hotspot: Asignación de subred dedicada `172.28.199.0/24` en Docker Compose y exclusión explícita del rango Hotspot de iPhone (`172.20.10.0/24`) en el endpoint administrativo del pairing token para blindaje de seguridad (`SEC-01`).
   - Detección Dinámica de IP del PC y Ajuste Interactivo en Streamlit: Soporte de variable `HOST_IP` y panel desplegable en la interfaz con alerta de contenedor y recálculo en tiempo real de QR y URLs.
 
+- **RF-24 (Soporte Dual HTTPS Opcional vía Tailscale Serve, Blindaje Proxy SEC-01 y Endurecimiento iOS WebKit)**:
+  - Convivencia Dual HTTP/HTTPS: Soporte opcional de `MOBILE_PUBLIC_URL` (en `.env` / Docker y editable temporalmente por sesión en `mobile_view.py`) para URLs HTTPS como `tailscale serve --bg 8000`, manteniendo operativo el acceso `http://<IP_LOCAL>:8000/mobile/` para usuarios sin Tailscale.
+  - Blindaje Proxy SEC-01: `_verify_admin_network_access` en `src/backend/api/routers/mobile.py` rechaza con `HTTP 403` cualquier petición a `/api/mobile/admin/*` que incluya cabeceras de proxy (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `Tailscale-User-Login`, `Tailscale-User-Name`), impidiendo su exposición a través de túneles inversos.
+  - Endurecimiento iOS WebKit y Mixed Content: `sanitizeForCache` en `src/mobile/public-pwa/sw.js` reconstruye respuestas marcadas como `redirected` antes de guardarlas en caché para Safari/Chrome iOS, y `ServerConfigModal.tsx` advierte sobre bloqueos *Mixed Content* si se introduce `http://` desde un origen `https://`.
+
 ---
 
 ## 4. Requerimientos No Funcionales y Restricciones Técnicas

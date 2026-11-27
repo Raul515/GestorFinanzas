@@ -23,6 +23,18 @@ function fetchWithTimeout(request, options = {}, timeoutMs = NETWORK_TIMEOUT_MS)
   });
 }
 
+async function sanitizeForCache(response) {
+  if (!response || !response.redirected) {
+    return response;
+  }
+  const body = await response.clone().arrayBuffer();
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(response.headers),
+  });
+}
+
 async function matchShellFromCache(request) {
   return (
     (await caches.match(request, { ignoreSearch: true })) ||
@@ -37,7 +49,13 @@ self.addEventListener("install", (event) => {
       return Promise.all(
         ASSETS_TO_CACHE.map((assetUrl) =>
           fetchWithTimeout(assetUrl, { cache: "no-store" }, 5000)
-            .then((res) => (res && res.ok ? cache.put(assetUrl, res) : cache.add(assetUrl)))
+            .then(async (res) => {
+              if (res && res.ok) {
+                const cleanRes = await sanitizeForCache(res);
+                return cache.put(assetUrl, cleanRes);
+              }
+              return cache.add(assetUrl);
+            })
             .catch(() => cache.add(assetUrl).catch(() => null))
         )
       );
@@ -99,9 +117,11 @@ self.addEventListener("fetch", (event) => {
         try {
           const networkResponse = await fetchWithTimeout("/mobile/index.html", { cache: "no-store" }, NETWORK_TIMEOUT_MS);
           if (networkResponse && networkResponse.status === 200) {
+            const cleanRes = await sanitizeForCache(networkResponse);
             const cache = await caches.open(CACHE_NAME);
-            await cache.put("/mobile/index.html", networkResponse.clone());
-            await cache.put("/mobile/", networkResponse.clone());
+            await cache.put("/mobile/index.html", cleanRes.clone());
+            await cache.put("/mobile/", cleanRes.clone());
+            return cleanRes;
           }
           return networkResponse;
         } catch {

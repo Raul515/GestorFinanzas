@@ -96,3 +96,26 @@ Si cambias de red Wi-Fi o el router asigna una nueva IP a tu PC (ej. pasa de `19
 ### 3. Sincronización Manual por Archivos (Syncthing Opcional)
 - En la app móvil puedes pulsar **"Exportar Lote JSON"** para descargar los apuntes en un fichero `.json`.
 - Si utilizas Syncthing, deposítalo en la carpeta compartida `sync/mobile/inbox/`: el backend de tu PC lo procesará automáticamente al arrancar.
+
+---
+
+## 🔒 Modo HTTPS Opcional (Tailscale Serve — Recomendado para iPhone y 4G/5G)
+
+Si no quieres usar ninguna app externa, puedes seguir utilizando el Companion Móvil exactamente igual por **HTTP Wi-Fi** o mediante la **APK nativa de Android**. Ambos modos conviven a la vez sin conflicto.
+
+Si además quieres **HTTPS válido de fábrica** (imprescindible para que Safari/Chrome en iPhone mantengan el modo *100% offline* incluso tras cerrar la app) junto con una **URL fija** (independiente de si el PC está por cable o Wi-Fi) y **sincronización automática por 4G/5G**:
+
+1. **Instala Tailscale** (plan gratuito personal) en tu PC y en tus teléfonos móviles iniciando sesión con la misma cuenta.
+2. En tu PC (PowerShell / Terminal), activa el proxy HTTPS privado sobre el puerto de Docker/FastAPI:
+   ```powershell
+   tailscale serve --bg 8000
+   ```
+   Tailscale te mostrará tu dirección HTTPS privada permanente, por ejemplo: `https://mi-pc.tailXXXX.ts.net`.
+3. **Configura la URL en el proyecto (opcional, para que Streamlit la muestre en las guías)**:
+   - En el archivo `.env` de la raíz del proyecto, define:
+     ```env
+     MOBILE_PUBLIC_URL=https://mi-pc.tailXXXX.ts.net
+     ```
+   - O bien introdúcela directamente en Streamlit dentro de `⚙️ Ajustes y Sistema -> 📱 Companion Móvil -> ⚙️ Configuración de IP / HTTPS`.
+4. **Vincula tus móviles una única vez** entrando a `https://mi-pc.tailXXXX.ts.net/mobile/` con el **PIN de 6 dígitos**.
+   - **Seguridad garantizada (SEC-01)**: aunque el tráfico entre por el proxy HTTPS de Tailscale, el backend bloquea automáticamente con `403` las rutas administrativas (`/api/mobile/admin/*`), manteniéndolas accesibles únicamente desde el PC local / Streamlit.
